@@ -751,7 +751,6 @@
     </widget>
     <addaction name="actionHelpPortal"/>
     <addaction name="actionWebsite"/>
-    <addaction name="actionDiscord"/>
     <addaction name="separator"/>
     <addaction name="menuLogFiles"/>
     <addaction name="menuCrashLogs"/>
@@ -1876,7 +1875,7 @@
   </action>
   <action name="actionWebsite">
    <property name="text">
-    <string>Basic.MainMenu.Help.Website</string>
+    <string>Basic.MainMenu.Help.JeiOBSRepository</string>
    </property>
   </action>
   <action name="actionNewSceneCollection">
@@ -2080,17 +2079,12 @@
   </action>
   <action name="actionHelpPortal">
    <property name="text">
-    <string>Basic.MainMenu.Help.HelpPortal</string>
+    <string>Basic.MainMenu.Help.UpstreamHelpPortal</string>
    </property>
   </action>
   <action name="actionShowCrashLogs">
    <property name="text">
     <string>Basic.MainMenu.Help.CrashLogs.ShowLogs</string>
-   </property>
-  </action>
-  <action name="actionDiscord">
-   <property name="text">
-    <string>Basic.MainMenu.Help.Discord</string>
    </property>
   </action>
   <action name="actionShowWhatsNew">
