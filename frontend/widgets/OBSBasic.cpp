@@ -337,8 +337,12 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	installEventFilter(shortcutFilter);
 
 	stringstream name;
+	/* Keep the upstream-shaped "OBS <version>" line for log tools, and
+	 * say right after it that this is a fork, so nobody mistakes the log
+	 * for an OBS Studio one. */
 	name << "OBS " << App()->GetVersionString();
 	blog(LOG_INFO, "%s", name.str().c_str());
+	blog(LOG_INFO, "JeiOBS (based on OBS Studio): an independent fork, not supported by the OBS Project");
 	blog(LOG_INFO, "---------------------------------");
 
 	UpdateTitleBar();
@@ -1285,10 +1289,6 @@ void OBSBasic::applicationShutdown() noexcept
 		updateCheckThread->wait();
 	}
 
-	if (patronJsonThread && patronJsonThread->isRunning()) {
-		patronJsonThread->wait();
-	}
-
 	delete screenshotData;
 	delete previewProjectorSource;
 	delete previewProjectorMain;
@@ -1982,12 +1982,7 @@ void OBSBasic::UpdateTitleBar()
 	const char *profile = config_get_string(App()->GetUserConfig(), "Basic", "Profile");
 	const char *sceneCollection = config_get_string(App()->GetUserConfig(), "Basic", "SceneCollection");
 
-	name << "OBS ";
-	if (previewProgramMode) {
-		name << "Studio ";
-	}
-
-	name << App()->GetVersionString(false);
+	name << "JeiOBS " << App()->GetVersionString(false);
 	if (safe_mode) {
 		name << " (" << Str("TitleBar.SafeMode") << ")";
 	}
@@ -2004,15 +1999,6 @@ void OBSBasic::UpdateTitleBar()
 OBSBasic *OBSBasic::Get()
 {
 	return reinterpret_cast<OBSBasic *>(App()->GetMainWindow());
-}
-
-void OBSBasic::UpdatePatronJson(const std::string &text, const std::string &error)
-{
-	if (!error.empty()) {
-		return;
-	}
-
-	patronJson = text;
 }
 
 void OBSBasic::SetDisplayAffinity(QWindow *window)
