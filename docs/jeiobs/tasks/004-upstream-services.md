@@ -20,7 +20,8 @@ Line numbers are from main `8c382452d`.
 
 - Help > Log Files > "Save a Copy of the Current/Previous Log" writes the log,
   with a one-line JeiOBS header, to `<Documents>/JeiOBS/logs/<log name>`
-  without asking where (home directory if there is no Documents folder). A
+  without asking where (home directory if there is no Documents folder). An
+  existing copy is never replaced; a second save becomes `<log name> (2)`. A
   message shows the path, offers "Show in Folder", and reminds the user to check
   the file for personal details before sharing it. Logs are still written to the
   normal log folder as they happen.

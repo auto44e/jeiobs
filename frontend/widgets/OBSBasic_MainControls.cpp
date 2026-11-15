@@ -49,6 +49,7 @@
 #include <nlohmann/json.hpp>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
 
 #include <sstream>
@@ -308,7 +309,13 @@ void OBSBasic::SaveLogCopy(const char *file, const LogFileType logType)
 	   << fileString;
 	const string content = ss.str();
 
-	const QString target = saveDir.absoluteFilePath(QT_UTF8(file));
+	/* Never replace an earlier copy: it may have been edited before sharing. */
+	const QFileInfo logName(QT_UTF8(file));
+	QString target = saveDir.absoluteFilePath(logName.fileName());
+	for (int n = 2; QFileInfo::exists(target); ++n) {
+		target = saveDir.absoluteFilePath(
+			QString("%1 (%2).%3").arg(logName.completeBaseName()).arg(n).arg(logName.suffix()));
+	}
 	if (!os_quick_write_utf8_file_safe(QT_TO_UTF8(target), content.c_str(), content.size(), false, "tmp",
 					   nullptr)) {
 		blog(LOG_WARNING, "Failed to save a copy of the log to %s", QT_TO_UTF8(target));
