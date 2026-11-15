@@ -15,10 +15,23 @@ Line numbers are from main `8c382452d`.
 | Log analyzer link: opens `https://obsproject.com/tools/analyzer?log_url=…` | `frontend/dialogs/LogUploadDialog.cpp:144` | all |
 | Crash report upload to the same endpoint | `frontend/utility/CrashHandler.cpp:38` | Windows, macOS (Linux finds no crash log) |
 
-The OBS Project's support service should not receive JeiOBS logs. Options:
-remove or hide the upload actions and keep "Show/View log files"; or point them
-at a JeiOBS endpoint, which does not exist. Proposed: hide upload and analyzer,
-keep local log access.
+**Decided (owner, 2026-11-15): no uploads; save the file locally.** Done on
+`jeiobs/local-logs`:
+
+- Help > Log Files > "Save a Copy of the Current/Previous Log" writes the log,
+  with a one-line JeiOBS header, to `<Documents>/JeiOBS/logs/<log name>`
+  without asking where (home directory if there is no Documents folder). A
+  message shows the path, offers "Show in Folder", and reminds the user to check
+  the file for personal details before sharing it. Logs are still written to the
+  normal log folder as they happen.
+- The upload dialog (`LogUploadDialog`), the analyzer link, the crash-report
+  upload checkbox on the unclean-shutdown prompt, the "Upload Previous Crash
+  Report" menu item and all crash-upload code in `CrashHandler` are removed.
+  Crash reports stay in the local crash folder (Help > Crash Reports > Show
+  Crash Reports, Windows and macOS).
+- Fixed on the way: on a first run there is no previous log, and the old code
+  read the log folder itself as a file, which trapped in libobs. The new code
+  shows "No log file was found" instead.
 
 ## Opens OBS Project pages or fetches from them
 

@@ -255,7 +255,6 @@ private:
 	// TODO: Unused thread pointer, remove.
 	QScopedPointer<QThread> devicePropertiesThread;
 
-	QScopedPointer<QThread> logUploadThread;
 
 	ConfigFile activeConfiguration;
 
@@ -622,8 +621,8 @@ private slots:
 	void on_action_Settings_triggered();
 	void on_actionShowMacPermissions_triggered();
 	void on_actionShowLogs_triggered();
-	void on_actionUploadCurrentLog_triggered();
-	void on_actionUploadLastLog_triggered();
+	void on_actionSaveCurrentLog_triggered();
+	void on_actionSaveLastLog_triggered();
 	void on_actionViewCurrentLog_triggered();
 	void on_actionCheckForUpdates_triggered();
 	void on_actionRepair_triggered();
@@ -631,7 +630,6 @@ private slots:
 	void on_actionRestartSafe_triggered();
 
 	void on_actionShowCrashLogs_triggered();
-	void on_actionUploadLastCrashLog_triggered();
 
 	void on_OBSBasic_customContextMenuRequested(const QPoint &pos);
 
@@ -654,8 +652,6 @@ private slots:
 
 	void on_resetUI_triggered();
 
-	void logUploadFinished(const std::string &text, const std::string &error, OBS::LogFileType uploadType);
-
 public slots:
 	void updateCheckFinished();
 	void on_actionAdvAudioProperties_triggered();
@@ -668,7 +664,7 @@ public:
 	void CreateEditTransformWindow(obs_sceneitem_t *item);
 	void CreatePropertiesWindow(obs_source_t *source);
 
-	void UploadLog(const char *subdir, const char *file, OBS::LogFileType uploadType);
+	void SaveLogCopy(const char *file, OBS::LogFileType logType);
 
 	/* -------------------------------------
 	 * MARK: - OBSBasic_MainMenu

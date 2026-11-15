@@ -739,8 +739,8 @@
       <string>Basic.MainMenu.Help.Logs</string>
      </property>
      <addaction name="actionShowLogs"/>
-     <addaction name="actionUploadCurrentLog"/>
-     <addaction name="actionUploadLastLog"/>
+     <addaction name="actionSaveCurrentLog"/>
+     <addaction name="actionSaveLastLog"/>
      <addaction name="actionViewCurrentLog"/>
     </widget>
     <widget class="QMenu" name="menuCrashLogs">
@@ -748,7 +748,6 @@
       <string>Basic.MainMenu.Help.CrashLogs</string>
      </property>
      <addaction name="actionShowCrashLogs"/>
-     <addaction name="actionUploadLastCrashLog"/>
     </widget>
     <addaction name="actionHelpPortal"/>
     <addaction name="actionWebsite"/>
@@ -1680,14 +1679,14 @@
     <string>Basic.MainMenu.Help.Logs.ShowLogs</string>
    </property>
   </action>
-  <action name="actionUploadLastLog">
+  <action name="actionSaveLastLog">
    <property name="text">
-    <string>Basic.MainMenu.Help.Logs.UploadLastLog</string>
+    <string>Basic.MainMenu.Help.Logs.SaveLastLog</string>
    </property>
   </action>
-  <action name="actionUploadCurrentLog">
+  <action name="actionSaveCurrentLog">
    <property name="text">
-    <string>Basic.MainMenu.Help.Logs.UploadCurrentLog</string>
+    <string>Basic.MainMenu.Help.Logs.SaveCurrentLog</string>
    </property>
   </action>
   <action name="actionViewCurrentLog">
@@ -2087,11 +2086,6 @@
   <action name="actionShowCrashLogs">
    <property name="text">
     <string>Basic.MainMenu.Help.CrashLogs.ShowLogs</string>
-   </property>
-  </action>
-  <action name="actionUploadLastCrashLog">
-   <property name="text">
-    <string>Basic.MainMenu.Help.CrashLogs.UploadLastLog</string>
    </property>
   </action>
   <action name="actionDiscord">
