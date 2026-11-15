@@ -259,9 +259,6 @@ private:
 
 	ConfigFile activeConfiguration;
 
-	QScopedPointer<QThread> patronJsonThread;
-	std::string patronJson;
-
 	std::unique_ptr<Ui::OBSBasic> ui;
 
 	void OnEvent(enum obs_frontend_event event);
@@ -289,7 +286,6 @@ private:
 
 public slots:
 	void close();
-	void UpdatePatronJson(const std::string &text, const std::string &error);
 	void UpdateEditMenu();
 	void applicationShutdown() noexcept;
 	void toggleMixerLayout();
