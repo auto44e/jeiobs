@@ -22,6 +22,10 @@ FFMPEG_SHA256=6136812ea6d4e68bdba27e33c2a94382711cdf4f8602ffef056ff792bd6f9818
 MBEDTLS_V=3.6.7
 MBEDTLS_SHA256=a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6
 QT_V=6.11.1
+# Steinberg VST3 SDK: same commit upstream CI pins (.github/scripts/utils.zsh/
+# setup_ubuntu). MIT licensed; only base, pluginterfaces and public.sdk are used.
+VST3_HASH=9fad9770f2ae8542ab1a548a68c1ad1ac690abe0
+VST3_TAG="3.8.0"
 
 verify() { # file sha256
   echo "$2  $1" | sha256sum -c - >/dev/null || { echo "SHA256 mismatch: $1" >&2; exit 1; }
@@ -61,9 +65,21 @@ if [ ! -d "$DEPS/Qt/$QT_V/gcc_64/lib/cmake/Qt6" ]; then
   "$DEPS/aqt-venv/bin/aqt" install-qt linux desktop "$QT_V" linux_gcc_64 -O "$DEPS/Qt" -m qtimageformats
 fi
 
+# --- Steinberg VST3 SDK (for -DSTEINBERG_VST3_PATH=$DEPS/vst3) ---------------
+V3="$DEPS/vst3/vst3sdk"
+if [ "$(git -C "$V3" rev-parse HEAD 2>/dev/null)" != "$VST3_HASH" ]; then
+  rm -rf "$V3" && mkdir -p "$DEPS/vst3"
+  git clone -q --filter=blob:none --no-checkout --recurse-submodules=no \
+    https://github.com/steinbergmedia/vst3sdk.git "$V3"
+  git -C "$V3" sparse-checkout set base pluginterfaces public.sdk LICENSE.txt
+  git -C "$V3" -c advice.detachedHead=false checkout -q -f "$VST3_HASH" --
+  git -C "$V3" submodule update --init -q base pluginterfaces public.sdk
+fi
+
 cat <<EOF
 Dependencies ready in $DEPS
   FFMPEG=$DEPS/ffmpeg-$FFMPEG_V
   MBEDTLS=$DEPS/mbedtls-$MBEDTLS_V
   QT=$DEPS/Qt/$QT_V/gcc_64
+  STEINBERG_VST3_PATH=$DEPS/vst3   (VST SDK $VST3_TAG, MIT)
 EOF
