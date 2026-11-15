@@ -1,6 +1,16 @@
 Code of Conduct
 ===============
 
+.. important::
+
+   **This repository is JeiOBS (based on OBS Studio), an independent fork.** The
+   text below is the OBS Project's Code of Conduct, kept unchanged for reference.
+   Its scope, its enforcement team and its contact address (``coc@obsproject.com``)
+   belong to the OBS Project and do **not** cover JeiOBS. Participants in this
+   fork are expected to follow its spirit. For a conduct concern about this
+   repository, contact the repository owner (@auto44e) through GitHub. See
+   ``docs/jeiobs/NOTICE.md``.
+
 Preamble
 --------
 

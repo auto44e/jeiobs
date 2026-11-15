@@ -24,6 +24,13 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
   pin, initial coexistence audit, quick-check script and unsigned manual build CI.
 - Upstream publication/signing/entry-point jobs guarded in this branch.
 - [Issue #1](https://github.com/auto44e/jeiobs/issues/1): first coding task, VST3.
+- Fork notices (2026-11-15, branch jeiobs/fork-notices): [NOTICE.md](NOTICE.md),
+  a JeiOBS-specific [SECURITY.md](../../SECURITY.md) using GitHub private
+  vulnerability reporting (enabled on the repo), and "independent fork, not the
+  original" banners on the inherited README.rst, CONTRIBUTING.md, COC.rst and
+  docs/sphinx. COPYING, AUTHORS, COMMITMENT and source headers are untouched.
+  Product name convention: "JeiOBS (based on OBS Studio)"; identifier `jeiobs`.
+  The quick check now also guards these notices.
 
 ## Evidence
 

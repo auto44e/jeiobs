@@ -39,8 +39,23 @@ wrapper = (ROOT / '.github/workflows/jeiobs-build.yaml').read_text()
 require('secrets:' not in wrapper, 'Manual wrapper must not pass secrets')
 require('workflow_dispatch:' in wrapper and 'pull_request:' not in wrapper,
         'Full matrix must remain explicitly requested during scaffold phase')
+# Fork-identity notices: inherited upstream documents must keep their JeiOBS
+# banner, and SECURITY.md must never route JeiOBS reports to the OBS Project.
+MARK = 'JeiOBS (based on OBS Studio)'
+for rel in ['README.md', 'README.rst', 'CONTRIBUTING.md', 'COC.rst', 'SECURITY.md',
+            'docs/sphinx/index.rst', 'docs/jeiobs/NOTICE.md']:
+    head = '\n'.join((ROOT / rel).read_text().splitlines()[:30])
+    require(MARK in head, f'{rel}: missing fork banner "{MARK}" near the top')
+notice = (ROOT / 'docs/jeiobs/NOTICE.md').read_text()
+require('Use at your own risk' in notice and 'without warranty' in notice,
+        'NOTICE.md: missing own-risk / no-warranty statement')
+security = (ROOT / 'SECURITY.md').read_text()
+require('security@obsproject.com' not in security and 'obsproject.com/discord' not in security,
+        'SECURITY.md: must not route JeiOBS reports to OBS Project channels')
+require('github.com/auto44e/jeiobs/security/advisories/new' in security,
+        'SECURITY.md: missing private reporting link')
 for message in errors:
     print(f'FAIL: {message}', file=sys.stderr)
 if errors:
     sys.exit(1)
-print('PASS: upstream pin shape, COPYING integrity, local doc links and scaffold workflow guards')
+print('PASS: upstream pin shape, COPYING integrity, local doc links, scaffold workflow guards and fork notices')

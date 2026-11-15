@@ -1,6 +1,14 @@
 OBS Studio Contribution Guidelines
 ============
 
+> [!IMPORTANT]
+> This repository is **JeiOBS (based on OBS Studio)**, an independent fork, not
+> OBS Studio. The text below is the upstream OBS Project's contribution guide,
+> kept unchanged for reference; it describes how to contribute to **upstream**, not
+> to JeiOBS. To contribute to this fork, follow
+> [docs/jeiobs/CONTRIBUTING.md](docs/jeiobs/CONTRIBUTING.md). See the
+> [fork notice](docs/jeiobs/NOTICE.md).
+
 OBS Studio accepts contributions via public **pull requests**, which encompass changes made to the project as well as a written description of the changes made and the motivation behind them.
 
 Pull requests can be opened by any user with sufficient contribution permissions on the platform chosen by the project. Likewise, any user with sufficient access permissions is able to read, comment, and suggest changes to a pull request, but the ultimate decision for or against adopting the suggested changes lies with **project members**.
