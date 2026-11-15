@@ -36,6 +36,10 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
   isolated HOME. Needs FFmpeg 8.0.3, MbedTLS 3.6.7 and Qt 6.11.1 from a private
   prefix (`tools/jeiobs/linux-deps.sh`); see [BUILDING.md](BUILDING.md). Browser/CEF
   is disabled. This unblocks the task 001 build/test evidence on Linux.
+- Task 001 VST3 backport (2026-11-15, draft PR on `jeiobs/vst3-upstream`): five
+  upstream commits cherry-picked with `-x`; builds ON (672/672) and OFF (624/624);
+  `obs-vst3.so` loads; SDK 3.8.0 is MIT and fetched, not vendored. Runtime plugin
+  tests are still open; see [task 001](tasks/001-vst3.md#progress-2026-11-15-branch-jeiobsvst3-upstream).
 
 ## Evidence
 
