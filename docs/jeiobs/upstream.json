@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/obsproject/obs-studio",
+  "tag": "33.0.1",
+  "commit": "65c320b46e1af5c7a555161aea6182cdf7a8c524",
+  "observed_date": "2026-11-15",
+  "license": "GPL-2.0-or-later",
+  "copying_sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+}

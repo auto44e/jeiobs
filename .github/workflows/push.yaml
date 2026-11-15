@@ -14,12 +14,13 @@ permissions:
 jobs:
   check-format:
     name: Format 🔍
-    if: github.ref_name == 'master'
+    if: github.repository == 'obsproject/obs-studio' && (github.ref_name == 'master')
     uses: ./.github/workflows/check-format.yaml
     permissions:
       contents: read
 
   build-project:
+    if: github.repository == 'obsproject/obs-studio'
     name: Build 🧱
     uses: ./.github/workflows/build-project.yaml
     secrets: inherit
@@ -28,7 +29,7 @@ jobs:
 
   compatibility-validation:
     name: Validate Compatibility 🕵️
-    if: github.ref_name == 'master'
+    if: github.repository == 'obsproject/obs-studio' && (github.ref_name == 'master')
     runs-on: ubuntu-26.04
     permissions:
       checks: write
@@ -52,7 +53,7 @@ jobs:
 
   services-validation:
     name: Validate Services 🕵️
-    if: github.ref_name == 'master'
+    if: github.repository == 'obsproject/obs-studio' && (github.ref_name == 'master')
     runs-on: ubuntu-26.04
     permissions:
       checks: write
@@ -78,7 +79,7 @@ jobs:
 
   update-documentation:
     name: Update Documentation 📖
-    if: github.repository_owner == 'obsproject' && (github.ref_name == 'master' || github.ref_type == 'tag')
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && (github.ref_name == 'master' || github.ref_type == 'tag'))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -100,7 +101,7 @@ jobs:
 
   deploy-documentation:
     name: Deploy Documentation to Cloudflare ☁️
-    if: github.repository_owner == 'obsproject' && github.ref_type == 'tag'
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && github.ref_type == 'tag')
     runs-on: ubuntu-26.04
     needs: update-documentation
     defaults:
@@ -139,7 +140,7 @@ jobs:
   sign-windows-build:
     name: Windows Signing ✍️
     uses: obsproject/obs-studio/.github/workflows/sign-windows.yaml@04a973a1d9c585bed7292eb11234c397e606dd02
-    if: github.repository_owner == 'obsproject' && github.ref_type == 'tag'
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && github.ref_type == 'tag')
     needs: build-project
     permissions:
       contents: 'read'
@@ -149,7 +150,7 @@ jobs:
 
   create-release:
     name: Create Release 🛫
-    if: github.ref_type == 'tag'
+    if: github.repository == 'obsproject/obs-studio' && (github.ref_type == 'tag')
     runs-on: ubuntu-26.04
     needs: [build-project, sign-windows-build]
     defaults:

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   check-tag:
     name: Check Release Tag
-    if: github.repository_owner == 'obsproject'
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject')
     runs-on: ubuntu-26.04
     outputs:
       validTag: ${{ steps.check.outputs.validTag }}
@@ -71,7 +71,7 @@ jobs:
   flatpak-publish:
     name: Flathub 📦
     needs: check-tag
-    if: github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag)
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag))
     runs-on: ubuntu-26.04
     defaults:
       run:
@@ -229,7 +229,7 @@ jobs:
   steam-upload:
     name: Upload Steam Builds 🚂
     needs: check-tag
-    if: github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag)
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag))
     runs-on: macos-26
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -245,7 +245,7 @@ jobs:
   windows-patches:
     name: Create Windows Patches 🩹
     needs: check-tag
-    if: github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag)
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag))
     runs-on: windows-2025-vs2026
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -259,7 +259,7 @@ jobs:
 
   create-appcast:
     name: Create Sparkle Appcast 🎙️
-    if: github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag)
+    if: github.repository == 'obsproject/obs-studio' && (github.repository_owner == 'obsproject' && fromJSON(needs.check-tag.outputs.validTag))
     runs-on: macos-26
     needs: check-tag
     strategy:
@@ -323,6 +323,7 @@ jobs:
           path: ${{ github.workspace }}/output
 
   merge-appcasts:
+    if: github.repository == 'obsproject/obs-studio'
     runs-on: ubuntu-26.04
     needs: create-appcast
     steps:
