@@ -1203,11 +1203,9 @@ void OBSBasic::OBSInit()
 	ui->actionRepair = nullptr;
 #if !defined(__APPLE__)
 	delete ui->actionShowCrashLogs;
-	delete ui->actionUploadLastCrashLog;
 	delete ui->menuCrashLogs;
 	delete ui->actionCheckForUpdates;
 	ui->actionShowCrashLogs = nullptr;
-	ui->actionUploadLastCrashLog = nullptr;
 	ui->menuCrashLogs = nullptr;
 	ui->actionCheckForUpdates = nullptr;
 #endif
@@ -1857,9 +1855,6 @@ void OBSBasic::closeWindow()
 	}
 	if (updateCheckThread) {
 		updateCheckThread->wait();
-	}
-	if (logUploadThread) {
-		logUploadThread->wait();
 	}
 	if (devicePropertiesThread && devicePropertiesThread->isRunning()) {
 		devicePropertiesThread->wait();
