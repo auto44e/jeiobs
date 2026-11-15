@@ -3,6 +3,7 @@ on:
   workflow_call:
 jobs:
   create-windows-update:
+    if: github.repository == 'obsproject/obs-studio'
     name: Sign Windows Build 🥩
     strategy:
       matrix:

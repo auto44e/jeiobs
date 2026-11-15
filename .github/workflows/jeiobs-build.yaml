@@ -1,0 +1,12 @@
+name: jeiobs full build (manual, unsigned)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jeiobs-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.repository == 'auto44e/jeiobs'
+    uses: ./.github/workflows/build-project.yaml

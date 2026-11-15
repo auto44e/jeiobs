@@ -51,6 +51,11 @@ jobs:
             *) ;;
           esac
 
+          # jeiobs: never sign, notarize or package inherited OBS identities.
+          if [[ "${GITHUB_REPOSITORY}" != "obsproject/obs-studio" ]]; then
+            config_data=('codesign:false' 'notarize:false' 'package:false' 'config:RelWithDebInfo')
+          fi
+
           for config in "${config_data[@]}"; do
             IFS=':' read -r key value <<< "${config}"
             echo "${key}=${value}" >> $GITHUB_OUTPUT
