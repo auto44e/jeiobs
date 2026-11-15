@@ -409,6 +409,11 @@ void OBSBasic::on_actionRestartSafe_triggered()
 	}
 }
 
+/* JeiOBS has no website, chat server or release builds of its own yet: the
+ * Help menu points at the fork repository. The help portal is OBS Studio's,
+ * and the menu says so. */
+static constexpr char jeiobsRepoUrl[] = "https://github.com/auto44e/jeiobs";
+
 void OBSBasic::on_actionHelpPortal_triggered()
 {
 	QUrl url = QUrl("https://obsproject.com/help", QUrl::TolerantMode);
@@ -417,13 +422,7 @@ void OBSBasic::on_actionHelpPortal_triggered()
 
 void OBSBasic::on_actionWebsite_triggered()
 {
-	QUrl url = QUrl("https://obsproject.com", QUrl::TolerantMode);
-	QDesktopServices::openUrl(url);
-}
-
-void OBSBasic::on_actionDiscord_triggered()
-{
-	QUrl url = QUrl("https://obsproject.com/discord", QUrl::TolerantMode);
+	QUrl url = QUrl(jeiobsRepoUrl, QUrl::TolerantMode);
 	QDesktopServices::openUrl(url);
 }
 
@@ -449,8 +448,7 @@ void OBSBasic::on_actionShowWhatsNew_triggered()
 
 void OBSBasic::on_actionReleaseNotes_triggered()
 {
-	QString addr("https://github.com/obsproject/obs-studio/releases");
-	QUrl url(QString("%1/%2").arg(addr, obs_get_version_string()), QUrl::TolerantMode);
+	QUrl url(QString("%1/releases").arg(jeiobsRepoUrl), QUrl::TolerantMode);
 	QDesktopServices::openUrl(url);
 }
 

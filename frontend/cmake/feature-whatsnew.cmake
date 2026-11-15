@@ -1,6 +1,8 @@
 include_guard(DIRECTORY)
 
-option(ENABLE_WHATSNEW "Enable WhatsNew dialog" ON)
+# JeiOBS: off by default. The panel downloads OBS Studio's news feed from
+# obsproject.com, which does not describe this fork.
+option(ENABLE_WHATSNEW "Enable WhatsNew dialog" OFF)
 
 if(ENABLE_WHATSNEW AND TARGET OBS::browser-panels)
   if(OS_MACOS)
