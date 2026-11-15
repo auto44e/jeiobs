@@ -85,6 +85,11 @@ Observed on Ubuntu 24.04, GCC 13.3, CMake 3.28.3, Ninja 1.11.1, x86_64, at main
    `LD_LIBRARY_PATH` is needed because `libswresample` is not on the build RPATH.
    Add `QT_QPA_PLATFORM=offscreen` for a headless smoke test.
 
+   **VST3 host** (task 001): `linux-deps.sh` also fetches the Steinberg VST SDK
+   3.8.0 (MIT) at upstream's pinned commit. Add
+   `-DSTEINBERG_VST3_PATH=$D/vst3` to the configure command; the directory must
+   *contain* `vst3sdk/`. `-DENABLE_VST3=OFF` builds without it.
+
 **Smoke-test evidence (headless, isolated HOME):** `obs --version` reported
 `OBS Studio - 33.0.1-6-gab6332dd5`. A 25 s offscreen launch loaded 33 modules,
 ran the graphics thread at 33.3 ms median and shut down with 0 memory leaks;
