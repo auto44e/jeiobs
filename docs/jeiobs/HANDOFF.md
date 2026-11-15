@@ -1,3 +1,14 @@
+# Current planning update — 2026-11-15
+
+Inspected main at `5e17d4f99b2c15756b2ff5bbeb2e4454b80feb8a`. Added the
+[workspace saving/offline proposal](WORKSPACE_SAVING.md) and
+[agent task 002](tasks/002-workspace-saving.md). Status: documented/planned only.
+No runtime changes or tests. Begin with persistence inventory and synthetic fixtures;
+VST3 task 001 retains first priority. This update does not refresh other feature status.
+Earlier setup observations are retained below as historical evidence, not current-head tests.
+
+---
+
 # Current handoff
 
 Observed: 2026-11-15T09:44:48-05:00. Repository: auto44e/jeiobs.

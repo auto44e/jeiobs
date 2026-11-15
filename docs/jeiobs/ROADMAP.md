@@ -69,3 +69,11 @@ dependency provenance and compatibility matrix. Upstream review at least monthly
 and promptly for security fixes; each integration gets a small reviewable PR.
 No claimed support without execution evidence. Preserve GPL and upstream credit;
 never use upstream update channels, signing credentials or OBS release branding.
+
+## Workspace saving and offline configuration
+
+Planned: [whole-workspace snapshots, portable export and offline editing](WORKSPACE_SAVING.md).
+Includes version history/rollback and cross-platform master-FX suggestions with
+preserved device bindings and missing-plugin placeholders. See
+[task 002](tasks/002-workspace-saving.md) for the first bounded investigation.
+VST3 remains the first coding task; these are proposed capabilities, not implemented.
