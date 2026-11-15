@@ -36,14 +36,17 @@ Line numbers are from main `8c382452d`.
 
 ## Opens OBS Project pages or fetches from them
 
-- Help menu (`OBSBasic_MainControls.cpp:418-461`): Help Portal, Website, Discord
-  (obsproject.com) and Release Notes (github.com/obsproject releases for this
-  version). Proposed: Website and Release Notes go to the JeiOBS repository;
-  remove Discord; keep Help Portal but label it as upstream documentation.
-- What's New (`frontend/utility/WhatsNewInfoThread.cpp:17-35`) fetches
-  `obsproject.com/update_studio/whatsnew.json`. It is only built with browser
-  panels (CEF), which the documented Linux build disables. Proposed:
-  `ENABLE_WHATSNEW=OFF` by default.
+- **Done (owner agreed 2026-11-15, `jeiobs/help-links`):** Help menu
+  "JeiOBS Repository" and "JeiOBS Release Notes" open
+  `github.com/auto44e/jeiobs` and its releases page. Discord is removed. The help
+  portal stays and is labelled "OBS Studio Help Portal (upstream)". New en-US keys
+  are used for the relabelled items, so other languages show the English label
+  instead of a translation that names the wrong product.
+- **Done:** What's New (`frontend/utility/WhatsNewInfoThread.cpp:17-35`)
+  fetched `obsproject.com/update_studio/whatsnew.json`. `ENABLE_WHATSNEW` now
+  defaults to OFF on every platform; the menu item is removed when it is off. It
+  was already absent from the documented Linux build, which has no browser
+  panels.
 - Updater (Windows and macOS only; none on Linux). Covered by M0.
 - Missing-encoder help link `https://obsproject.com/kb/encoder-missing`
   (`OBSBasic_Profiles.cpp:1065`), the legacy plugin locations link
