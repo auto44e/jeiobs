@@ -31,6 +31,11 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
   docs/sphinx. COPYING, AUTHORS, COMMITMENT and source headers are untouched.
   Product name convention: "JeiOBS (based on OBS Studio)"; identifier `jeiobs`.
   The quick check now also guards these notices.
+- Local Linux baseline build (2026-11-15, Ubuntu 24.04, main `ab6332dd5`):
+  configures and builds 624/624, 0 errors, and passes a headless smoke run with an
+  isolated HOME. Needs FFmpeg 8.0.3, MbedTLS 3.6.7 and Qt 6.11.1 from a private
+  prefix (`tools/jeiobs/linux-deps.sh`); see [BUILDING.md](BUILDING.md). Browser/CEF
+  is disabled. This unblocks the task 001 build/test evidence on Linux.
 
 ## Evidence
 
