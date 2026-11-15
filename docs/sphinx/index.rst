@@ -8,6 +8,14 @@
 Welcome to OBS Studio's documentation!
 ======================================
 
+.. note::
+
+   These are the upstream OBS Studio developer docs, carried unchanged in
+   **JeiOBS (based on OBS Studio)**, an independent fork that is not made,
+   endorsed or supported by the OBS Project. They may not describe JeiOBS
+   changes, and links to ``obsproject.com`` point to upstream. See
+   ``docs/jeiobs/NOTICE.md`` in the repository.
+
 * **Setting up an OBS development environment?** :wiki:`Use the Wiki <Install-Instructions>`
 * **Developing your first OBS plugin?** `Use the obs-plugintemplate <https://github.com/obsproject/obs-plugintemplate#obs-plugin-template>`_
 

@@ -1,6 +1,15 @@
 OBS Studio <https://obsproject.com>
 ===================================
 
+.. important::
+
+   **This repository is JeiOBS (based on OBS Studio), an independent fork. It is
+   not OBS Studio and is not made, endorsed or supported by the OBS Project.**
+   Use it at your own risk: it is pre-release software provided without warranty
+   (see ``docs/jeiobs/NOTICE.md``). The text below is the original upstream README,
+   kept unchanged for attribution. The badges and links in it refer to the upstream
+   project, not to JeiOBS. For this fork, start with ``README.md``.
+
 .. image:: https://github.com/obsproject/obs-studio/actions/workflows/push.yaml/badge.svg?branch=master
    :alt: OBS Studio Build Status - GitHub Actions
    :target: https://github.com/obsproject/obs-studio/actions/workflows/push.yaml?query=branch%3Amaster
