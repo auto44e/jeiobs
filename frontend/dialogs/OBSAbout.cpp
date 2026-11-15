@@ -1,15 +1,15 @@
 #include "OBSAbout.hpp"
 
 #include <widgets/OBSBasic.hpp>
-#include <utility/RemoteTextThread.hpp>
 
 #include <qt-wrappers.hpp>
 
-#include <json11.hpp>
-
 #include "moc_OBSAbout.cpp"
 
-using namespace json11;
+/* JeiOBS fork links (see docs/jeiobs/NOTICE.md). */
+#define JEIOBS_REPO_URL "https://github.com/auto44e/jeiobs"
+#define JEIOBS_NOTICE_URL JEIOBS_REPO_URL "/blob/main/docs/jeiobs/NOTICE.md"
+#define OBS_UPSTREAM_URL "https://github.com/obsproject/obs-studio"
 
 extern bool steam;
 
@@ -33,17 +33,20 @@ OBSAbout::OBSAbout(QWidget *parent) : QDialog(parent), ui(new Ui::OBSAbout)
 
 	ui->contribute->setText(QTStr("About.Contribute"));
 
+	/* JeiOBS: link to the fork, not to the OBS Project's donation and
+	 * contribution pages. The upstream OBS Studio project is still credited
+	 * (see About.Fork.Upstream and the Authors tab). */
 	if (steam) {
 		delete ui->donate;
 	} else {
-		ui->donate->setText("&nbsp;&nbsp;<a href='https://obsproject.com/contribute'>" + QTStr("About.Donate") +
+		ui->donate->setText("&nbsp;&nbsp;<a href='" JEIOBS_REPO_URL "'>" + QTStr("About.Fork.Repository") +
+				    "</a>&nbsp;&nbsp;<a href='" JEIOBS_NOTICE_URL "'>" + QTStr("About.Fork.Notice") +
 				    "</a>");
 		ui->donate->setTextInteractionFlags(Qt::TextBrowserInteraction);
 		ui->donate->setOpenExternalLinks(true);
 	}
 
-	ui->getInvolved->setText("&nbsp;&nbsp;<a href='https://obsproject.com/developer-contributing'>" +
-				 QTStr("About.GetInvolved") + "</a>");
+	ui->getInvolved->setText("&nbsp;&nbsp;<a href='" OBS_UPSTREAM_URL "'>" + QTStr("About.Fork.Upstream") + "</a>");
 	ui->getInvolved->setTextInteractionFlags(Qt::TextBrowserInteraction);
 	ui->getInvolved->setOpenExternalLinks(true);
 
@@ -62,65 +65,21 @@ OBSAbout::OBSAbout(QWidget *parent) : QDialog(parent), ui(new Ui::OBSAbout)
 	connect(ui->authors, &ClickableLabel::clicked, this, &OBSAbout::ShowAuthors);
 	connect(ui->license, &ClickableLabel::clicked, this, &OBSAbout::ShowLicense);
 
-	QPointer<OBSAbout> about(this);
-
-	OBSBasic *main = OBSBasic::Get();
-	if (main->patronJson.empty() && !main->patronJsonThread) {
-		RemoteTextThread *thread =
-			new RemoteTextThread("https://obsproject.com/patreon/about-box.json", "application/json");
-		QObject::connect(thread, &RemoteTextThread::Result, main, &OBSBasic::UpdatePatronJson);
-		QObject::connect(thread, &RemoteTextThread::Result, this, &OBSAbout::ShowAbout);
-		main->patronJsonThread.reset(thread);
-		thread->start();
-	} else {
-		ShowAbout();
-	}
+	/* JeiOBS: upstream fetched the OBS Project's Patreon supporter list from
+	 * obsproject.com here. A fork must not present upstream's donors as its
+	 * own supporters, nor contact upstream servers when the dialog opens, so
+	 * the default "About" view shows the fork notice instead. */
+	ShowAbout();
 }
 
 void OBSAbout::ShowAbout()
 {
-	OBSBasic *main = OBSBasic::Get();
-
-	if (main->patronJson.empty()) {
-		return;
-	}
-
-	std::string error;
-	Json json = Json::parse(main->patronJson, error);
-	const Json::array &patrons = json.array_items();
 	QString text;
 
-	text += "<h1>Top Patreon contributors:</h1>";
-	text += "<p style=\"font-size:16px;\">";
-	bool first = true;
-	bool top = true;
-
-	for (const Json &patron : patrons) {
-		std::string name = patron["name"].string_value();
-		std::string link = patron["link"].string_value();
-		int amount = patron["amount"].int_value();
-
-		if (top && amount < 5000) {
-			text += "</p>";
-			top = false;
-		} else if (!first) {
-			text += "<br/>";
-		}
-
-		if (!link.empty()) {
-			text += "<a href=\"";
-			text += QT_UTF8(link.c_str()).toHtmlEscaped();
-			text += "\">";
-		}
-		text += QT_UTF8(name.c_str()).toHtmlEscaped();
-		if (!link.empty()) {
-			text += "</a>";
-		}
-
-		if (first) {
-			first = false;
-		}
-	}
+	text += "<h1>" + QTStr("About.Fork.Heading").toHtmlEscaped() + "</h1>";
+	text += "<p style=\"font-size:14px;\">";
+	text += QTStr("About.Fork.Body").toHtmlEscaped().replace("\n", "<br/>");
+	text += "</p>";
 
 	ui->textBrowser->setHtml(text);
 }
@@ -128,7 +87,7 @@ void OBSAbout::ShowAbout()
 void OBSAbout::ShowAuthors()
 {
 	std::string path;
-	QString error = QTStr("About.Error").arg("https://github.com/obsproject/obs-studio/blob/master/AUTHORS");
+	QString error = QTStr("About.Error").arg(JEIOBS_REPO_URL "/blob/main/AUTHORS");
 
 #ifdef __APPLE__
 	if (!GetDataFilePath("AUTHORS", path)) {
@@ -154,7 +113,7 @@ void OBSAbout::ShowAuthors()
 void OBSAbout::ShowLicense()
 {
 	std::string path;
-	QString error = QTStr("About.Error").arg("https://github.com/obsproject/obs-studio/blob/master/COPYING");
+	QString error = QTStr("About.Error").arg(JEIOBS_REPO_URL "/blob/main/COPYING");
 
 	if (!GetDataFilePath("license/gplv2.txt", path)) {
 		ui->textBrowser->setPlainText(error);
