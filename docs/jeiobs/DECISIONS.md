@@ -110,26 +110,42 @@ The lead may merge its own PR only when all of these hold:
      speaks first.
    - Confinement, exactly as enforced:
      - Claude has only the Read, Glob and Grep tools, no MCP servers, and user
-       settings only (`--setting-sources user`). The run refuses a commit that
-       contains `.claude/` or `CLAUDE.md`, so a change cannot configure its own
-       reviewer.
+       settings only (`--setting-sources user`), so it reads no project
+       settings, hooks or `CLAUDE.md` from the checkout.
      - Codex runs the `codex-cli` engine directly (the toolbox launcher injects
        MCP servers) with a dedicated `CODEX_HOME`. Its config has no MCP,
        plugin or project sections (the engine adds telemetry sections itself),
-       uses a "core" shell environment, and passes `--sandbox read-only`.
+       uses a "core" shell environment, and passes `--sandbox read-only` and
+       `project_doc_max_bytes=0`, so it reads no `AGENTS.md` or
+       `AGENTS.override.md` from the checkout. The run fails if a Codex session
+       log from the run shows project instructions for the checkout. The
+       provider config runs the toolbox launcher as the Bedrock credential
+       helper (`credential-process`) only.
+     - The run refuses a reviewed commit that contains `.claude`, `CLAUDE.md`
+       or `AGENTS.override.md` anywhere, so a change cannot configure its own
+       reviewer.
      - Where Codex's sandbox cannot start on the host, its commands run
-       unsandboxed and `00-meta.md` says so. A tamper check then fails the run
-       if, after any turn, the lead's repository changed (refs, HEAD, index
-       entries and flags, tracked diffs, untracked and ignored file contents,
-       `.git/config` and hooks) or the review checkout's HEAD or files changed.
-       The runner also keeps, in its own memory, the sha256 of the context and
-       ledger snapshots, of `00-meta.md`, of each prompt (before its turn) and
-       of each reply (once saved), and verifies them before each prompt, after
-       each turn and at the end; cleanup fails the run if the review checkout
-       changed. This detects later changes to those files and to the
-       repository. It cannot detect reads, network use, writes elsewhere, or a
-       change to a reply while its peer is still writing it. `00-meta.md` lists
-       the files the run wrote, with their hashes; only those are committed.
+       unsandboxed and `00-meta.md` says so. Nothing then stops a peer from
+       writing; the runner has tripwires only. After every turn the lead's
+       repository (refs, HEAD, index entries and flags, tracked diffs,
+       untracked and ignored file contents, `.git/config` and hooks) and the
+       review checkout (HEAD, `git status`, and index flags) must be
+       unchanged. The runner keeps, in its own memory, the sha256 of the
+       context and ledger snapshots, of `00-meta.md`, of each prompt (before
+       its turn) and of each reply (when its turn ends; in round 1, as soon as
+       that peer exits), and verifies them before each prompt, after each turn,
+       at the end and in cleanup. Each turn runs in its own process group,
+       which is killed when the turn ends. These tripwires catch a change still
+       present at the next check, until the run ends. They miss reads, network
+       use, writes elsewhere, changes undone before a check, a reply changed
+       during its own turn, and changes after the run by a process that left
+       its process group. Only the sandbox stops a peer that evades them.
+     - At exit the runner prints the sha256 of every file it wrote, the final
+       `00-meta.md` included; `00-meta.md` lists the same files (its own entry
+       is the hash of its header). Before committing a run, the lead checks the
+       files with `sha256sum -c` against that output, and commits only those
+       files. Hashes are of the files as written, before the transcript edits
+       allowed above.
    - Every prompt and reply is committed. stderr logs stay in a local
      diagnostics folder, because they contain tool output.
    - The run fails closed if a turn times out, errors or is empty, lacks a

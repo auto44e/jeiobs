@@ -22,31 +22,47 @@
 #               other's reply (not an isolation guarantee; see below).
 #
 # What is enforced, and what is not:
-# - Claude gets only the Read, Glob and Grep tools and no MCP servers.
+# - Claude gets only the Read, Glob and Grep tools, no MCP servers, and user
+#   settings only (--setting-sources user): project settings, hooks and
+#   CLAUDE.md in the reviewed checkout are not loaded.
 # - Codex runs the codex-cli engine directly (the toolbox launcher in bin/
 #   injects MCP servers into its config) with a dedicated CODEX_HOME whose
 #   config.toml has no [mcp_servers] (the engine itself adds analytics/otel
-#   telemetry sections), a "core" shell environment, and --sandbox read-only.
+#   telemetry sections), a "core" shell environment, --sandbox read-only, and
+#   project_doc_max_bytes=0 so it reads no AGENTS.md or AGENTS.override.md from
+#   the checkout. The run fails if a Codex session log from this run shows
+#   project instructions for the checkout. The provider config runs the toolbox
+#   launcher as Bedrock credential helper (credential-process) only; it does not
+#   start Codex.
+# - The run refuses a reviewed commit that contains .claude, CLAUDE.md or
+#   AGENTS.override.md anywhere, so a change cannot configure its reviewer.
 # - Where Codex's sandbox cannot start (bubblewrap needs unprivileged user
 #   namespaces; Ubuntu 24.04 AppArmor blocks them), Codex commands run
-#   unsandboxed. 00-meta.md says so. The tamper check is then the enforcement:
-#   after every turn, the lead's repository (refs, HEAD, index flags, tracked
-#   diffs, untracked and ignored file contents, .git/config and hooks, except
-#   OUTDIR) and the review checkout (HEAD and status) must be unchanged.
+#   unsandboxed. 00-meta.md says so. Nothing then stops a peer from writing;
+#   the runner only has tripwires:
+#   - after every turn, the lead's repository (refs, HEAD, index entries and
+#     flags, tracked diffs, untracked and ignored file contents, .git/config and
+#     hooks, except OUTDIR) and the review checkout (HEAD, status, and index
+#     flags: every entry must be plain "H") must be unchanged;
+#   - the sha256 of the context and ledger snapshots, of 00-meta.md, of each
+#     prompt (taken before its turn) and of each reply (taken when its turn
+#     ends; in round 1, as soon as that peer exits) are held in the runner's
+#     memory and verified before each prompt, after each turn, at the end and
+#     in cleanup;
+#   - each turn runs in its own process group, which is killed when the turn
+#     ends.
+#   These catch a change still present at the next check, until the run ends.
+#   They miss reads, network use, writes elsewhere, changes undone before a
+#   check, a reply changed before it is saved (during its turn), and changes
+#   after the run by a process that left its process group (setsid). Only the
+#   sandbox stops a peer that evades them. At exit the runner prints the sha256
+#   of every file it wrote, including the final 00-meta.md (which cannot list
+#   its own final hash); the lead checks the files against that output before
+#   committing them. Hashes are of the files as written, before the transcript
+#   edits in DECISIONS.md.
 # - Round 1 is not isolated: a peer that can read the filesystem could find
 #   the other's in-progress reply. Nothing relies on it being unseen.
-# - The runner keeps the sha256 of the context and ledger snapshots, of
-#   00-meta.md, of each prompt (taken before the turn starts) and of each reply
-#   (taken when it is saved, after the turn) in its own memory, and verifies all
-#   of them before each prompt, after each turn and at the end. This detects any
-#   later change to those files. It cannot detect a change made to a reply while
-#   its peer is still writing it, or files added to OUTDIR (the lead commits only
-#   the files the runner wrote, listed in 00-meta.md).
-# - Claude loads user settings only (--setting-sources user): project settings,
-#   hooks or CLAUDE.md in the reviewed checkout are not loaded, and the run fails
-#   if the checkout contains .claude/ or CLAUDE.md at all, so a change cannot
-#   steer its own review. Codex ignores project config (untrusted, see 00-meta).
-#
+
 # Fails closed (exit 3, writes FAILED) on a timeout, a non-zero exit, an empty
 # reply, a missing or malformed VERDICT or FINDING line, a ledger row or earlier
 # finding the peer did not dispose of, or a tamper-check failure. Exit 0 means
@@ -92,10 +108,18 @@ mkdir -p "$DIAG" || exit 2
 TMP="$(mktemp -d)"
 TREE="$TMP/tree"
 fail() { echo "FAILED: $1" | tee "$OUT/FAILED" >&2; exit 3; }
+declare -A EVIDENCE=()      # path -> sha256, held only in this process
+declare -A PGID=()          # peer -> process group of its running turn
+reap() { local g; for g in "${PGID[@]}"; do kill -KILL -- "-$g" 2>/dev/null; done; PGID=(); }
 cleanup() {
-  local rc=$?
+  local rc=$? f
+  reap
+  for f in "${!EVIDENCE[@]}"; do
+    [ "$(sha256sum < "$f" 2>/dev/null)" = "${EVIDENCE[$f]}" ] || { echo "FAILED: $(basename "$f") changed after it was saved" | tee -a "$OUT/FAILED" >&2; rc=3; }
+  done
   if [ -d "$TREE" ] && { [ "$(git -C "$TREE" rev-parse HEAD 2>/dev/null)" != "${FULLSHA:-}" ] ||
-    [ -n "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching 2>/dev/null)" ]; }; then
+    [ -n "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching 2>/dev/null)" ] ||
+    [ -n "$(git -C "$TREE" ls-files -v 2>/dev/null | grep -v '^H ')" ]; }; then
     echo "FAILED: the review checkout was modified" | tee -a "$OUT/FAILED" >&2
     rc=3
   fi
@@ -104,14 +128,14 @@ cleanup() {
 }
 trap cleanup EXIT
 git -C "$REPO" worktree add --detach "$TREE" "$FULLSHA" >/dev/null 2>&1 || { echo "error: cannot check out $FULLSHA" >&2; exit 2; }
-if [ -e "$TREE/.claude" ] || [ -n "$(find "$TREE" -name CLAUDE.md -not -path '*/.git/*' -print -quit)" ]; then
-  echo "error: the reviewed commit contains .claude/ or CLAUDE.md; refusing to review (a change must not configure its reviewer)" >&2; exit 2
+if [ -n "$(find "$TREE" -path "$TREE/.git" -prune -o \( -name .claude -o -name CLAUDE.md -o -name AGENTS.override.md \) -print -quit)" ]; then
+  echo "error: the reviewed commit contains .claude, CLAUDE.md or AGENTS.override.md; refusing to review (a change must not configure its reviewer)" >&2; exit 2
 fi
+touch "$TMP/started"   # Codex session logs newer than this belong to this run
 
 # Snapshots: peers always see the context and ledger as they were at the start.
 cp "$CTX" "$OUT/00-context.md"; cp "$LEDGER" "$OUT/00-ledger-in.md"
 CTX="$OUT/00-context.md"; LEDGER="$OUT/00-ledger-in.md"
-declare -A EVIDENCE=()      # path -> sha256, held only in this process
 declare -A PROMPT_HASH=()   # "<peer>-r<round>" -> sha256 of the prompt before the turn
 pin() { [ -f "$1" ] || fail "cannot pin missing file $(basename "$1")"; EVIDENCE["$1"]="$(sha256sum < "$1")"; }
 verify_evidence() { # label
@@ -142,10 +166,14 @@ tamper_check() { # label
   [ "$(repo_state)" = "$BASE_STATE" ] || fail "$1: the lead's repository changed during the turn"
   [ "$(git -C "$TREE" rev-parse HEAD)" = "$FULLSHA" ] || fail "$1: the review checkout's HEAD moved"
   [ -z "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching)" ] || fail "$1: the review checkout was modified"
+  [ -z "$(git -C "$TREE" ls-files -v | grep -v '^H ')" ] || fail "$1: index flags were set in the review checkout"
+  ! grep -rlF "instructions for $TREE" --include='*.jsonl' "$REVIEW_CODEX_HOME/sessions" 2>/dev/null \
+    | while IFS= read -r f; do [ "$f" -nt "$TMP/started" ] && echo "$f"; done | grep -q . \
+    || fail "$1: Codex loaded project instructions from the review checkout"
 }
 BASE_STATE="$(repo_state)"
 if bwrap --ro-bind / / true >/dev/null 2>&1; then SANDBOX="available"
-else SANDBOX="UNAVAILABLE on this host (bubblewrap cannot create user namespaces); tamper check enforced"; fi
+else SANDBOX="UNAVAILABLE on this host (bubblewrap cannot create user namespaces); Codex commands ran unsandboxed, tripwires only"; fi
 
 SELF="$(readlink -f "$0")"
 {
@@ -155,7 +183,7 @@ SELF="$(readlink -f "$0")"
   echo "- Reviewed commit: \`$FULLSHA\` (peers ran in a detached worktree at this commit)"
   echo "- Author: $AUTHOR; rounds: $ROUNDS (round 1 independent first pass, both at once, not isolated); cross-talk order: $FIRST, $SECOND; timeout per turn: ${TIMEOUT}s"
   echo "- Claude: $(claude --version 2>/dev/null | head -1), model ${PR_CLAUDE_MODEL:-opus}, effort ${PR_CLAUDE_EFFORT:-max}; tools Read, Glob, Grep; no MCP"
-  echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1) (engine, not the toolbox launcher), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME config without MCP/plugin/project sections, shell env \"core\"; --sandbox read-only, sandbox $SANDBOX"
+  echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1) (engine started directly; the toolbox launcher runs only as Bedrock credential helper), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME config without MCP/plugin/project sections, shell env \"core\", no project instructions (project_doc_max_bytes=0); --sandbox read-only, sandbox $SANDBOX"
   echo "- Round 1 is an independent first pass, not isolated (see the script header)"
   echo "- Script: \`tools/jeiobs/peer-review/review.sh\`, sha256 \`$(sha256sum "$SELF" | cut -c1-64)\`"
   echo "- Context sha256 \`$(sha256sum "$CTX" | cut -c1-64)\`; ledger sha256 \`$(sha256sum "$LEDGER" | cut -c1-64)\`"
@@ -205,15 +233,21 @@ prompt() { # peer round own_prev other_latest -> path
   } > "$p" || fail "cannot write the $peer r$r prompt"
   echo "$p"
 }
-run_peer() { # peer prompt reply stderr
+start_peer() { # peer prompt reply stderr  (background; sets PGID[peer])
+  # timeout puts itself in a new process group (it is not --foreground), so the
+  # whole turn can be killed when it ends.
   if [ "$1" = claude ]; then
-    (cd "$TREE" && timeout "$TIMEOUT" claude -p --model "${PR_CLAUDE_MODEL:-opus}" --effort "${PR_CLAUDE_EFFORT:-max}" \
+    (cd "$TREE" && exec timeout "$TIMEOUT" claude -p --model "${PR_CLAUDE_MODEL:-opus}" --effort "${PR_CLAUDE_EFFORT:-max}" \
       --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" --strict-mcp-config --setting-sources user \
-      < "$2" > "$3" 2> "$4")
+      < "$2" > "$3" 2> "$4") &
   else
     CODEX_HOME="$REVIEW_CODEX_HOME" timeout "$TIMEOUT" "$CODEX_BIN" exec --sandbox read-only --skip-git-repo-check \
-      -C "$TREE" -c model_reasoning_effort="${PR_CODEX_EFFORT:-xhigh}" -o "$3" - < "$2" > "$4" 2>&1
+      -C "$TREE" -c project_doc_max_bytes=0 -c model_reasoning_effort="${PR_CODEX_EFFORT:-xhigh}" -o "$3" - < "$2" > "$4" 2>&1 &
   fi
+  PGID[$1]=$!
+}
+end_peer() { # peer  (kills what is left of the turn's process group)
+  kill -KILL -- "-${PGID[$1]}" 2>/dev/null; unset "PGID[$1]"
 }
 validate() { # peer round reply
   local peer=$1 r=$2 f=$3 id bad
@@ -241,27 +275,36 @@ pin_saved() { # peer round slot
   pin "$OUT/$n-r$2-$1.prompt.md"; pin "$OUT/$n-r$2-$1.reply.md"
 }
 
-# Round 1: independent first pass. Both peers start together; both are waited for even if one
-# fails, then the tamper check runs, then the files are saved, then validated.
+# Round 1: independent first pass. Both peers start together. Each reply is saved
+# and pinned as soon as its peer exits; after both have exited, the tamper check
+# runs, then both replies are validated.
 pa=$(prompt "$FIRST" 1 "" "") || exit 3; pb=$(prompt "$SECOND" 1 "" "") || exit 3
 PROMPT_HASH["$FIRST-r1"]="$(sha256sum < "$pa")"; PROMPT_HASH["$SECOND-r1"]="$(sha256sum < "$pb")"
-run_peer "$FIRST" "$pa" "$TMP/$FIRST-r1.reply" "$DIAG/r1-$FIRST.stderr.txt" & ja=$!
-run_peer "$SECOND" "$pb" "$TMP/$SECOND-r1.reply" "$DIAG/r1-$SECOND.stderr.txt" & jb=$!
-wait $ja; ra=$?; wait $jb; rb=$?
-touch "$TMP/$FIRST-r1.reply" "$TMP/$SECOND-r1.reply"
-a=$(save "$FIRST" 1 1); b=$(save "$SECOND" 1 2)
-pin_saved "$FIRST" 1 1; pin_saved "$SECOND" 1 2
+start_peer "$FIRST" "$pa" "$TMP/$FIRST-r1.reply" "$DIAG/r1-$FIRST.stderr.txt"
+start_peer "$SECOND" "$pb" "$TMP/$SECOND-r1.reply" "$DIAG/r1-$SECOND.stderr.txt"
+declare -A RC=()
+ja=${PGID[$FIRST]} jb=${PGID[$SECOND]} left="${PGID[$FIRST]} ${PGID[$SECOND]}"
+for _ in 1 2; do
+  done=""; wait -n -p done $left; rc=$?
+  if [ "$done" = "$ja" ]; then peer=$FIRST slot=1 left=$jb
+  elif [ "$done" = "$jb" ]; then peer=$SECOND slot=2 left=$ja
+  else fail "round 1: lost track of a peer (wait returned $rc)"; fi
+  RC[$peer]=$rc; end_peer "$peer"
+  touch "$TMP/$peer-r1.reply"; f=$(save "$peer" 1 $slot) || exit 3; pin_saved "$peer" 1 $slot
+  if [ $slot = 1 ]; then a=$f; else b=$f; fi
+done
 tamper_check "round 1"
-[ $ra -eq 0 ] || fail "$FIRST r1 exited $ra"
-[ $rb -eq 0 ] || fail "$SECOND r1 exited $rb"
+[ "${RC[$FIRST]}" -eq 0 ] || fail "$FIRST r1 exited ${RC[$FIRST]}"
+[ "${RC[$SECOND]}" -eq 0 ] || fail "$SECOND r1 exited ${RC[$SECOND]}"
 validate "$FIRST" 1 "$a"; validate "$SECOND" 1 "$b"
 for ((r = 2; r <= ROUNDS; r++)); do
   for side in 1 2; do
     if [ $side = 1 ]; then peer=$FIRST own=$a other=$b; else peer=$SECOND own=$b other=$a; fi
     p=$(prompt "$peer" "$r" "$own" "$other") || exit 3
     PROMPT_HASH["$peer-r$r"]="$(sha256sum < "$p")"
-    run_peer "$peer" "$p" "$TMP/$peer-r$r.reply" "$DIAG/r$r-$peer.stderr.txt"; rc=$?
-    touch "$TMP/$peer-r$r.reply"; f=$(save "$peer" "$r" $side); pin_saved "$peer" "$r" $side
+    start_peer "$peer" "$p" "$TMP/$peer-r$r.reply" "$DIAG/r$r-$peer.stderr.txt"
+    wait "${PGID[$peer]}"; rc=$?; end_peer "$peer"
+    touch "$TMP/$peer-r$r.reply"; f=$(save "$peer" "$r" $side) || exit 3; pin_saved "$peer" "$r" $side
     tamper_check "round $r $peer"
     [ $rc -eq 0 ] || fail "$peer r$r exited $rc"
     validate "$peer" "$r" "$f"
@@ -274,6 +317,9 @@ verify_evidence "end of run"
   echo
   echo "## Files written by this run"
   echo
+  echo "The hash given for \`00-meta.md\` is of its header (the part before \"Finished\");"
+  echo "the runner prints the final hash of every file, this one included, when it exits."
+  echo
   for f in "${!EVIDENCE[@]}"; do echo "- \`$(basename "$f")\` sha256 \`${EVIDENCE[$f]%% *}\`"; done | sort
   echo
   echo "## Final dispositions"
@@ -282,4 +328,8 @@ verify_evidence "end of run"
   grep -hE '^(FINDING|VERDICT)' "$a" "$b"
   echo '```'
 } >> "$OUT/00-meta.md"
+pin "$OUT/00-meta.md"
 grep -hE '^(FINDING|VERDICT)' "$a" "$b"
+echo
+echo "Evidence (check with: sha256sum -c, from $OUT, before committing):"
+for f in "${!EVIDENCE[@]}"; do echo "${EVIDENCE[$f]%% *}  $(basename "$f")"; done | sort -k2

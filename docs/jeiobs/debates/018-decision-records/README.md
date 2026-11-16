@@ -12,6 +12,8 @@
 
 Transcripts are verbatim except that trailing whitespace was stripped (the
 repository's whitespace check rejects it), the home directory is shown as `~`,
-and relative markdown links inside run folders are shown as plain text.
+and relative markdown links inside run folders are shown as plain text. These
+edits change file hashes, so the hashes in each `00-meta.md` are of the files
+as the runner wrote them.
 SHAs before `f4e2e6d35` are pre-rewrite; translate them with
 [history/2026-11-16-history-rewrite.md](../../history/2026-11-16-history-rewrite.md).
