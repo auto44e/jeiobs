@@ -20,14 +20,20 @@
 #   ROUNDS      at least 2 (default 2). Round 1 is blind: both peers run at the
 #               same time and neither reply exists while the other works.
 #
-# Confinement: Claude gets only Read, Glob and Grep and no MCP servers. Codex
-# runs the real binary (not the toolbox launcher, which injects MCP servers)
-# with a dedicated CODEX_HOME holding only model and provider settings, so it
-# has no MCP servers, plugins or skills, and with --sandbox read-only. On hosts
-# where Codex's sandbox cannot start (bubblewrap needs unprivileged user
-# namespaces), 00-meta.md says so, and the run relies on the tamper check:
-# after every turn the lead's repository (all refs, index and working tree) and
-# the review checkout must be unchanged, or the run fails.
+# What is enforced, and what is not:
+# - Claude gets only the Read, Glob and Grep tools and no MCP servers.
+# - Codex runs the codex-cli engine directly (the toolbox launcher in bin/
+#   injects MCP servers into its config) with a dedicated CODEX_HOME whose
+#   config.toml has no [mcp_servers] (the engine itself adds analytics/otel
+#   telemetry sections), a "core" shell environment, and --sandbox read-only.
+# - Where Codex's sandbox cannot start (bubblewrap needs unprivileged user
+#   namespaces; Ubuntu 24.04 AppArmor blocks them), Codex commands run
+#   unsandboxed. 00-meta.md says so. The tamper check is then the enforcement:
+#   after every turn, the lead's repository (refs, HEAD, index flags, tracked
+#   diffs, untracked and ignored file contents, .git/config and hooks, except
+#   OUTDIR) and the review checkout (HEAD and status) must be unchanged.
+# - Blindness in round 1 is by protocol and timing, not enforced: a peer that
+#   can read the filesystem could look for the other's in-progress files.
 #
 # Fails closed (exit 3, writes FAILED) on a timeout, a non-zero exit, an empty
 # reply, a missing or malformed VERDICT or FINDING line, a ledger row or earlier
@@ -55,13 +61,14 @@ case $AUTHOR in
   claude) FIRST=codex SECOND=claude ;; codex | lead) FIRST=claude SECOND=codex ;;
   *) echo "error: -a claude|codex|lead" >&2; exit 2 ;;
 esac
-CODEX_BIN="$(ls -d "$HOME"/.toolbox/tools/codex/*/bin/codex 2>/dev/null | sort -V | tail -1)"
-[ -x "$CODEX_BIN" ] || CODEX_BIN="$(command -v codex)"
+CODEX_BIN="${REVIEW_CODEX_BIN:-$(ls -d "$HOME"/.toolbox/tools/codex/*/codex 2>/dev/null | sort -V | tail -1)}"
+"$CODEX_BIN" --version 2>/dev/null | grep -q '^codex-cli ' || { echo "error: $CODEX_BIN is not the codex-cli engine" >&2; exit 2; }
 REVIEW_CODEX_HOME="${REVIEW_CODEX_HOME:-$HOME/.config/jeiobs-agent/codex-review}"
 command -v claude >/dev/null && [ -x "$CODEX_BIN" ] || { echo "error: claude and codex needed" >&2; exit 2; }
 [ -f "$REVIEW_CODEX_HOME/config.toml" ] || { echo "error: no $REVIEW_CODEX_HOME/config.toml (model/provider only)" >&2; exit 2; }
-if grep -q '^\[mcp_servers' "$REVIEW_CODEX_HOME/config.toml"; then
-  echo "error: $REVIEW_CODEX_HOME/config.toml defines MCP servers" >&2; exit 2
+if grep -qE '^\[(mcp_servers|plugins|marketplaces|projects)' "$REVIEW_CODEX_HOME/config.toml" \
+  || ! grep -qE '^inherit = "core"' "$REVIEW_CODEX_HOME/config.toml"; then
+  echo "error: $REVIEW_CODEX_HOME/config.toml must have no MCP/plugin/project sections and inherit = \"core\"" >&2; exit 2
 fi
 REPO="$(git rev-parse --show-toplevel)" || exit 2
 FULLSHA="$(git -C "$REPO" rev-parse --verify "$SHA^{commit}")" || { echo "error: $SHA is not a commit" >&2; exit 2; }
@@ -86,13 +93,24 @@ git -C "$REPO" worktree add --detach "$TREE" "$FULLSHA" >/dev/null 2>&1 || { ech
 cp "$CTX" "$OUT/00-context.md"; cp "$LEDGER" "$OUT/00-ledger-in.md"
 CTX="$OUT/00-context.md"; LEDGER="$OUT/00-ledger-in.md"
 
+REL_OUT="${OUT#"$REPO"/}"
 repo_state() {
-  { git -C "$REPO" for-each-ref --format='%(refname) %(objectname)'
-    git -C "$REPO" rev-parse HEAD; git -C "$REPO" status --porcelain=v2 --untracked-files=all --ignored=matching \
-      | grep -v " ${OUT#"$REPO"/}" ; git -C "$REPO" diff --binary; } 2>/dev/null | sha256sum
+  local gd; gd="$(git -C "$REPO" rev-parse --git-common-dir)"; case $gd in /*) ;; *) gd="$REPO/$gd" ;; esac
+  {
+    git -C "$REPO" for-each-ref --format='%(refname) %(objectname)'
+    git -C "$REPO" rev-parse HEAD
+    git -C "$REPO" ls-files -v | grep -v " $REL_OUT/"          # index entries with flags
+    git -C "$REPO" diff --binary; git -C "$REPO" diff --cached --binary
+    { git -C "$REPO" ls-files -o -z --exclude-standard; git -C "$REPO" ls-files -o -z --ignored --exclude-standard; } \
+      | tr '\0' '\n' | grep -v "^$REL_OUT/" | sort -u | while IFS= read -r f; do
+        printf '%s ' "$f"; sha256sum < "$REPO/$f" 2>/dev/null || echo missing; done
+    sha256sum "$gd/config" "$gd"/hooks/* 2>/dev/null
+  } 2>/dev/null | sha256sum
 }
+TREE_HEAD=""
 tamper_check() { # label
   [ "$(repo_state)" = "$BASE_STATE" ] || fail "$1: the lead's repository changed during the turn"
+  [ "$(git -C "$TREE" rev-parse HEAD)" = "$FULLSHA" ] || fail "$1: the review checkout's HEAD moved"
   [ -z "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching)" ] || fail "$1: the review checkout was modified"
 }
 BASE_STATE="$(repo_state)"
@@ -107,7 +125,8 @@ SELF="$(readlink -f "$0")"
   echo "- Reviewed commit: \`$FULLSHA\` (peers ran in a detached worktree at this commit)"
   echo "- Author: $AUTHOR; rounds: $ROUNDS (round 1 blind, both at once); cross-talk order: $FIRST, $SECOND; timeout per turn: ${TIMEOUT}s"
   echo "- Claude: $(claude --version 2>/dev/null | head -1), model ${PR_CLAUDE_MODEL:-opus}, effort ${PR_CLAUDE_EFFORT:-max}; tools Read, Glob, Grep; no MCP"
-  echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME without MCP, plugins or skills; --sandbox read-only, sandbox $SANDBOX"
+  echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1) (engine, not the toolbox launcher), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME config without MCP/plugin/project sections, shell env \"core\"; --sandbox read-only, sandbox $SANDBOX"
+  echo "- Round 1 is blind by protocol and timing, not enforced (see the script header)"
   echo "- Script: \`tools/jeiobs/peer-review/review.sh\`, sha256 \`$(sha256sum "$SELF" | cut -c1-64)\`"
   echo "- Context sha256 \`$(sha256sum "$CTX" | cut -c1-64)\`; ledger sha256 \`$(sha256sum "$LEDGER" | cut -c1-64)\`"
   echo "- stderr logs: kept locally (not committed), \`$(basename "$DIAG")\`"
@@ -184,22 +203,29 @@ save() { # peer round slot  (copies the prompt and reply into OUT)
   echo "$OUT/$n-r$2-$1.reply.md"
 }
 
-# Round 1: blind. Both peers start together; replies are copied to OUT afterwards.
+# Round 1: blind. Both peers start together; both are waited for even if one
+# fails, then the tamper check runs, then the files are saved, then validated.
 pa=$(prompt "$FIRST" 1 "" ""); pb=$(prompt "$SECOND" 1 "" "")
 run_peer "$FIRST" "$pa" "$TMP/$FIRST-r1.reply" "$DIAG/r1-$FIRST.stderr.txt" & ja=$!
 run_peer "$SECOND" "$pb" "$TMP/$SECOND-r1.reply" "$DIAG/r1-$SECOND.stderr.txt" & jb=$!
-wait $ja || fail "$FIRST r1 exited $?"
-wait $jb || fail "$SECOND r1 exited $?"
-tamper_check "round 1"
-validate "$FIRST" 1 "$TMP/$FIRST-r1.reply"; validate "$SECOND" 1 "$TMP/$SECOND-r1.reply"
+wait $ja; ra=$?; wait $jb; rb=$?
+touch "$TMP/$FIRST-r1.reply" "$TMP/$SECOND-r1.reply"
 a=$(save "$FIRST" 1 1); b=$(save "$SECOND" 1 2)
+tamper_check "round 1"
+[ $ra -eq 0 ] || fail "$FIRST r1 exited $ra"
+[ $rb -eq 0 ] || fail "$SECOND r1 exited $rb"
+validate "$FIRST" 1 "$a"; validate "$SECOND" 1 "$b"
 for ((r = 2; r <= ROUNDS; r++)); do
-  p=$(prompt "$FIRST" "$r" "$a" "$b")
-  run_peer "$FIRST" "$p" "$TMP/$FIRST-r$r.reply" "$DIAG/r$r-$FIRST.stderr.txt" || fail "$FIRST r$r exited $?"
-  tamper_check "round $r $FIRST"; validate "$FIRST" "$r" "$TMP/$FIRST-r$r.reply"; a=$(save "$FIRST" "$r" 1)
-  p=$(prompt "$SECOND" "$r" "$b" "$a")
-  run_peer "$SECOND" "$p" "$TMP/$SECOND-r$r.reply" "$DIAG/r$r-$SECOND.stderr.txt" || fail "$SECOND r$r exited $?"
-  tamper_check "round $r $SECOND"; validate "$SECOND" "$r" "$TMP/$SECOND-r$r.reply"; b=$(save "$SECOND" "$r" 2)
+  for side in 1 2; do
+    if [ $side = 1 ]; then peer=$FIRST own=$a other=$b; else peer=$SECOND own=$b other=$a; fi
+    p=$(prompt "$peer" "$r" "$own" "$other")
+    run_peer "$peer" "$p" "$TMP/$peer-r$r.reply" "$DIAG/r$r-$peer.stderr.txt"; rc=$?
+    touch "$TMP/$peer-r$r.reply"; f=$(save "$peer" "$r" $side)
+    tamper_check "round $r $peer"
+    [ $rc -eq 0 ] || fail "$peer r$r exited $rc"
+    validate "$peer" "$r" "$f"
+    if [ $side = 1 ]; then a=$f; else b=$f; fi
+  done
 done
 {
   echo "- Finished: $(date -u +%FT%TZ)"

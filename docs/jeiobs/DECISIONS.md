@@ -31,9 +31,9 @@ Terms used below:
 - **Lead agent:** the Kiro session the owner gave this directive to. It
   orchestrates the peers and owns the outcome.
 - **Peers:** the Codex and Claude CLIs, run as separate one-shot processes. They
-  are two model lineages. They keep no memory between calls, but they read the
-  lead's working tree and git history, which can change between rounds; the
-  reviewed commit is therefore pinned by SHA.
+  are two model lineages and keep no memory between calls. Gate reviews run them
+  in a detached checkout of the reviewed commit; design consults may run them in
+  the lead's working tree.
 - **The lead's lineage:** the lead's model is chosen per session and is not
   fixed. So code the lead writes itself is treated as written by neither peer:
   both review it adversarially.
@@ -102,16 +102,24 @@ The lead may merge its own PR only when all of these hold:
    rounds:
    - The peers read a detached checkout of the reviewed commit, not the lead's
      working tree.
-   - Round 1 is blind: both peers run at the same time, and neither reply
-     exists while the other works. From round 2 the peers see each other's
-     replies; the lineage that did not write the change (`-a`) speaks first.
-   - Confinement: Claude has only the Read, Glob and Grep tools and no MCP
-     servers. Codex runs the real binary with a dedicated `CODEX_HOME` holding
-     only model and provider settings (no MCP servers, plugins or skills) and
-     `--sandbox read-only`. Where Codex's sandbox cannot start on the host, the
-     run records that, and a tamper check after every turn (all refs, index and
-     working tree of the lead's repository, including ignored files, and the
-     review checkout) fails the run if anything changed.
+   - Round 1 is blind by protocol and timing: both peers start at the same
+     time and are not told where the other writes. This is not enforced; a peer
+     that can read the filesystem could look. From round 2 the peers see each
+     other's replies; the lineage that did not write the change (`-a`) speaks
+     first.
+   - Confinement, exactly as enforced:
+     - Claude has only the Read, Glob and Grep tools and no MCP servers.
+     - Codex runs the `codex-cli` engine directly (the toolbox launcher injects
+       MCP servers) with a dedicated `CODEX_HOME`. Its config has no MCP,
+       plugin or project sections (the engine adds telemetry sections itself),
+       uses a "core" shell environment, and passes `--sandbox read-only`.
+     - Where Codex's sandbox cannot start on the host, its commands run
+       unsandboxed and `00-meta.md` says so. A tamper check then fails the run
+       if, after any turn, the lead's repository changed (refs, HEAD, index
+       entries and flags, tracked diffs, untracked and ignored file contents,
+       `.git/config` and hooks) or the review checkout's HEAD or files changed.
+       The check detects writes to the repository; it cannot detect reads,
+       network use, or writes elsewhere.
    - Every prompt and reply is committed. stderr logs stay in a local
      diagnostics folder, because they contain tool output.
    - The run fails closed if a turn times out, errors or is empty, lacks a
@@ -125,14 +133,16 @@ The lead may merge its own PR only when all of these hold:
      libobs API changes repeat review rounds until a round finds no blocker or
      major issue.
    - If the head changes after the review, both lineages review the new head.
-     One exception: a commit that only adds or updates files under the PR's
-     own `debates/<pr>/` folder (the run's files and the ledger), checked with
-     `git diff --name-status <reviewed SHA> <head>`, needs no further review.
-     The merge pins that new head, and the run's `00-meta.md` names the
-     reviewed SHA.
+     One exception: a commit whose only changes, per
+     `git diff --name-status <reviewed SHA> <head>`, are *added* files inside
+     one new run folder `debates/<pr>/<run>/` and a modification of
+     `debates/<pr>/findings.md` needs no further review. Earlier transcripts
+     may not be changed this way.
      After a history rewrite, record old→new SHAs and show that the trees are
      identical (`git diff --quiet old new`); only real changes need review.
-   - The merge uses `gh pr merge --merge --match-head-commit <reviewed SHA>`.
+   - The merge uses `gh pr merge --merge --match-head-commit <head>`, where
+     `<head>` is the reviewed SHA or the exempt transcript commit on top of it.
+     The run's `00-meta.md` names the reviewed SHA.
 4. **No open blocker or major finding.** The lead keeps a findings ledger in
    the PR's debate folder, one row per finding: ID, severity, status, finder,
    and the source, meaning the file and FINDING line in a committed transcript
@@ -185,8 +195,9 @@ repository.
 
 ## Confinement history
 
-Until 2026-11-16 the Codex "read-only" and "workspace-write" sandboxes did not
-work on the maintainer's Ubuntu 24.04 host: AppArmor blocks the unprivileged
+Until at least 2026-11-16 the Codex "read-only" and "workspace-write"
+sandboxes did not work on the maintainer's Ubuntu 24.04 host (and still do not,
+until the owner enables bubblewrap): AppArmor blocks the unprivileged
 user namespaces that bubblewrap needs, and Codex's commands ran unsandboxed
 after an automatic escalation. That covers the task 003 workers and reviews and
 the early #18 reviews. No damage was found (the working tree was checked after

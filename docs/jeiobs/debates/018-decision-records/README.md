@@ -5,8 +5,9 @@
   is verbatim; that helper did not save per-turn prompts (each turn's prompt was
   the context plus the other peer's previous reply, which is in `04`).
 - `05-final/`, `06-…/`: review runs with `tools/jeiobs/peer-review/review.sh`.
-  Every prompt, reply and stderr log is kept; `00-meta.md` names the reviewed
-  commit and the final dispositions.
+  Every prompt and reply is kept. stderr logs are kept locally, not here
+  (they contain tool output); run 06 was trimmed to match. `00-meta.md` names
+  the reviewed commit and the final dispositions.
 - [findings.md](findings.md): the ledger.
 
 Transcripts are verbatim except that trailing whitespace was stripped (the
