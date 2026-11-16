@@ -1,6 +1,6 @@
 # Current roadmap direction — 2026-11-15
 
-Inspected main `2dbad5000837e1f18f1dc92a3efc2538f2cb6355`. Owner expanded implementation scope:
+Inspected main `dd2078b1ec8a0776b3148f661c94509da25df941`. Owner expanded implementation scope:
 full S1-S6 saving/offline delivery on Windows/macOS/Linux, OBS-compatible native saves,
 graceful audio recovery, PDC preserving A/V sync, sidechains, optional listen bus,
 full adopted plugin host-spec coverage, mixed-media timing and optional recording
@@ -101,6 +101,12 @@ have been configured. CI workflow definitions do not imply a successful run.
 Existing upstream master/other branches retain upstream workflows; use main.
 
 ## Next bounded task
+
+Open small items (2026-11-16):
+- Pin `aqtinstall` in `tools/jeiobs/linux-deps.sh` (it installs an unpinned
+  version). Dependency change, so owner-merged (review of #18, finding k10).
+- Task 003 follow-up D6 (remember failed VST3 bundles): design debated, see
+  `debates/` once its PR opens. Task 002 S1: audit written, format design in debate.
 
 Execute [001-vst3](tasks/001-vst3.md) / issue #1. It may precede M0 completion,
 but use disposable profiles/VMs. Before creating a feature PR, review dependencies

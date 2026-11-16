@@ -1,7 +1,7 @@
 # jeiobs implementation roadmap
 
 Owner direction: 2026-11-15 (America/New_York). Baseline inspected:
-`2dbad5000837e1f18f1dc92a3efc2538f2cb6355`. This roadmap commits scope for implementation; it does not
+`dd2078b1ec8a0776b3148f661c94509da25df941`. This roadmap commits scope for implementation; it does not
 declare unbuilt features complete. Milestones group outcomes, not serial approval gates.
 
 ## Current evidence and priorities
@@ -224,4 +224,4 @@ Agents can proceed autonomously with ordinary design/code/test work and small PR
 Record runner/hardware blockers and exact reproduction steps; reserve scarce human
 hardware time for native UI, drivers, licensed plugins and actual device validation.
 Keep evidence honest and current. No extra owner approval for routine implementation;
-maintainer merge/release authority remains unchanged.
+Release authority stays with the owner; merges follow [DECISIONS](DECISIONS.md).

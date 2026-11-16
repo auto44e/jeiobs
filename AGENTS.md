@@ -7,7 +7,8 @@ GPL-2.0-or-later licensing, module/source identifiers and public ABI where possi
 
 ## Working agreement
 
-- Ship small, reviewable PRs with one purpose. Branch from main; no force pushes.
+- Ship small, reviewable PRs with one purpose. Branch from main; no force pushes
+  except on the owner's verbatim instruction (docs/jeiobs/DECISIONS.md, gate item 1).
 - The first coding task is docs/jeiobs/tasks/001-vst3.md. Roadmap numbers express
   priorities and dependencies, not a compulsory serial approval chain.
   Independent experiments may proceed in parallel; unfinished work stays opt-in.
@@ -29,14 +30,17 @@ GPL-2.0-or-later licensing, module/source identifiers and public ABI where possi
 - Ask the owner for product scope, incompatible licensing or destructive decisions;
   ordinary refactors and changes to previously tested code need no extra approval.
 - No secrets or personal logs. SDK additions need recorded provenance/license review.
-  AAX and ARA2 remain out of scope. No autonomous merge or release publishing.
+  AAX and ARA2 remain out of scope. Release publishing, signing, installers and
+  updaters are owner-only. Merging: the lead agent may merge its own PR only through
+  the self-merge gate in docs/jeiobs/DECISIONS.md (peer debate, owner-only classes
+  excluded); every other PR is merged by the owner.
 
 ## PR evidence
 
 State problem, final change, key design choices, tests actually run, limitations,
-compatibility impact and rollback. Keep detail proportional to risk; no mandatory
-essay, debate transcript or independent reviewer count for every small change.
-See docs/jeiobs/CONTRIBUTING.md for risk tiers and completion criteria.
+compatibility impact and rollback. Record decisions with why / if otherwise / flex
+and commit peer transcripts under docs/jeiobs/debates/ (docs/jeiobs/DECISIONS.md).
+Keep detail proportional to risk. See docs/jeiobs/CONTRIBUTING.md for risk tiers.
 
 ## Expanded implementation direction — 2026-11-15
 

@@ -81,8 +81,8 @@ end it.
 | Build | Result |
 | --- | --- |
 | this branch | **16 PASS, 0 FAIL**, about 50 s, no process left. Hang probe skipped in 2.1 s with a 2 s timeout; frozen probe killed by the coordinator at 7.0 s; OBS quits mid-scan in 1.4–2.8 s with 0 leaks while the scanner runs; the noisy grandchild is alive while the scan finishes in about 30 ms. |
-| this branch, clean Ubuntu 24.04 container (`tools/jeiobs/cleanroom`, under `xvfb-run`) | **15 PASS, 0 FAIL** at `73b9c2190` (before the frozen-probe check existed) |
-| round-2 code (`e5d433625`) | the frozen-probe check FAILS (still running at 20 s), the other 15 PASS |
+| this branch, clean Ubuntu 24.04 container (`tools/jeiobs/cleanroom`, under `xvfb-run`) | **15 PASS, 0 FAIL** at `6ad152a95` (before the frozen-probe check existed) |
+| round-2 code (`5948e0474`) | the frozen-probe check FAILS (still running at 20 s), the other 15 PASS |
 | unfixed (main) | the 6 original checks PASS, **all new checks FAIL** (crash: exit 139 and no list; hang: still running at 20 s; OBS blocked at exit until the 30 s timeout). |
 
 The script exits 2 (no verdict) if a needed tool is missing, if `pgrep`/`pkill`
@@ -109,3 +109,62 @@ which would make the class checks unreliable.
 - ADelay's 68–100 ms of extra delay is not attributed; see task 001.
 - `VST3Plugin::init` assigns `sampleRate = sampleRate;` (the parameter to
   itself). Harmless today because the member is not read.
+
+## Decisions
+
+Recorded in the [DECISIONS](../DECISIONS.md) format (swept in 2026-11-16, after
+the merge). Correspondence: [debates/003-vst3-scanner](../debates/003-vst3-scanner/).
+
+**D1. One probe process per code-loading bundle, sequential.** Why: a plugin
+crash or hang can only be contained by a process boundary. Both design reviews
+([02](../debates/003-vst3-scanner/02-design-codex.md),
+[03](../debates/003-vst3-scanner/03-design-claude.md)) chose it. If otherwise:
+an in-process scan with signal handlers cannot survive a hang or heap
+corruption. Probing in parallel would leak pipe handles between probes on Windows
+and make the order nondeterministic. Flex: parallel probes with a small pool if
+first scans with many plugins become too slow; needs per-probe handle hygiene
+first.
+
+**D2. Result file plus nonce, not a framed stdout payload.** Why: a file written
+atomically is simpler to validate than a payload parsed from a stream. Settled by
+the lead after the design reviews, not by a debate. Correction (review of #18):
+it is not forgery protection. Plugin output goes to `/dev/null` (or `NUL`) before
+plugin code runs, and a nonce cannot stop code inside the probe from writing a
+valid-looking result. The nonce only rejects stale files from earlier probes. If
+otherwise (Claude's framed stdout on a private descriptor): equally sound, with
+more parsing code in the coordinator. Flex: either works; revisit if libobs gains
+a private IPC channel.
+
+**D3. libobs gains `os_process_pipe_kill` and `os_process_pipe_wait`.** Why: a
+cancel file cannot interrupt a blocked read. Accepting the wait leaves exit
+bounded only by the probe timeout. Round 2 showed a timer alone fails on POSIX
+once the probe drops its pipe
+([11](../debates/003-vst3-scanner/11-r2-review-impl-claude.md)). If otherwise:
+OBS can hang at exit, and a frozen probe blocks the scan forever. Flex: firm.
+Both are additive exports and could be offered upstream.
+
+**D4. No overall scan deadline.** Why: it can only act between probes, it would
+silently cut off large first scans, and the kill bounds shutdown anyway (Claude,
+[03](../debates/003-vst3-scanner/03-design-claude.md)). The two designs
+disagreed (Codex proposed 30 s overall,
+[02](../debates/003-vst3-scanner/02-design-codex.md)); the lead chose this, without
+a debate. If otherwise: a first scan with many slow plugins would stop early and
+list only part of them, and the rest would be probed again on every launch. Flex:
+revisit together with D6.
+
+**D5. 30 s per-probe default.** Why: slow but valid plugins on a cold start
+(antivirus, licence checks) must not be dropped
+([07](../debates/003-vst3-scanner/07-r1-review-impl-claude.md)). The options on
+the table were 3 s (Codex, 02), 10 s (the first brief), 20 s (Claude, 03) and a
+retry with a longer timeout (Claude, 07). The lead chose 30 s without a debate.
+If otherwise: with 3–10 s, valid plugins are skipped on slow machines and look
+broken. Flex: keep it high once D6 exists, because a remembered false timeout
+would stick. D6 must retry timeouts, for example on Rescan, rather than lower
+this value.
+
+**D6. Failed bundles are not remembered yet.** Why: it needs a fingerprint
+schema (path, mtime, size) and its own tests; it was kept out of an already
+large PR. Cost of this choice: every launch pays the timeout for each hanging
+plugin. If otherwise (remembering them in #16): a bigger PR, plus a persistence
+format with no tests behind it. Flex: **next task**. A skip list beside
+`vst3list.json`, retried on Rescan or when the fingerprint changes.
