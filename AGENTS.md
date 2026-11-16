@@ -37,3 +37,15 @@ State problem, final change, key design choices, tests actually run, limitations
 compatibility impact and rollback. Keep detail proportional to risk; no mandatory
 essay, debate transcript or independent reviewer count for every small change.
 See docs/jeiobs/CONTRIBUTING.md for risk tiers and completion criteria.
+
+## Expanded implementation direction — 2026-11-15
+
+Follow the expanded ROADMAP tracks for complete snapshot/offline delivery, OBS-compatible
+legacy saves, graceful audio recovery, PDC/A/V timing, sidechains, listen bus, media
+conversion and recording timecode. Task 002 requires S1-S6, not investigation alone.
+Implement shared logic and native Windows/macOS/Linux adapters autonomously in small
+PRs. Run available native CI; do not leave avoidable platform stubs for the owner.
+Record blocked native/hardware tests without calling cross-compilation runtime proof.
+The original VST3-first instruction is historical sequencing: continue its remaining
+validation while independent authorized tracks proceed. Full plugin host-spec coverage
+requires a versioned capability matrix; do not label partial hosting fully conformant.
