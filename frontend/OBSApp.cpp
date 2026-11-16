@@ -18,7 +18,6 @@
 #include "OBSApp.hpp"
 
 #include <components/Multiview.hpp>
-#include <dialogs/LogUploadDialog.hpp>
 #include <plugin-manager/PluginManager.hpp>
 #include <utility/CrashHandler.hpp>
 #include <utility/OBSEventFilter.hpp>
@@ -33,7 +32,6 @@
 #endif
 #include <qt-wrappers.hpp>
 
-#include <QCheckBox>
 #include <QDesktopServices>
 #if defined(_WIN32) || defined(ENABLE_SPARKLE_UPDATER)
 #include <QFile>
@@ -84,7 +82,6 @@ namespace {
 
 typedef struct UncleanLaunchAction {
 	bool useSafeMode = false;
-	bool sendCrashReport = false;
 } UncleanLaunchAction;
 
 enum class PluginFailureAction { Continue, OpenPluginManager };
@@ -116,7 +113,7 @@ PluginFailureAction handlePluginFailure()
 	}
 }
 
-UncleanLaunchAction handleUncleanShutdown(bool enableCrashUpload)
+UncleanLaunchAction handleUncleanShutdown()
 {
 	UncleanLaunchAction launchAction;
 
@@ -128,13 +125,6 @@ UncleanLaunchAction handleUncleanShutdown(bool enableCrashUpload)
 	crashWarning.setOption(QMessageBox::Option::DontUseNativeDialog);
 	crashWarning.setWindowTitle(QTStr("CrashHandling.Dialog.Title"));
 	crashWarning.setText(QTStr("CrashHandling.Labels.Text"));
-
-	if (enableCrashUpload) {
-		crashWarning.setInformativeText(QTStr("CrashHandling.Labels.PrivacyNotice"));
-
-		QCheckBox *sendCrashReportCheckbox = new QCheckBox(QTStr("CrashHandling.Checkbox.SendReport"));
-		crashWarning.setCheckBox(sendCrashReportCheckbox);
-	}
 
 	QPushButton *launchSafeButton =
 		crashWarning.addButton(QTStr("CrashHandling.Buttons.LaunchSafe"), QMessageBox::AcceptRole);
@@ -153,14 +143,6 @@ UncleanLaunchAction handleUncleanShutdown(bool enableCrashUpload)
 		blog(LOG_INFO, "[Safe Mode] Safe mode launch selected, loading third-party plugins is disabled");
 	} else {
 		blog(LOG_WARNING, "[Safe Mode] Normal launch selected, loading third-party plugins is enabled");
-	}
-
-	bool sendCrashReport = (enableCrashUpload) ? crashWarning.checkBox()->isChecked() : false;
-
-	if (sendCrashReport) {
-		launchAction.sendCrashReport = true;
-
-		blog(LOG_INFO, "User selected to send crash report");
 	}
 
 	return launchAction;
@@ -1187,17 +1169,14 @@ void OBSApp::AppInit()
 
 void OBSApp::checkForUncleanShutdown()
 {
+	/* JeiOBS does not upload crash reports: they stay in the local crash
+	 * report folder (Help > Crash Reports > Show Crash Reports). */
 	bool hasUncleanShutdown = crashHandler_->hasUncleanShutdown();
-	bool hasNewCrashLog = crashHandler_->hasNewCrashLog();
 
 	if (hasUncleanShutdown) {
-		UncleanLaunchAction launchAction = handleUncleanShutdown(hasNewCrashLog);
+		UncleanLaunchAction launchAction = handleUncleanShutdown();
 
 		safe_mode = launchAction.useSafeMode;
-
-		if (launchAction.sendCrashReport) {
-			crashHandler_->uploadLastCrashLog();
-		}
 	}
 }
 
@@ -1357,14 +1336,6 @@ bool OBSApp::OBSInit()
 		[this](Qt::ApplicationState state) { ResetHotkeyState(state == Qt::ApplicationActive); });
 	ResetHotkeyState(applicationState() == Qt::ApplicationActive);
 
-	connect(crashHandler_.get(), &OBS::CrashHandler::crashLogUploadFailed, this,
-		[this](const QString &errorMessage) {
-			emit this->logUploadFailed(OBS::LogFileType::CrashLog, errorMessage);
-		});
-
-	connect(crashHandler_.get(), &OBS::CrashHandler::crashLogUploadFinished, this,
-		[this](const QString &fileUrl) { emit this->logUploadFinished(OBS::LogFileType::CrashLog, fileUrl); });
-
 	return true;
 }
 
@@ -1456,41 +1427,6 @@ void OBSApp::openCrashLogDirectory() const
 
 	QUrl crashLogDirectoryURL = QUrl::fromLocalFile(crashLogDirectoryString);
 	QDesktopServices::openUrl(crashLogDirectoryURL);
-}
-
-void OBSApp::uploadLastAppLog() const
-{
-	OBSBasic *basicWindow = static_cast<OBSBasic *>(GetMainWindow());
-
-	basicWindow->UploadLog("obs-studio/logs", GetLastLog(), OBS::LogFileType::LastAppLog);
-}
-
-void OBSApp::uploadCurrentAppLog() const
-{
-	OBSBasic *basicWindow = static_cast<OBSBasic *>(GetMainWindow());
-
-	basicWindow->UploadLog("obs-studio/logs", GetCurrentLog(), OBS::LogFileType::CurrentAppLog);
-}
-
-void OBSApp::uploadLastCrashLog()
-{
-	crashHandler_->uploadLastCrashLog();
-}
-
-OBS::LogFileState OBSApp::getLogFileState(OBS::LogFileType type) const
-{
-	switch (type) {
-	case OBS::LogFileType::CrashLog: {
-		bool hasNewCrashLog = crashHandler_->hasNewCrashLog();
-
-		return (hasNewCrashLog) ? OBS::LogFileState::New : OBS::LogFileState::Uploaded;
-	}
-	case OBS::LogFileType::CurrentAppLog:
-	case OBS::LogFileType::LastAppLog:
-		return OBS::LogFileState::New;
-	default:
-		return OBS::LogFileState::NoState;
-	}
 }
 
 bool OBSApp::TranslateString(const char *lookupVal, const char **out) const

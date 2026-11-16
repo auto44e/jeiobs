@@ -20,7 +20,6 @@
 #include "OBSBasic.hpp"
 #include "OBSBasicStats.hpp"
 
-#include <dialogs/LogUploadDialog.hpp>
 #include <dialogs/OBSAbout.hpp>
 #include <dialogs/OBSBasicAdvAudio.hpp>
 #include <dialogs/OBSBasicFilters.hpp>
@@ -49,6 +48,9 @@
 
 #include <nlohmann/json.hpp>
 #include <QDesktopServices>
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
 
 #include <sstream>
 
@@ -64,8 +66,7 @@ extern QCef *cef;
 extern QCefCookieManager *panel_cookies;
 
 using namespace std;
-using LogUploadDialog = OBS::LogUploadDialog;
-using LogUploadType = OBS::LogFileType;
+using LogFileType = OBS::LogFileType;
 
 void OBSBasic::CreateInteractionWindow(obs_source_t *source)
 {
@@ -275,37 +276,67 @@ static BPtr<char> ReadLogFile(const char *subdir, const char *log)
 	return file;
 }
 
-void OBSBasic::UploadLog(const char *subdir, const char *file, const LogUploadType uploadType)
+void OBSBasic::SaveLogCopy(const char *file, const LogFileType logType)
 {
-	BPtr<char> fileString{ReadLogFile(subdir, file)};
+	/* JeiOBS does not upload logs. Logs are already written to the log
+	 * folder as they happen; this saves a copy, without asking where, to a
+	 * folder that is easy to find and share by hand. */
+	/* On a first run there is no previous log and the name is empty. Do
+	 * not read the log folder itself as a file. */
+	BPtr<char> fileString{(file && *file) ? ReadLogFile("obs-studio/logs", file) : nullptr};
 
 	if (!fileString || !*fileString) {
-		OBSApp *app = App();
-		emit app->logUploadFailed(uploadType, QTStr("LogUploadDialog.Errors.NoLogFile"));
+		OBSMessageBox::warning(this, QTStr("LogSave.Title"), QTStr("LogSave.Errors.NoLogFile"));
 		return;
 	}
 
-	ui->menuLogFiles->setEnabled(false);
-
-	stringstream ss;
-	ss << "OBS " << App()->GetVersionString(false) << " log file uploaded at " << CurrentDateTimeString()
-	   << ((uploadType == OBS::LogFileType::CurrentAppLog) ? " (Active Log)" : " (Complete Log)") << "\n\n"
-	   << fileString;
-
-	if (logUploadThread) {
-		logUploadThread->wait();
+	QString baseDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+	if (baseDir.isEmpty()) {
+		baseDir = QDir::homePath();
 	}
 
-	RemoteTextThread *thread = new RemoteTextThread("https://obsproject.com/logs/upload", "text/plain", ss.str());
+	QDir saveDir(baseDir + "/JeiOBS/logs");
+	if (!saveDir.mkpath(".")) {
+		OBSMessageBox::warning(this, QTStr("LogSave.Title"),
+				       QTStr("LogSave.Errors.Write").arg(saveDir.absolutePath()));
+		return;
+	}
 
-	logUploadThread.reset(thread);
+	stringstream ss;
+	ss << "JeiOBS (based on OBS Studio) " << App()->GetVersionString(false) << " log file saved at "
+	   << CurrentDateTimeString() << ((logType == LogFileType::CurrentAppLog) ? " (Active Log)" : " (Complete Log)")
+	   << "\n\n"
+	   << fileString;
+	const string content = ss.str();
 
-	connect(thread, &RemoteTextThread::Result, this,
-		[this, uploadType](const std::string &text, const std::string &error) {
-			logUploadFinished(text, error, uploadType);
-		});
+	/* Never replace an earlier copy: it may have been edited before sharing. */
+	const QFileInfo logName(QT_UTF8(file));
+	QString target = saveDir.absoluteFilePath(logName.fileName());
+	for (int n = 2; QFileInfo::exists(target); ++n) {
+		target = saveDir.absoluteFilePath(
+			QString("%1 (%2).%3").arg(logName.completeBaseName()).arg(n).arg(logName.suffix()));
+	}
+	if (!os_quick_write_utf8_file_safe(QT_TO_UTF8(target), content.c_str(), content.size(), false, "tmp",
+					   nullptr)) {
+		blog(LOG_WARNING, "Failed to save a copy of the log to %s", QT_TO_UTF8(target));
+		OBSMessageBox::warning(this, QTStr("LogSave.Title"), QTStr("LogSave.Errors.Write").arg(target));
+		return;
+	}
 
-	logUploadThread->start();
+	blog(LOG_INFO, "Saved a copy of log %s to %s", file, QT_TO_UTF8(target));
+
+	QMessageBox saved(this);
+	saved.setIcon(QMessageBox::Information);
+	saved.setWindowTitle(QTStr("LogSave.Title"));
+	saved.setText(QTStr("LogSave.Saved").arg(target));
+	saved.setTextInteractionFlags(Qt::TextSelectableByMouse);
+	QPushButton *showButton = saved.addButton(QTStr("LogSave.ShowFolder"), QMessageBox::ActionRole);
+	saved.addButton(QMessageBox::Ok);
+	saved.exec();
+
+	if (saved.clickedButton() == showButton) {
+		QDesktopServices::openUrl(QUrl::fromLocalFile(saveDir.absolutePath()));
+	}
 }
 
 void OBSBasic::on_actionShowLogs_triggered()
@@ -319,26 +350,14 @@ void OBSBasic::on_actionShowLogs_triggered()
 	QDesktopServices::openUrl(url);
 }
 
-void OBSBasic::on_actionUploadCurrentLog_triggered()
+void OBSBasic::on_actionSaveCurrentLog_triggered()
 {
-	ui->menuLogFiles->setEnabled(false);
-
-	LogUploadDialog uploadDialog{this, LogUploadType::CurrentAppLog};
-
-	uploadDialog.exec();
-
-	ui->menuLogFiles->setEnabled(true);
+	SaveLogCopy(App()->GetCurrentLog(), LogFileType::CurrentAppLog);
 }
 
-void OBSBasic::on_actionUploadLastLog_triggered()
+void OBSBasic::on_actionSaveLastLog_triggered()
 {
-	ui->menuLogFiles->setEnabled(false);
-
-	LogUploadDialog uploadDialog{this, LogUploadType::LastAppLog};
-
-	uploadDialog.exec();
-
-	ui->menuLogFiles->setEnabled(true);
+	SaveLogCopy(App()->GetLastLog(), LogFileType::LastAppLog);
 }
 
 void OBSBasic::on_actionViewCurrentLog_triggered()
@@ -356,17 +375,6 @@ void OBSBasic::on_actionViewCurrentLog_triggered()
 void OBSBasic::on_actionShowCrashLogs_triggered()
 {
 	App()->openCrashLogDirectory();
-}
-
-void OBSBasic::on_actionUploadLastCrashLog_triggered()
-{
-	ui->menuCrashLogs->setEnabled(false);
-
-	LogUploadDialog uploadDialog{this, LogUploadType::CrashLog};
-
-	uploadDialog.exec();
-
-	ui->menuCrashLogs->setEnabled(true);
 }
 
 void OBSBasic::on_actionCheckForUpdates_triggered()
@@ -401,19 +409,10 @@ void OBSBasic::on_actionRestartSafe_triggered()
 	}
 }
 
-void OBSBasic::logUploadFinished(const std::string &text, const std::string &error, LogUploadType uploadType)
-{
-	OBSApp *app = App();
-
-	if (text.empty()) {
-		emit app->logUploadFailed(uploadType, QString::fromStdString(error));
-	} else {
-		nlohmann::json parsed = nlohmann::json::parse(text);
-		std::string logURL = parsed["url"];
-
-		emit app->logUploadFinished(uploadType, QString::fromStdString(logURL));
-	}
-}
+/* JeiOBS has no website, chat server or release builds of its own yet: the
+ * Help menu points at the fork repository. The help portal is OBS Studio's,
+ * and the menu says so. */
+static constexpr char jeiobsRepoUrl[] = "https://github.com/auto44e/jeiobs";
 
 void OBSBasic::on_actionHelpPortal_triggered()
 {
@@ -423,13 +422,7 @@ void OBSBasic::on_actionHelpPortal_triggered()
 
 void OBSBasic::on_actionWebsite_triggered()
 {
-	QUrl url = QUrl("https://obsproject.com", QUrl::TolerantMode);
-	QDesktopServices::openUrl(url);
-}
-
-void OBSBasic::on_actionDiscord_triggered()
-{
-	QUrl url = QUrl("https://obsproject.com/discord", QUrl::TolerantMode);
+	QUrl url = QUrl(jeiobsRepoUrl, QUrl::TolerantMode);
 	QDesktopServices::openUrl(url);
 }
 
@@ -455,8 +448,7 @@ void OBSBasic::on_actionShowWhatsNew_triggered()
 
 void OBSBasic::on_actionReleaseNotes_triggered()
 {
-	QString addr("https://github.com/obsproject/obs-studio/releases");
-	QUrl url(QString("%1/%2").arg(addr, obs_get_version_string()), QUrl::TolerantMode);
+	QUrl url(QString("%1/releases").arg(jeiobsRepoUrl), QUrl::TolerantMode);
 	QDesktopServices::openUrl(url);
 }
 
