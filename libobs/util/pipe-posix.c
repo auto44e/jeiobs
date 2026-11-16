@@ -189,9 +189,7 @@ bool os_process_pipe_wait(os_process_pipe_t *pp, uint32_t timeout_ms)
 		}
 
 		struct timespec sleep_time = {.tv_sec = 0, .tv_nsec = poll_ns};
-		if (poll_ns < 10000000L) {
-			poll_ns *= 2;
-		}
+		poll_ns = poll_ns * 2 < 10000000L ? poll_ns * 2 : 10000000L;
 		const time_t remaining_sec = deadline.tv_sec - now.tv_sec;
 		const long remaining_nsec = deadline.tv_nsec - now.tv_nsec;
 		if (remaining_sec == 0 && remaining_nsec < sleep_time.tv_nsec) {
