@@ -7,6 +7,13 @@ find_package(SteinbergVST3 REQUIRED)
 
 target_sources(obs-vst3-scanner PRIVATE vst3-scanner.cpp)
 
-target_link_libraries(obs-vst3-scanner PRIVATE OBS::libobs OBS::vst3-library Steinberg::VST3)
+target_link_libraries(
+  obs-vst3-scanner
+  PRIVATE
+    OBS::libobs
+    OBS::vst3-library
+    Steinberg::VST3
+    $<$<PLATFORM_ID:Darwin>:$<LINK_LIBRARY:FRAMEWORK,CoreFoundation.framework>>
+)
 
 set_target_properties_obs(obs-vst3-scanner PROPERTIES FOLDER plugins/obs-vst3)

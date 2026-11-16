@@ -21,7 +21,7 @@
 
 extern bool loadHost();
 extern void unloadHost();
-extern bool retrieveVst3List(obs_source_t *src);
+extern bool retrieveVst3List(obs_source_t *src, bool retryFailed);
 extern void cancelVst3Scan();
 extern void freeVst3List();
 extern void register_vst3_source();
@@ -45,7 +45,7 @@ bool obs_module_load(void)
 		return false;
 	}
 
-	if (!retrieveVst3List(nullptr)) {
+	if (!retrieveVst3List(nullptr, false)) {
 		blog(LOG_WARNING, "OBS-VST3: no VST3 found or scanner could not be started.");
 	}
 
