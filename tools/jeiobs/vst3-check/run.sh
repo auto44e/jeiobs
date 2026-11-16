@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproducible runtime check for the obs-vst3 host (tasks 001 and 003). Linux only.
+# Reproducible runtime check for the obs-vst3 host (tasks 001, 003 and 005). Linux only.
 #
 #   tools/jeiobs/vst3-check/run.sh BUILD_DIR [DEPS_DIR]
 #
@@ -11,18 +11,21 @@
 # throwaway HOME and the offscreen Qt platform, and loads plugins only from that
 # HOME. Nothing outside /tmp and DEPS_DIR is written. Builds two GUI-free
 # Steinberg sample effects (VST SDK 3.8.0, MIT; 3 classes), seven broken or
-# moduleinfo-only bundles and two throwaway OBS test plugins (probes).
+# moduleinfo-only bundles and two throwaway OBS test plugins (probes). The
+# skip-list checks (task 005, skip-list.sh) add bundles that log every load.
 # Every run is time-limited, and any scanner, probe or fixture process the run
 # leaves behind is killed, also one that a check has stopped (SIGSTOP) on
 # purpose. Results are printed as PASS/FAIL lines; exit status
 # is 0 only if every expectation holds, 1 if one fails, 2 if the check cannot run.
+# A check this machine cannot run at all (as root: ulimit -u) prints a SKIP line
+# instead and does not change the exit status.
 set -uo pipefail
 ulimit -c 0                     # crashing fixtures must not leave core files in BIN
 unset OBS_VST3_PROBE_TIMEOUT_MS # each run below sets the probe timeout it needs
 die() { echo "$*" >&2; exit 2; } # the check cannot run, or cannot trust its tools
 
 # --- 0. Preflight: tools, and no system VST3 that every scan would also see ---
-for t in pgrep pkill timeout python3 gcc g++; do
+for t in pgrep pkill timeout python3 gcc g++ flock realpath; do
   command -v "$t" >/dev/null || die "missing tool: $t"
 done
 for d in /usr/lib/vst3 /usr/local/lib/vst3; do
@@ -350,6 +353,9 @@ delayed() {
 }
 check "ADelay delays the tone by ~1 s (0.95-1.15), level kept, no NaN/Inf" 'want delayed'
 
+. "$HERE/skip-list.sh"
+
 echo "work dir: $WORK"
 echo "$FAILS failed expectation(s)"
+[ "${SKIPS:-0}" = 0 ] || echo "$SKIPS check(s) skipped"
 [ "$FAILS" = 0 ]

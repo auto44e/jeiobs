@@ -2,14 +2,15 @@
 
   results.py ids LIST_JSON WANT...          class ids in a scanner list.json
   results.py names OBS_LOG WANT...          effect names OBS listed in its log
-  results.py skips LOG BUNDLE N [timeout|killed]
+  results.py skips LOG BUNDLE N [timeout|killed|remembered|fresh]
                                             "[VST3 Scanner] Skipped BUNDLE: <reason>"
 
 Prints a short summary for the PASS/FAIL line. Exits 0 only if the ids or
 names are exactly WANT (as a multiset), or if exactly N skip lines name BUNDLE,
-each with a timeout reason when "timeout" is given, or with exactly the
-reason for a probe the scanner had to kill itself when "killed" is given.
-Unreadable input fails.
+each with a timeout reason when "timeout" is given, with exactly the reason for
+a probe the scanner had to kill itself when "killed" is given, with a
+"remembered <reason> (Rescan to retry)" reason (task 005) when "remembered" is
+given, or with any other reason when "fresh" is given. Unreadable input fails.
 """
 import collections
 import json
@@ -18,7 +19,12 @@ import sys
 LISTED = "[VST3 Scanner]   "
 SKIPPED = "[VST3 Scanner] Skipped "
 KILLED = "probe timed out (killed)"
-REASONS = {"timeout": ("probe timed out", KILLED), "killed": (KILLED,)}
+REASONS = {
+    "timeout": lambda r: r in ("probe timed out", KILLED),
+    "killed": lambda r: r == KILLED,
+    "remembered": lambda r: r.startswith("remembered ") and r.endswith(" (Rescan to retry)"),
+    "fresh": lambda r: not r.startswith("remembered"),
+}
 
 
 def compare(what, got, want):
@@ -54,7 +60,7 @@ def skips(path, bundle, count, *mode):
         rest = line.split(SKIPPED, 1)[1] if SKIPPED in line else ""
         if rest.startswith(bundle + ": "):
             reasons.append(rest[len(bundle) + 2 :])
-    ok = len(reasons) == int(count) and (allowed is None or all(r in allowed for r in reasons))
+    ok = len(reasons) == int(count) and (allowed is None or all(allowed(r) for r in reasons))
     return ok, f"skipped x{len(reasons)}" + (f" ({'; '.join(reasons)})" if reasons else "")
 
 
