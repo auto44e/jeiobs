@@ -11,7 +11,8 @@ for historical and upstream submission guidance. AI-assisted work is welcome her
 1. Pick a bounded task from the backlog. First: upstream VST3 backport.
 2. Create a branch from main, inspect the code, and open a small PR early.
 3. Implement and test the changed behavior. Record genuine blockers plainly.
-4. Update the handoff when status changes. Maintainer reviews and merges.
+4. Update the handoff when status changes. Maintainer reviews and merges; the lead
+   agent may merge its own PR after the peer review in [DECISIONS](DECISIONS.md).
 
 Use Backlog → Ready → In progress → Review → Done; use Blocked with a reason and
 next unblock action. Limit each contributor to one active implementation task.

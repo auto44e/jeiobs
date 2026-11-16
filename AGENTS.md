@@ -29,14 +29,17 @@ GPL-2.0-or-later licensing, module/source identifiers and public ABI where possi
 - Ask the owner for product scope, incompatible licensing or destructive decisions;
   ordinary refactors and changes to previously tested code need no extra approval.
 - No secrets or personal logs. SDK additions need recorded provenance/license review.
-  AAX and ARA2 remain out of scope. No autonomous merge or release publishing.
+  AAX and ARA2 remain out of scope. No release publishing, signing or installers
+  without the owner. Merging: since 2026-11-16 the lead agent may merge its own PR
+  after the two-lineage peer review in docs/jeiobs/DECISIONS.md; other contributors'
+  PRs still go to the maintainer.
 
 ## PR evidence
 
 State problem, final change, key design choices, tests actually run, limitations,
-compatibility impact and rollback. Keep detail proportional to risk; no mandatory
-essay, debate transcript or independent reviewer count for every small change.
-See docs/jeiobs/CONTRIBUTING.md for risk tiers and completion criteria.
+compatibility impact and rollback. Record decisions with why / if otherwise / flex
+and commit peer transcripts under docs/jeiobs/debates/ (docs/jeiobs/DECISIONS.md).
+Keep detail proportional to risk. See docs/jeiobs/CONTRIBUTING.md for risk tiers.
 
 ## Expanded implementation direction — 2026-11-15
 
