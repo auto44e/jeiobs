@@ -162,7 +162,8 @@ scan, also when 0; a crash after Rescan raises `failures` to 2; a torn
 under the lock, so a blocked scanner changes nothing.
 
 Checks 12–17 add these readings: the `kind` of a remembered failure is any
-non-empty string other than `timeout`; an ignored entry or file leaves exactly
+non-empty string other than `timeout` (the scanner writes `failure`, and its
+loader accepts only `failure` and `timeout`, ignoring other entries); an ignored entry or file leaves exactly
 one entry for the path after the extra probe; the shim of #17 finds the marker
 as `A.status` for an argument A of the probe's command line (the result path).
 
