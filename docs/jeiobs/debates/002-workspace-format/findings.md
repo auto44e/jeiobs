@@ -35,3 +35,11 @@ claude-2 | Minor | open → fixed (awaiting finder) | claude | review-decisions/
 claude-3 | Minor | open → fixed (awaiting finder) | claude | review-decisions/03-r2-claude.reply.md (FINDING claude-3) | fixed in the follow-up PR (why/flex, wording, task 002 Next)
 claude-4 | Minor | open → fixed (awaiting finder) | claude | review-decisions/03-r2-claude.reply.md (FINDING claude-4) | fixed in the follow-up PR (why/flex, wording, task 002 Next)
 codex-1 | Major | open → fixed (awaiting finder) | codex | review-decisions/04-r2-codex.reply.md (FINDING codex-1) | fixed in the follow-up PR (why/flex, wording, task 002 Next)
+
+PR #27 review runs: `review-decisions-2` (changes requested: purge, wording) and
+`review-decisions-3` (both approve). Run 3's last open item:
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-7 | Minor | open → fixed (awaiting finder) | claude | review-decisions-3/03-r2-claude.reply.md (FINDING claude-7) | wording now "the owner's answer"
+claude-2 to claude-6, codex-1 | Major or Minor | accepted-fix | claude, codex | review-decisions-3 | all accepted by their finders in run 3

@@ -627,7 +627,7 @@ Decided 2026-11-16. The owner's words, verbatim: "will go with all you recs for 
   - Flex: reopen if the generator proves hard to keep correct across Unicode releases; then
     vendor `utf8proc`. The owner may also pick it now.
 
-The options and costs as they were put to the owner. The "Decided:" labels were added after his answer:
+The options and costs as they were put to the owner. The "Decided:" labels were added after the owner's answer:
 
 1. **`config_lock()` and `config_unlock()` in libobs util (needed by PR4). Decided: add it.** This is a new public
    libobs API around the existing recursive `config->mutex`. It is the only mechanism found that
