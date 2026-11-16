@@ -13,7 +13,8 @@
 # Steinberg sample effects (VST SDK 3.8.0, MIT; 3 classes), seven broken or
 # moduleinfo-only bundles and two throwaway OBS test plugins (probes).
 # Every run is time-limited, and any scanner, probe or fixture process the run
-# leaves behind is killed. Results are printed as PASS/FAIL lines; exit status
+# leaves behind is killed, also one that a check has stopped (SIGSTOP) on
+# purpose. Results are printed as PASS/FAIL lines; exit status
 # is 0 only if every expectation holds, 1 if one fails, 2 if the check cannot run.
 set -uo pipefail
 ulimit -c 0                     # crashing fixtures must not leave core files in BIN
@@ -53,9 +54,12 @@ nprocs() { # DIR: set NP to the number of such processes under DIR
     *) die "pgrep failed with status $rc" ;;
   esac
 }
-reap() { # DIR: SIGKILL all of them
-  pkill -KILL -f -- "obs-vst3-scanner.*$1/"; local rc=$?
-  [ "$rc" -le 1 ] || die "pkill failed with status $rc"
+reap() { # DIR: SIGCONT, then SIGKILL all of them, so none is left stopped
+  local s rc
+  for s in CONT KILL; do
+    pkill "-$s" -f -- "obs-vst3-scanner.*$1/"; rc=$?
+    [ "$rc" -le 1 ] || die "pkill failed with status $rc"
+  done
 }
 TPID= # the timeout wrapper of the run in progress; it signals its whole group
 cleanup() { if [ -n "$TPID" ]; then kill "$TPID" 2>/dev/null; wait "$TPID" 2>/dev/null; fi; reap "$WORK"; }
@@ -148,10 +152,48 @@ home() { # NAME BUNDLE...: fresh sandbox HOME $h whose ~/.vst3 holds copies of B
 # (TPID). Both set RC (exit status) and MS (wall-clock milliseconds).
 ms() { echo $(( $(date +%s%N) / 1000000 )); }
 scan() { # SECS: the scanner alone on $h, probe timeout 2 s; stdout scan.out, stderr scan.err
-  local t0; t0=$(ms)
+  scan_start "$1"; scan_wait; }
+scan_start() { # SECS: start that scan and return while it runs; scan_wait ends it
+  T0=$(ms)
   (cd "$BIN" && exec env HOME="$h" OBS_VST3_PROBE_TIMEOUT_MS=2000 timeout -k 5 "$1" \
-    ./obs-vst3-scanner "$h/list.json") >"$h/scan.out" 2>"$h/scan.err" & TPID=$!
-  wait "$TPID" 2>/dev/null; RC=$?; TPID=; MS=$(( $(ms) - t0 )); }
+    ./obs-vst3-scanner "$h/list.json") >"$h/scan.out" 2>"$h/scan.err" & TPID=$!; }
+scan_wait() { wait "$TPID" 2>/dev/null; RC=$?; TPID=; MS=$(( $(ms) - T0 )); }
+# freeze BUNDLE: during a scan_start scan, SIGSTOP the scanner's --probe child
+# for $h/.vst3/BUNDLE.vst3 once that child runs BUNDLE's code, so the probe's
+# own watchdog can never end it. It must be in that code: a probe redirects its
+# stdio before it loads the bundle, and only then does nothing but the scanner's
+# own kill bound the scanner's wait. Polls every 50 ms until 3 s into the scan.
+# Sets FROZE to the stopped PID (empty if none) and FROZE_NOTE to what happened.
+kids() { # PID: set KIDS to PID's child processes
+  local out rc; out="$(pgrep -P "$1")"; rc=$?
+  case $rc in 0) mapfile -t KIDS <<<"$out" ;; 1) KIDS=() ;; *) die "pgrep failed with status $rc" ;; esac; }
+isprobe() { # PID BUNDLE: PID runs with the arguments --probe $h/.vst3/BUNDLE.vst3 ...
+  local a; mapfile -d '' -t a 2>/dev/null <"/proc/$1/cmdline" || return 1
+  [ "${a[1]-}" = --probe ] && [ "${a[2]-}" = "$h/.vst3/$2.vst3" ]; }
+FROZE= FROZE_NOTE=
+freeze() {
+  local so="/$1.vst3/Contents/x86_64-linux/$1.so" scanners s p st i
+  FROZE= FROZE_NOTE="no $1 probe ran $1.so within 3 s"
+  while [ $(( $(ms) - T0 )) -lt 3000 ]; do
+    kill -0 "$TPID" 2>/dev/null || { FROZE_NOTE="scan ended before a $1 probe ran $1.so"; return; }
+    kids "$TPID"; scanners=("${KIDS[@]}") # the scanner: the timeout wrapper's child
+    for s in "${scanners[@]}"; do
+      kids "$s"
+      for p in "${KIDS[@]}"; do
+        isprobe "$p" "$1" && grep -qF -- "$so" "/proc/$p/maps" 2>/dev/null || continue
+        kill -STOP "$p" 2>/dev/null
+        for ((i = 0; i < 20; i++)); do st=$(pstate "$p"); [ "$st" = T ] && break; sleep 0.05; done
+        if [ "$st" = T ] && isprobe "$p" "$1"; then
+          FROZE=$p FROZE_NOTE="$1 probe stopped in $1.so at $(( $(ms) - T0 )) ms"
+        else
+          kill -CONT "$p" 2>/dev/null # not stopped, or no longer that probe: undo
+          FROZE_NOTE="$1 probe $p not stopped (state $st)"
+        fi
+        return
+      done
+    done
+    sleep 0.05
+  done; }
 obs() { # PROBE SECS [ENV...]: real OBS on $h with one test plugin; also sets SEEN
   local p="$1" t="$2" t0 i; shift 2
   mkdir -p "$h/.config/obs-studio/plugins/$p/bin/64bit" &&
@@ -211,6 +253,7 @@ scanning() { # the scanner was seen during the OBS run, and still ran when quit-
 interrupted() {
   grep -q 'Available plugins' "$h/obs.log" 2>/dev/null
   case $? in 0) note "scan finished"; return 1 ;; 1) note "scan interrupted" ;; *) note "obs.log unreadable"; return 1 ;; esac; }
+froze() { note "$FROZE_NOTE"; [ -n "$FROZE" ]; } # freeze stopped the probe it was after
 pstate() { local a b s; { read -r a b s _ <"/proc/$1/stat"; } 2>/dev/null && echo "$s" || echo gone; }
 GC= # bad-noisy's grandchild in $h, once alive() has confirmed it is that process
 alive() { # the grandchild wrote its PID marker and is running now
@@ -261,6 +304,12 @@ check "exit0 bundle (clean exit, no result): skipped once, 3 classes kept" 'kept
 home info "${GOOD[@]}" "$WORK/bad/"{infoonly,infoone}.vst3; scan 20
 check "moduleinfo-only bundles (no audio class; one): code not loaded, neither skipped, 3 classes + infoone's listed" \
   'kept 10000 $GOOD_IDS $INFOONE; want skips scan.out infoonly 0; want skips scan.out infoone 0'
+# A probe frozen inside the bundle's code (as if its watchdog could not run)
+# must still be ended by the scanner's own kill, long before the 20 s limit.
+home frozen "${GOOD[@]}" "$WORK/bad/hang.vst3"; scan_start 20; freeze hang; scan_wait
+check "frozen probe (SIGSTOP inside hang.so): coordinator kills it, scan done in < 12 s, skipped once as killed, 3 classes kept, no process left" \
+  'want froze; kept 12000 $GOOD_IDS; want skips scan.out hang 1 killed; want gone'
+reap "$h"
 
 echo "== host (real OBS, quit after load)"
 home hgood "${GOOD[@]}"; obs quit-probe 60
