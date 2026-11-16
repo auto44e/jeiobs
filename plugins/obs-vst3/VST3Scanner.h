@@ -68,13 +68,8 @@ public:
 	void setModuleProbe(ModuleProbe probe);
 
 private:
-	struct ModuleInfoReadResult {
-		bool parsed = false;
-		bool hasClasses = false;
-	};
-
 	std::vector<std::string> getVST3Paths();
-	ModuleInfoReadResult tryReadModuleInfo(const std::string &bundlePath);
+	bool tryReadModuleInfo(const std::string &bundlePath);
 	bool loadFromModuleInfo(const Steinberg::ModuleInfo &info, const std::string &bundlePath);
 	void appendClassInfo(VST3ClassInfo classInfo, const std::string &bundlePath);
 

@@ -23,12 +23,17 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <limits>
+#include <mutex>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -46,9 +51,10 @@ VST3Scanner *list;
 std::string vst3ConfigPath;
 
 namespace {
-constexpr int kDefaultProbeTimeoutMs = 10000;
+constexpr int kDefaultProbeTimeoutMs = 30000;
 constexpr int kMinimumProbeTimeoutMs = 500;
 constexpr int kMaximumProbeTimeoutMs = 120000;
+constexpr int kProbeWatchdogExitCode = 86;
 constexpr size_t kProbeOutputBufferSize = 4096;
 
 #ifdef _WIN32
@@ -122,6 +128,79 @@ std::string probeResultPath(size_t sequence)
 	return cacheDirectory() + "probe-" + std::to_string(currentProcessId()) + "-" + std::to_string(sequence) + ".json";
 }
 
+bool isPermissionDenied(const std::error_code &error)
+{
+	return error == std::errc::permission_denied ||
+	       error.default_error_condition() == std::errc::permission_denied;
+}
+
+bool isProbeResultFileName(const std::string &name)
+{
+	if (name.compare(0, 6, "probe-") != 0) {
+		return false;
+	}
+
+	const auto hasSuffix = [&name](const char *suffix) {
+		const size_t suffixLength = std::strlen(suffix);
+		return name.size() >= suffixLength && name.compare(name.size() - suffixLength, suffixLength, suffix) == 0;
+	};
+
+	return hasSuffix(".json") || hasSuffix(".json.tmp");
+}
+
+void removeStaleProbeResults()
+{
+	namespace fs = std::filesystem;
+
+	const fs::path directory = fs::u8path(cacheDirectory());
+	std::error_code error;
+	fs::directory_iterator entries(directory, fs::directory_options::skip_permission_denied, error);
+	const fs::directory_iterator end;
+	if (error) {
+		if (!isPermissionDenied(error)) {
+			blog(LOG_WARNING, "[VST3 Scanner] Cannot inspect probe results in %s: %s", directory.u8string().c_str(),
+			     error.message().c_str());
+		}
+		return;
+	}
+
+	const auto cutoff = fs::file_time_type::clock::now() - std::chrono::hours(1);
+	while (entries != end) {
+		if (error) {
+			if (!isPermissionDenied(error)) {
+				blog(LOG_WARNING, "[VST3 Scanner] Probe result directory iteration stopped at %s: %s",
+				     directory.u8string().c_str(), error.message().c_str());
+			}
+			error.clear();
+			entries.increment(error);
+			continue;
+		}
+
+		const fs::path path = entries->path();
+		const std::string name = path.filename().u8string();
+		if (isProbeResultFileName(name)) {
+			std::error_code fileError;
+			if (fs::is_regular_file(path, fileError) && !fileError) {
+				const auto modified = fs::last_write_time(path, fileError);
+				if (!fileError && modified < cutoff) {
+					fs::remove(path, fileError);
+					if (fileError) {
+						blog(LOG_WARNING, "[VST3 Scanner] Cannot remove stale probe result %s: %s",
+						     path.u8string().c_str(), fileError.message().c_str());
+					}
+				}
+			}
+		}
+
+		entries.increment(error);
+	}
+
+	if (error && !isPermissionDenied(error)) {
+		blog(LOG_WARNING, "[VST3 Scanner] Probe result directory iteration stopped at %s: %s",
+		     directory.u8string().c_str(), error.message().c_str());
+	}
+}
+
 void drainProbeOutput(os_process_pipe_t *pipe, bool errorOutput)
 {
 	uint8_t buffer[kProbeOutputBufferSize];
@@ -160,33 +239,114 @@ bool prepareProbeOutput()
 #endif
 }
 
-void startProbeWatchdog(int timeoutMs)
+#ifdef _WIN32
+bool clearCoordinatorHandleInheritance()
 {
-	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-#ifndef _WIN32
-	const pid_t parentProcessId = getppid();
+	const DWORD standardHandles[] = {STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE};
+	for (const DWORD standardHandle : standardHandles) {
+		const HANDLE handle = GetStdHandle(standardHandle);
+		if (handle == nullptr || handle == INVALID_HANDLE_VALUE) {
+			continue;
+		}
+
+		if (!SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0)) {
+			blog(LOG_ERROR, "[VST3 Scanner] Cannot clear inheritance on standard handle: %lu", GetLastError());
+			return false;
+		}
+	}
+
+	return true;
+}
 #endif
 
-	std::thread([deadline
-#ifndef _WIN32
-		     ,
-		     parentProcessId
+bool parseProcessId(const char *value, unsigned long long &processId)
+{
+	if (!value || !*value || *value == '-') {
+		return false;
+	}
+
+	char *end = nullptr;
+	errno = 0;
+	const unsigned long long parsed = std::strtoull(value, &end, 10);
+	if (errno == ERANGE || end == value || *end != '\0' || parsed == 0) {
+		return false;
+	}
+
+	processId = parsed;
+	return true;
+}
+
+bool startProbeWatchdog(int timeoutMs, unsigned long long parentProcessId)
+{
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+	std::mutex startMutex;
+	std::condition_variable startCondition;
+	bool startFinished = false;
+	bool startSucceeded = false;
+
+	std::thread watchdog([deadline, parentProcessId, &startMutex, &startCondition, &startFinished, &startSucceeded] {
+#ifdef _WIN32
+		if (parentProcessId > std::numeric_limits<DWORD>::max()) {
+			std::lock_guard<std::mutex> lock(startMutex);
+			startFinished = true;
+			startCondition.notify_one();
+			return;
+		}
+
+		HANDLE parentHandle = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(parentProcessId));
+		if (!parentHandle || WaitForSingleObject(parentHandle, 0) == WAIT_OBJECT_0) {
+			std::lock_guard<std::mutex> lock(startMutex);
+			startFinished = true;
+			startCondition.notify_one();
+			return;
+		}
+#else
+		if (static_cast<unsigned long long>(getppid()) != parentProcessId) {
+			std::lock_guard<std::mutex> lock(startMutex);
+			startFinished = true;
+			startCondition.notify_one();
+			return;
+		}
 #endif
-		     ] {
+
+		{
+			std::lock_guard<std::mutex> lock(startMutex);
+			startFinished = true;
+			startSucceeded = true;
+		}
+		startCondition.notify_one();
+
 		for (;;) {
 			if (std::chrono::steady_clock::now() >= deadline) {
-				probeExit(3);
+				probeExit(kProbeWatchdogExitCode);
 			}
 
 #ifndef _WIN32
-			if (getppid() != parentProcessId) {
-				probeExit(3);
+			if (static_cast<unsigned long long>(getppid()) != parentProcessId) {
+				probeExit(kProbeWatchdogExitCode);
+			}
+#else
+			if (WaitForSingleObject(parentHandle, 0) == WAIT_OBJECT_0) {
+				probeExit(kProbeWatchdogExitCode);
 			}
 #endif
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(150));
 		}
-	}).detach();
+	});
+
+	{
+		std::unique_lock<std::mutex> lock(startMutex);
+		startCondition.wait(lock, [&startFinished] { return startFinished; });
+	}
+
+	if (!startSucceeded) {
+		watchdog.join();
+		return false;
+	}
+
+	watchdog.detach();
+	return true;
 }
 
 bool parseProbeTimeout(const char *value, int &timeoutMs)
@@ -205,17 +365,25 @@ bool parseProbeTimeout(const char *value, int &timeoutMs)
 	return true;
 }
 
-int runProbe(const char *bundlePath, const char *resultPath, const char *nonce, const char *timeoutValue)
+int runProbe(const char *bundlePath, const char *resultPath, const char *nonce, const char *timeoutValue,
+	     const char *parentProcessIdValue)
 {
 	int timeoutMs = 0;
 	if (!parseProbeTimeout(timeoutValue, timeoutMs)) {
 		return EXIT_FAILURE;
 	}
 
+	unsigned long long parentProcessId = 0;
+	if (!parseProcessId(parentProcessIdValue, parentProcessId)) {
+		return EXIT_FAILURE;
+	}
+
 #ifdef _WIN32
 	SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
-	startProbeWatchdog(timeoutMs);
+	if (!startProbeWatchdog(timeoutMs, parentProcessId)) {
+		return EXIT_FAILURE;
+	}
 
 	if (!prepareProbeOutput()) {
 		probeExit(EXIT_FAILURE);
@@ -278,12 +446,15 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 		return reject("cannot create probe arguments");
 	}
 
-	const std::string timeout = std::to_string(getProbeTimeoutMs());
+	const int timeoutMs = getProbeTimeoutMs();
+	const std::string timeout = std::to_string(timeoutMs);
+	const std::string parentProcessId = std::to_string(currentProcessId());
 	os_process_args_add_arg(args, "--probe");
 	os_process_args_add_arg(args, bundlePath.c_str());
 	os_process_args_add_arg(args, resultPath.c_str());
 	os_process_args_add_arg(args, nonce.c_str());
 	os_process_args_add_arg(args, timeout.c_str());
+	os_process_args_add_arg(args, parentProcessId.c_str());
 
 	os_process_pipe_t *pipe = os_process_pipe_create2(args, "r");
 	os_process_args_destroy(args);
@@ -291,13 +462,41 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 		return reject("could not start probe");
 	}
 
+	struct ProbeTimeoutState {
+		std::condition_variable condition;
+		std::mutex mutex;
+		bool killed = false;
+		bool finished = false;
+	};
+
+	ProbeTimeoutState timeoutState;
+	std::thread timeoutThread([pipe, timeoutMs, &timeoutState] {
+		std::unique_lock<std::mutex> lock(timeoutState.mutex);
+		if (timeoutState.condition.wait_for(lock, std::chrono::milliseconds(timeoutMs + 2000),
+						    [&timeoutState] { return timeoutState.finished; })) {
+			return;
+		}
+
+		timeoutState.killed = os_process_pipe_kill(pipe);
+	});
+
 	std::thread errorReader([pipe] { drainProbeOutput(pipe, true); });
 	drainProbeOutput(pipe, false);
 	errorReader.join();
 
+	{
+		std::lock_guard<std::mutex> lock(timeoutState.mutex);
+		timeoutState.finished = true;
+	}
+	timeoutState.condition.notify_one();
+	timeoutThread.join();
+
 	const int status = os_process_pipe_destroy(pipe);
+	if (timeoutState.killed) {
+		return reject("probe timed out (killed)");
+	}
 	if (status != EXIT_SUCCESS) {
-		return reject(status == 3 ? "probe timed out" : "probe failed");
+		return reject(status == kProbeWatchdogExitCode ? "probe timed out" : "probe failed");
 	}
 
 	if (!os_file_exists(resultPath.c_str())) {
@@ -503,8 +702,7 @@ bool retrieveVst3List()
 		return false;
 	}
 
-	(void)scanVst3List();
-	return true;
+	return scanVst3List();
 }
 
 #ifdef _WIN32
@@ -535,12 +733,19 @@ int main(int argc, char *argv[])
 	setvbuf(stderr, NULL, _IONBF, 0);
 
 	if (argc >= 2 && std::strcmp(argv[1], "--probe") == 0) {
-		if (argc != 6) {
-			fprintf(stderr, "Usage: %s --probe <bundle-path> <result-file> <nonce> <timeout-ms>\n", argv[0]);
+		if (argc != 7) {
+			fprintf(stderr, "Usage: %s --probe <bundle-path> <result-file> <nonce> <timeout-ms> <parent-pid>\n",
+				argv[0]);
 			return EXIT_FAILURE;
 		}
-		return runProbe(argv[2], argv[3], argv[4], argv[5]);
+		return runProbe(argv[2], argv[3], argv[4], argv[5], argv[6]);
 	}
+
+#ifdef _WIN32
+	if (!clearCoordinatorHandleInheritance()) {
+		return EXIT_FAILURE;
+	}
+#endif
 
 	if (argc < 2 || !argv[1]) {
 		fprintf(stderr, "Usage: %s <vst3list.json>\n", argv[0]);
@@ -562,7 +767,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	removeStaleProbeResults();
+
 	if (!retrieveVst3List()) {
+		fprintf(stderr, "Scan failed\n");
 		delete list;
 		return EXIT_FAILURE;
 	}
