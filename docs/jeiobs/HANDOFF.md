@@ -103,6 +103,10 @@ Existing upstream master/other branches retain upstream workflows; use main.
 ## Next bounded task
 
 Open small items (2026-11-16):
+- **Owner action:** Codex's shell sandbox cannot start on the maintainer's host
+  (AppArmor blocks bubblewrap's user namespaces), so peer reviews rely on the
+  tamper check in `tools/jeiobs/peer-review/review.sh`. Enabling bubblewrap
+  needs a one-time AppArmor profile (sudo); see DECISIONS "Confinement history".
 - Pin `aqtinstall` in `tools/jeiobs/linux-deps.sh` (it installs an unpinned
   version). Dependency change, so owner-merged (review of #18, finding k10).
 - Task 003 follow-up D6 is [task 005](tasks/005-vst3-skip-list.md) (remember

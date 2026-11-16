@@ -1,8 +1,10 @@
 # Decision records and PR review (jeiobs)
 
-Status: **accepted**, 2026-11-16. The owner cleared this PR (#18) for a
-self-merge after fixes and peer review (quoted below). Later changes to this
-document stay owner-merged unless the owner clears them the same way. Adapted
+Status: **accepted**, 2026-11-16. The owner cleared PR #18 for a self-merge
+after fixes and peer review (quoted below), then merged it at `374f842c7`. The
+review-tooling hardening after that merge (review runs 07 onwards; run 06
+reviewed the merged head itself) is PR #19, which the owner merges. Later changes to this document stay owner-merged unless the
+owner clears them the same way. Adapted
 from the JeiOS decision-record policy (its ADR 0000).
 
 ## Owner directive (2026-11-16, verbatim from the chat)
@@ -31,9 +33,9 @@ Terms used below:
 - **Lead agent:** the Kiro session the owner gave this directive to. It
   orchestrates the peers and owns the outcome.
 - **Peers:** the Codex and Claude CLIs, run as separate one-shot processes. They
-  are two model lineages. They keep no memory between calls, but they read the
-  lead's working tree and git history, which can change between rounds; the
-  reviewed commit is therefore pinned by SHA.
+  are two model lineages and keep no memory between calls. Gate reviews run them
+  in a detached checkout of the reviewed commit; design consults may run them in
+  the lead's working tree.
 - **The lead's lineage:** the lead's model is chosen per session and is not
   fixed. So code the lead writes itself is treated as written by neither peer:
   both review it adversarially.
@@ -56,6 +58,9 @@ Each decision, in a task doc, `HANDOFF.md` or a PR description, has:
    - Keep each prompt verbatim and each final answer verbatim. Drop Codex
      tool-call output.
    - Replace the home directory with `~`. `/tmp` scratch paths may stay.
+   - Strip trailing whitespace, and show relative markdown links inside run
+     folders as plain text. These edits change file hashes, so the hashes in a
+     run's `00-meta.md` are of the files as the runner wrote them.
    - The fork identity `auto44e@gmail.com` is public commit metadata and may
      stay. No other personal or corporate address, and never a secret (the Slack
      webhook in particular).
@@ -93,7 +98,8 @@ The lead may merge its own PR only when all of these hold:
    product-scope and destructive decisions). The implementing PR can then be
    self-merged and must quote that decision.
 2. **Tests pass.** The checks that the CONTRIBUTING.md risk tier asks for were
-   run and passed. A failing or blocked check needs the owner's acceptance, not
+   run and passed, and their state at the reviewed SHA is given to the review
+   run (`-C`) so it lands in `00-meta.md`. A failing or blocked check needs the owner's acceptance, not
    just a report. Local and remote CI are reported separately, at the exact head
    SHA being merged.
 3. **A peer debate reviewed the exact head SHA.** Every self-merge gets a review
@@ -101,14 +107,65 @@ The lead may merge its own PR only when all of these hold:
    rounds:
    - The peers read a detached checkout of the reviewed commit, not the lead's
      working tree.
-   - Round 1 is blind: each peer reviews independently. From round 2 the peers
-     see each other's replies; the lineage that did not write the change speaks
-     first.
-   - Both are confined: Claude has only the Read, Glob and Grep tools and no MCP
-     servers; Codex runs with `--sandbox read-only` and no MCP servers.
-   - Every prompt, reply and stderr log is kept. The run fails closed if a turn
-     times out, errors, is empty, or lacks a VERDICT line or a FINDING line for
-     every ledger row the peer owns. A failed run is not a review.
+   - Round 1 is an independent first pass: both peers start together and their
+     prompts do not include the other's reply. It is not isolated (a peer that
+     can read the filesystem could find the other's in-progress reply), and
+     nothing in the gate depends on it being unseen. From round 2 the peers see
+     each other's replies; the lineage that did not write the change (`-a`)
+     speaks first.
+   - Confinement, exactly as enforced:
+     - Claude has only the Read, Glob and Grep tools, no MCP servers, and user
+       settings only (`--setting-sources user`), so it reads no project
+       settings, hooks or `CLAUDE.md` from the checkout.
+     - Codex runs the `codex-cli` engine directly (the toolbox launcher injects
+       MCP servers) with a `CODEX_HOME` kept for review runs. The run refuses
+       to start while another process uses it, and fails if one appears or its
+       `config.toml` changes. That config may only have
+       `[shell_environment_policy]`, `[analytics]`, `[otel]` (telemetry to a
+       local collector) and `[model_providers.*]` tables; it is parsed as TOML
+       and every key must be on an exact allowlist. Its `skills/` folder may
+       hold only the engine's bundled `.system` set, pinned by hash, and
+       `00-meta.md` names the home and both hashes. Codex gets a "core" shell environment,
+       `--sandbox read-only` and
+       `project_doc_max_bytes=0`, so it reads no `AGENTS.md` or
+       `AGENTS.override.md` from the checkout. The run fails if a Codex session
+       log from the run shows project instructions for the checkout. The
+       provider config runs the toolbox launcher as the Bedrock credential
+       helper (`credential-process`) only.
+     - The run refuses a reviewed commit that contains `.claude`, `CLAUDE.md`,
+       `AGENTS.override.md`, `.agents` (Codex repo skills) or `.codex` anywhere,
+       so a change cannot configure its own reviewer.
+     - Where Codex's sandbox cannot start on the host, its commands run
+       unsandboxed and `00-meta.md` says so. Nothing then stops a peer from
+       writing; the runner has tripwires only. After every turn the lead's
+       repository (refs, HEAD, index entries and flags, tracked diffs,
+       untracked and ignored file contents, `.git/config` and hooks) and the
+       review checkout (HEAD, `git status`, and index flags) must be
+       unchanged. The runner keeps, in its own memory, the sha256 of the
+       context and ledger snapshots, of `00-meta.md`, of each prompt (before
+       its turn) and of each reply (when its turn ends; in round 1, as soon as
+       that peer exits), and verifies them before each prompt, after each turn,
+       at the end and in cleanup. Each turn runs in its own process group,
+       which is killed when the turn ends. These tripwires catch a change still
+       present at the next check, until the run ends. They miss reads, network
+       use, writes elsewhere, changes undone before a check, a reply changed
+       during its own turn, and changes after the run by a process that left
+       its process group. Only the sandbox stops a peer that evades them.
+       Everything the runner trusts (the review home, `~/.claude` user settings,
+       the toolbox launcher that serves Bedrock credentials, the CLI binaries,
+       `python3`) is writable by any process of the same user; a run pins its
+       home's `config.toml` and skills, not the binaries or `~/.claude`.
+     - At exit the runner prints the sha256 of every file it wrote, the final
+       `00-meta.md` included; `00-meta.md` lists the same files (its own entry
+       is the hash of its header). Before committing a run, the lead checks the
+       files with `sha256sum -c` against that output, and commits only those
+       files. Hashes are of the files as written, before the transcript edits
+       allowed above.
+   - Every prompt and reply is committed. stderr logs stay in a local
+     diagnostics folder, because they contain tool output.
+   - The run fails closed if a turn times out, errors or is empty, does not end
+     with exactly one valid VERDICT line, has a malformed or repeated FINDING line, or skips a ledger row or
+     an earlier finding of that peer. A failed run is not a review.
    - Design consults (for example `~/.kiro/bin/peer-debate.sh` debates before
      code is written) are not gate reviews. Their transcripts are still
      committed with the decision they informed.
@@ -117,14 +174,16 @@ The lead may merge its own PR only when all of these hold:
      libobs API changes repeat review rounds until a round finds no blocker or
      major issue.
    - If the head changes after the review, both lineages review the new head.
-     One exception: a commit that only adds the review run's own files under
-     the PR's `debates/<pr>/` folder (checked with
-     `git diff --name-only <reviewed SHA> <head>`) needs no further review. The
-     merge then pins that head, and the run's `00-meta.md` names the reviewed
-     SHA.
+     One exception: a commit whose only changes, per
+     `git diff --name-status <reviewed SHA> <head>`, are *added* files inside
+     one new run folder `debates/<pr>/<run>/` and a modification of
+     `debates/<pr>/findings.md` needs no further review. Earlier transcripts
+     may not be changed this way.
      After a history rewrite, record old→new SHAs and show that the trees are
      identical (`git diff --quiet old new`); only real changes need review.
-   - The merge uses `gh pr merge --merge --match-head-commit <reviewed SHA>`.
+   - The merge uses `gh pr merge --merge --match-head-commit <head>`, where
+     `<head>` is the reviewed SHA or the exempt transcript commit on top of it.
+     The run's `00-meta.md` names the reviewed SHA.
 4. **No open blocker or major finding.** The lead keeps a findings ledger in
    the PR's debate folder, one row per finding: ID, severity, status, finder,
    and the source, meaning the file and FINDING line in a committed transcript
@@ -175,11 +234,23 @@ repository.
 - **If transcripts stayed in `/tmp`:** they are lost on reboot, and a later
   reversal could only use one agent's paraphrase.
 
+## Confinement history
+
+Until at least 2026-11-16 the Codex "read-only" and "workspace-write"
+sandboxes did not work on the maintainer's Ubuntu 24.04 host (and still do not,
+until the owner enables bubblewrap): AppArmor blocks the unprivileged
+user namespaces that bubblewrap needs, and Codex's commands ran unsandboxed
+after an automatic escalation. That covers the task 003 workers and reviews and
+the early #18 reviews. No damage was found (the working tree was checked after
+those runs), but records that called those runs sandboxed were wrong. Enabling
+bubblewrap needs an AppArmor change on the host (owner action).
+
 ## Review record for this PR
 
 [debates/018-decision-records](debates/018-decision-records/) holds both
-round-1 reviews, the two-round cross-talk, the findings ledger and the final
-review of the fixed head.
+round-1 reviews, the two-round cross-talk, the findings ledger and the review
+runs: `05-final` reviewed #18 at `ac008df4c` and run 06 at `374f842c7`, the head
+the owner merged; runs 07 onwards reviewed the follow-up commits that became #19.
 
 ## Flex
 
