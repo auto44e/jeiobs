@@ -26,7 +26,7 @@ PRs are the source of truth. Keep roadmap IDs in titles for easy filtering.
 | UI, build, ordinary feature | Affected build plus focused behavior tests; note platform gaps |
 | Real-time audio, persistence, installer, updater, plugin execution | Targeted regression/failure tests, compatibility impact and rollback; affected platform smoke tests before support/release claims |
 
-Known unrelated failures may be tracked with a linked issue and maintainer
+Known unrelated failures may be tracked with a linked issue and owner
 acceptance; do not hide failures or weaken security checks to get a green badge.
 Use short design notes for ABI, persistent data format, process isolation or
 major audio topology choices. Ordinary implementation choices belong in the PR.

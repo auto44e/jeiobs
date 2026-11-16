@@ -224,4 +224,4 @@ Agents can proceed autonomously with ordinary design/code/test work and small PR
 Record runner/hardware blockers and exact reproduction steps; reserve scarce human
 hardware time for native UI, drivers, licensed plugins and actual device validation.
 Keep evidence honest and current. No extra owner approval for routine implementation;
-maintainer merge/release authority remains unchanged.
+Release authority stays with the owner; merges follow [DECISIONS](DECISIONS.md).

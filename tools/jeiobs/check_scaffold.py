@@ -19,6 +19,9 @@ require(hashlib.sha256((ROOT / 'COPYING').read_bytes()).hexdigest() == pin['copy
         'COPYING changed: preserve upstream license text')
 for path in [ROOT / 'README.md', ROOT / 'AGENTS.md', *ROOT.glob('docs/jeiobs/**/*.md')]:
     text = path.read_text()
+    # Links inside fenced code blocks (e.g. verbatim diffs in debate
+    # transcripts) are not navigable, so they are not checked.
+    text = re.sub(r'^(`{3,}|~{3,}).*?^\1[ \t]*$', '', text, flags=re.M | re.S)
     for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', text):
         if '://' in target or target.startswith('#'):
             continue

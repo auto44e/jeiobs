@@ -1,9 +1,9 @@
 # Decision records and PR review (jeiobs)
 
-Status: **proposed**, 2026-11-16. It takes effect when the owner merges it.
-Because it defines the lead agent's own merge authority, this document and any
-change to it are owner-merged. Adapted from the JeiOS decision-record policy
-(its ADR 0000).
+Status: **accepted**, 2026-11-16. The owner cleared this PR (#18) for a
+self-merge after fixes and peer review (quoted below). Later changes to this
+document stay owner-merged unless the owner clears them the same way. Adapted
+from the JeiOS decision-record policy (its ADR 0000).
 
 ## Owner directive (2026-11-16, verbatim from the chat)
 
@@ -15,11 +15,28 @@ change to it are owner-merged. Adapted from the JeiOS decision-record policy
 > made, sort it out with a multi round peer debate, if inconclusic, you can raise
 > it to me. happy coding! you may continue!
 
+Later owner instructions (2026-11-16, verbatim):
+
+> it might be destructive but do clean these up and do neccesary repo repairs if
+> needed: [the lead's note about nine commits carrying a corporate email]
+
+> you all are clear to self merge #18 and onwards after fixing an error in one of
+> the commits and after peer review
+
+The first authorized the history rewrite recorded in
+[history/2026-11-16-history-rewrite.md](history/2026-11-16-history-rewrite.md).
+The second authorizes self-merging #18 and later PRs through the gate below.
+
 Terms used below:
 - **Lead agent:** the Kiro session the owner gave this directive to. It
   orchestrates the peers and owns the outcome.
-- **Peers:** the Codex and Claude CLIs, run as separate processes with no shared
-  state. They are two model lineages.
+- **Peers:** the Codex and Claude CLIs, run as separate one-shot processes. They
+  are two model lineages. They keep no memory between calls, but they read the
+  lead's working tree and git history, which can change between rounds; the
+  reviewed commit is therefore pinned by SHA.
+- **The lead's lineage:** the lead's model is chosen per session and is not
+  fixed. So code the lead writes itself is treated as written by neither peer:
+  both review it adversarially.
 - **The lead's own PR:** a PR the lead opens, including code written by peer
   workers under its direction. PRs from human contributors go to the owner.
 
@@ -50,35 +67,61 @@ blocks the merge.
 
 The lead may merge its own PR only when all of these hold:
 
-1. **Not an owner-only class.** These are always owner-merged:
+1. **Not an owner-only class, and no owner hold.** A PR labelled `owner-hold`,
+   or with an owner comment that has not been answered, is not self-merged.
+   These are always owner-merged:
    - this document, `AGENTS.md`, `docs/jeiobs/CONTRIBUTING.md` and anything else
      that changes review or merge rules;
    - `.github/` (workflows and their guards);
    - release, publishing, signing, notarization, packaging, installer, updater
      and uninstaller code or configuration;
-   - licensing changes and new third-party SDKs or dependencies that need a
-     provenance or licence review (AGENTS.md);
-   - anything that touches secrets or credentials handling for distribution.
+   - licensing changes, and **any change to third-party sources or binaries**: a
+     new dependency, a version, URL or hash pin (`CMakePresets.json`,
+     `build-aux/`, `tools/jeiobs/linux-deps.sh`, the VST3 SDK pins), a submodule
+     pointer (`.gitmodules` and the gitlinks) or vendored code under `deps/`. An
+     SDK's licence can change between versions;
+   - `tools/jeiobs/peer-review/` (the review tooling is part of this gate);
+   - anything that touches secrets or credentials handling for distribution;
+   - repository administration: force pushes, history rewrites, branch or tag
+     deletion, and repository or Actions settings. These need the owner's
+     instruction, quoted verbatim in the PR or history note. (Routine deletion of
+     an already-merged PR branch is allowed.)
+
+   **Owner-decided, then self-mergeable.** Changes that break existing save
+   files, migrations that rewrite users' files, and breaks of libobs public ABI
+   or of module/source IDs need an owner decision first (AGENTS.md reserves
+   product-scope and destructive decisions). The implementing PR can then be
+   self-merged and must quote that decision.
 2. **Tests pass.** The checks that the CONTRIBUTING.md risk tier asks for were
    run and passed. A failing or blocked check needs the owner's acceptance, not
    just a report. Local and remote CI are reported separately, at the exact head
    SHA being merged.
 3. **A peer debate reviewed the exact head SHA.** Every self-merge gets a review
-   by both lineages that includes at least one cross-talk round, in which each
-   peer sees the other's findings (`~/.kiro/bin/peer-debate.sh`, two rounds or
-   more):
+   by both lineages with at least two cross-talk rounds, run with
+   `tools/jeiobs/peer-review/review.sh`. It keeps every prompt and reply, gives
+   each peer its own previous reply and the other's latest one, runs both peers
+   read-only, and fails closed: a timed-out, failed or empty turn means there
+   was no review.
    - Code by one lineage is reviewed adversarially by the other first.
    - Real-time audio, persistence formats, plugin execution, process control and
      libobs API changes repeat review rounds until a round finds no blocker or
      major issue.
-   - If the head changes after the review, the changed part is re-reviewed.
-     The merge uses `gh pr merge --merge --match-head-commit <reviewed SHA>`.
-4. **No open blocker or major finding.** A finding is closed when it is fixed
-   and the finding peer accepts the fix in a later round, or when the lead
-   rejects it with a reason and the finding peer withdraws it in a later round.
-   If a peer keeps a blocker or major finding open after two cross-talk rounds,
-   the debate is inconclusive. It goes to the owner as options, a recommendation
-   and the trade-off, and the PR waits.
+   - If the head changes after the review, both lineages review the new head.
+     After a history rewrite, record old→new SHAs and show that the trees are
+     identical (`git diff --quiet old new`); only real changes need review.
+   - The merge uses `gh pr merge --merge --match-head-commit <reviewed SHA>`.
+4. **No open blocker or major finding.** The lead keeps a findings ledger in
+   the PR's debate folder: ID, severity, status, finder, and the finding's text
+   verbatim. Severity uses one scale (Blocker, Major, Minor), and only the finder
+   may lower it.
+   - A finding is closed when it is fixed and the finder accepts the fix in a
+     later round, or when the lead rejects it with a reason and the finder
+     withdraws it in a later round.
+   - Each closure must be an explicit `FINDING <ID> … accepted-fix|withdrawn`
+     line from the finder. Not mentioning a finding does not close it.
+   - If the finder keeps a blocker or major finding open after two cross-talk
+     rounds, the debate is inconclusive. It goes to the owner as options, a
+     recommendation and the trade-off, and the PR waits.
 5. **Recorded.**
    - The PR lists the transcripts, who wrote what and who reviewed it.
    - It is labelled AI-assisted, never as human review.
@@ -115,11 +158,21 @@ repository.
 - **If transcripts stayed in `/tmp`:** they are lost on reboot, and a later
   reversal could only use one agent's paraphrase.
 
+## Review record for this PR
+
+[debates/018-decision-records](debates/018-decision-records/) holds both
+round-1 reviews, the two-round cross-talk, the findings ledger and the final
+review of the fixed head.
+
 ## Flex
 
 - **FLEX (owner):** the owner-only classes, the number of rounds and the
-  transcript rules change only by an owner-merged PR. This document cannot be
-  amended by a self-merge.
+  transcript rules change only by an owner-merged PR, or one the owner clears
+  in words for a self-merge.
+- **FLEX (owner):** process gating runs under the owner's GitHub account, so
+  GitHub cannot tell a self-merge from an owner merge. A separate bot account,
+  with a ruleset and CODEOWNERS on the owner-only paths, would enforce item 1.
+  That is the owner's call.
 - If the owner wants to gate another class of change, it is added to gate item 1.
 
 ## Sweep

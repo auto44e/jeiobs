@@ -1,6 +1,12 @@
 # History rewrite — 2026-11-16
 
-Owner-approved repair. Nine fork commits on public `main` recorded the
+Owner instruction (2026-11-16, verbatim, given in the chat after the lead
+reported the problem):
+
+> it might be destructive but do clean these up and do neccesary repo repairs if
+> needed
+
+Nine fork commits on public `main` recorded the
 maintainer's corporate email and full name as **committer** (author was the fork
 identity). They came from `git cherry-pick` and `git rebase` runs that did not set
 the committer identity (VST3 backport cherry-picks, task 003 test cherry-picks, the

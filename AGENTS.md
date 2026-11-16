@@ -7,7 +7,8 @@ GPL-2.0-or-later licensing, module/source identifiers and public ABI where possi
 
 ## Working agreement
 
-- Ship small, reviewable PRs with one purpose. Branch from main; no force pushes.
+- Ship small, reviewable PRs with one purpose. Branch from main; no force pushes
+  except on the owner's verbatim instruction (docs/jeiobs/DECISIONS.md, gate item 1).
 - The first coding task is docs/jeiobs/tasks/001-vst3.md. Roadmap numbers express
   priorities and dependencies, not a compulsory serial approval chain.
   Independent experiments may proceed in parallel; unfinished work stays opt-in.
