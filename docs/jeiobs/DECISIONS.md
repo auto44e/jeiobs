@@ -93,7 +93,8 @@ The lead may merge its own PR only when all of these hold:
    product-scope and destructive decisions). The implementing PR can then be
    self-merged and must quote that decision.
 2. **Tests pass.** The checks that the CONTRIBUTING.md risk tier asks for were
-   run and passed. A failing or blocked check needs the owner's acceptance, not
+   run and passed, and their state at the reviewed SHA is given to the review
+   run (`-C`) so it lands in `00-meta.md`. A failing or blocked check needs the owner's acceptance, not
    just a report. Local and remote CI are reported separately, at the exact head
    SHA being merged.
 3. **A peer debate reviewed the exact head SHA.** Every self-merge gets a review
@@ -101,14 +102,21 @@ The lead may merge its own PR only when all of these hold:
    rounds:
    - The peers read a detached checkout of the reviewed commit, not the lead's
      working tree.
-   - Round 1 is blind: each peer reviews independently. From round 2 the peers
-     see each other's replies; the lineage that did not write the change speaks
-     first.
-   - Both are confined: Claude has only the Read, Glob and Grep tools and no MCP
-     servers; Codex runs with `--sandbox read-only` and no MCP servers.
-   - Every prompt, reply and stderr log is kept. The run fails closed if a turn
-     times out, errors, is empty, or lacks a VERDICT line or a FINDING line for
-     every ledger row the peer owns. A failed run is not a review.
+   - Round 1 is blind: both peers run at the same time, and neither reply
+     exists while the other works. From round 2 the peers see each other's
+     replies; the lineage that did not write the change (`-a`) speaks first.
+   - Confinement: Claude has only the Read, Glob and Grep tools and no MCP
+     servers. Codex runs the real binary with a dedicated `CODEX_HOME` holding
+     only model and provider settings (no MCP servers, plugins or skills) and
+     `--sandbox read-only`. Where Codex's sandbox cannot start on the host, the
+     run records that, and a tamper check after every turn (all refs, index and
+     working tree of the lead's repository, including ignored files, and the
+     review checkout) fails the run if anything changed.
+   - Every prompt and reply is committed. stderr logs stay in a local
+     diagnostics folder, because they contain tool output.
+   - The run fails closed if a turn times out, errors or is empty, lacks a
+     valid VERDICT line, has a malformed FINDING line, or skips a ledger row or
+     an earlier finding of that peer. A failed run is not a review.
    - Design consults (for example `~/.kiro/bin/peer-debate.sh` debates before
      code is written) are not gate reviews. Their transcripts are still
      committed with the decision they informed.
@@ -117,11 +125,11 @@ The lead may merge its own PR only when all of these hold:
      libobs API changes repeat review rounds until a round finds no blocker or
      major issue.
    - If the head changes after the review, both lineages review the new head.
-     One exception: a commit that only adds the review run's own files under
-     the PR's `debates/<pr>/` folder (checked with
-     `git diff --name-only <reviewed SHA> <head>`) needs no further review. The
-     merge then pins that head, and the run's `00-meta.md` names the reviewed
-     SHA.
+     One exception: a commit that only adds or updates files under the PR's
+     own `debates/<pr>/` folder (the run's files and the ledger), checked with
+     `git diff --name-status <reviewed SHA> <head>`, needs no further review.
+     The merge pins that new head, and the run's `00-meta.md` names the
+     reviewed SHA.
      After a history rewrite, record old→new SHAs and show that the trees are
      identical (`git diff --quiet old new`); only real changes need review.
    - The merge uses `gh pr merge --merge --match-head-commit <reviewed SHA>`.
@@ -174,6 +182,16 @@ repository.
   policy (Claude's review of #18).
 - **If transcripts stayed in `/tmp`:** they are lost on reboot, and a later
   reversal could only use one agent's paraphrase.
+
+## Confinement history
+
+Until 2026-11-16 the Codex "read-only" and "workspace-write" sandboxes did not
+work on the maintainer's Ubuntu 24.04 host: AppArmor blocks the unprivileged
+user namespaces that bubblewrap needs, and Codex's commands ran unsandboxed
+after an automatic escalation. That covers the task 003 workers and reviews and
+the early #18 reviews. No damage was found (the working tree was checked after
+those runs), but records that called those runs sandboxed were wrong. Enabling
+bubblewrap needs an AppArmor change on the host (owner action).
 
 ## Review record for this PR
 
