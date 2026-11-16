@@ -35,9 +35,17 @@
 #   OUTDIR) and the review checkout (HEAD and status) must be unchanged.
 # - Round 1 is not isolated: a peer that can read the filesystem could find
 #   the other's in-progress reply. Nothing relies on it being unseen.
-# - The runner keeps the sha256 of the context and ledger snapshots and of every
-#   saved prompt and reply in its own memory, and checks them before each
-#   prompt and after each turn, so a peer cannot alter the inputs or evidence.
+# - The runner keeps the sha256 of the context and ledger snapshots, of
+#   00-meta.md, of each prompt (taken before the turn starts) and of each reply
+#   (taken when it is saved, after the turn) in its own memory, and verifies all
+#   of them before each prompt, after each turn and at the end. This detects any
+#   later change to those files. It cannot detect a change made to a reply while
+#   its peer is still writing it, or files added to OUTDIR (the lead commits only
+#   the files the runner wrote, listed in 00-meta.md).
+# - Claude loads user settings only (--setting-sources user): project settings,
+#   hooks or CLAUDE.md in the reviewed checkout are not loaded, and the run fails
+#   if the checkout contains .claude/ or CLAUDE.md at all, so a change cannot
+#   steer its own review. Codex ignores project config (untrusted, see 00-meta).
 #
 # Fails closed (exit 3, writes FAILED) on a timeout, a non-zero exit, an empty
 # reply, a missing or malformed VERDICT or FINDING line, a ledger row or earlier
@@ -96,12 +104,16 @@ cleanup() {
 }
 trap cleanup EXIT
 git -C "$REPO" worktree add --detach "$TREE" "$FULLSHA" >/dev/null 2>&1 || { echo "error: cannot check out $FULLSHA" >&2; exit 2; }
+if [ -e "$TREE/.claude" ] || [ -n "$(find "$TREE" -name CLAUDE.md -not -path '*/.git/*' -print -quit)" ]; then
+  echo "error: the reviewed commit contains .claude/ or CLAUDE.md; refusing to review (a change must not configure its reviewer)" >&2; exit 2
+fi
 
 # Snapshots: peers always see the context and ledger as they were at the start.
 cp "$CTX" "$OUT/00-context.md"; cp "$LEDGER" "$OUT/00-ledger-in.md"
 CTX="$OUT/00-context.md"; LEDGER="$OUT/00-ledger-in.md"
-declare -A EVIDENCE=()   # path -> sha256, held only in this process
-pin() { EVIDENCE["$1"]="$(sha256sum < "$1")"; }
+declare -A EVIDENCE=()      # path -> sha256, held only in this process
+declare -A PROMPT_HASH=()   # "<peer>-r<round>" -> sha256 of the prompt before the turn
+pin() { [ -f "$1" ] || fail "cannot pin missing file $(basename "$1")"; EVIDENCE["$1"]="$(sha256sum < "$1")"; }
 verify_evidence() { # label
   local f
   for f in "${!EVIDENCE[@]}"; do
@@ -141,7 +153,7 @@ SELF="$(readlink -f "$0")"
   echo
   echo "- Started: $(date -u +%FT%TZ)"
   echo "- Reviewed commit: \`$FULLSHA\` (peers ran in a detached worktree at this commit)"
-  echo "- Author: $AUTHOR; rounds: $ROUNDS (round 1 blind, both at once); cross-talk order: $FIRST, $SECOND; timeout per turn: ${TIMEOUT}s"
+  echo "- Author: $AUTHOR; rounds: $ROUNDS (round 1 independent first pass, both at once, not isolated); cross-talk order: $FIRST, $SECOND; timeout per turn: ${TIMEOUT}s"
   echo "- Claude: $(claude --version 2>/dev/null | head -1), model ${PR_CLAUDE_MODEL:-opus}, effort ${PR_CLAUDE_EFFORT:-max}; tools Read, Glob, Grep; no MCP"
   echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1) (engine, not the toolbox launcher), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME config without MCP/plugin/project sections, shell env \"core\"; --sandbox read-only, sandbox $SANDBOX"
   echo "- Round 1 is an independent first pass, not isolated (see the script header)"
@@ -151,6 +163,7 @@ SELF="$(readlink -f "$0")"
   echo "- Topic: $TOPIC"
   if [ -n "$CI" ]; then echo; echo "## CI state at the reviewed commit"; echo; echo '```text'; cat "$CI"; echo '```'; fi
 } > "$OUT/00-meta.md"
+pin "$OUT/00-meta.md"
 
 PREAMBLE="You are one of two independent reviewers (Claude and Codex, different model lineages) in a
 cross-talk review for the JeiOBS repository. Your working directory is a checkout of exactly the
@@ -188,14 +201,15 @@ prompt() { # peer round own_prev other_latest -> path
     echo; echo "FINDINGS LEDGER (kept by the lead):"; cat "$LEDGER"
     echo; echo "YOUR OWN PREVIOUS REPLY:"; [ -n "$own" ] && cat "$own" || echo "(none: first round)"
     echo; echo "THE OTHER REVIEWER'S LATEST REPLY:"
-    if [ "$r" -eq 1 ]; then echo "(not shown: round 1 is blind)"; else cat "$other"; fi
-  } > "$p"
+    if [ "$r" -eq 1 ]; then echo "(not shown in round 1)"; else cat "$other"; fi
+  } > "$p" || fail "cannot write the $peer r$r prompt"
   echo "$p"
 }
 run_peer() { # peer prompt reply stderr
   if [ "$1" = claude ]; then
     (cd "$TREE" && timeout "$TIMEOUT" claude -p --model "${PR_CLAUDE_MODEL:-opus}" --effort "${PR_CLAUDE_EFFORT:-max}" \
-      --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" --strict-mcp-config < "$2" > "$3" 2> "$4")
+      --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" --strict-mcp-config --setting-sources user \
+      < "$2" > "$3" 2> "$4")
   else
     CODEX_HOME="$REVIEW_CODEX_HOME" timeout "$TIMEOUT" "$CODEX_BIN" exec --sandbox read-only --skip-git-repo-check \
       -C "$TREE" -c model_reasoning_effort="${PR_CODEX_EFFORT:-xhigh}" -o "$3" - < "$2" > "$4" 2>&1
@@ -217,8 +231,9 @@ validate() { # peer round reply
 }
 save() { # peer round slot  (copies the prompt and reply into OUT)
   local n; n=$(printf '%02d' $(( ($2 - 1) * 2 + $3 )))
-  cp "$TMP/$1-r$2.prompt" "$OUT/$n-r$2-$1.prompt.md"
-  cp "$TMP/$1-r$2.reply" "$OUT/$n-r$2-$1.reply.md"
+  cp "$TMP/$1-r$2.prompt" "$OUT/$n-r$2-$1.prompt.md" || fail "cannot save the $1 r$2 prompt"
+  [ "$(sha256sum < "$OUT/$n-r$2-$1.prompt.md")" = "${PROMPT_HASH[$1-r$2]}" ] || fail "$1 r$2 prompt changed during the turn"
+  cp "$TMP/$1-r$2.reply" "$OUT/$n-r$2-$1.reply.md" || fail "cannot save the $1 r$2 reply"
   echo "$OUT/$n-r$2-$1.reply.md"
 }
 pin_saved() { # peer round slot
@@ -226,9 +241,10 @@ pin_saved() { # peer round slot
   pin "$OUT/$n-r$2-$1.prompt.md"; pin "$OUT/$n-r$2-$1.reply.md"
 }
 
-# Round 1: blind. Both peers start together; both are waited for even if one
+# Round 1: independent first pass. Both peers start together; both are waited for even if one
 # fails, then the tamper check runs, then the files are saved, then validated.
-pa=$(prompt "$FIRST" 1 "" ""); pb=$(prompt "$SECOND" 1 "" "")
+pa=$(prompt "$FIRST" 1 "" "") || exit 3; pb=$(prompt "$SECOND" 1 "" "") || exit 3
+PROMPT_HASH["$FIRST-r1"]="$(sha256sum < "$pa")"; PROMPT_HASH["$SECOND-r1"]="$(sha256sum < "$pb")"
 run_peer "$FIRST" "$pa" "$TMP/$FIRST-r1.reply" "$DIAG/r1-$FIRST.stderr.txt" & ja=$!
 run_peer "$SECOND" "$pb" "$TMP/$SECOND-r1.reply" "$DIAG/r1-$SECOND.stderr.txt" & jb=$!
 wait $ja; ra=$?; wait $jb; rb=$?
@@ -242,7 +258,8 @@ validate "$FIRST" 1 "$a"; validate "$SECOND" 1 "$b"
 for ((r = 2; r <= ROUNDS; r++)); do
   for side in 1 2; do
     if [ $side = 1 ]; then peer=$FIRST own=$a other=$b; else peer=$SECOND own=$b other=$a; fi
-    p=$(prompt "$peer" "$r" "$own" "$other")
+    p=$(prompt "$peer" "$r" "$own" "$other") || exit 3
+    PROMPT_HASH["$peer-r$r"]="$(sha256sum < "$p")"
     run_peer "$peer" "$p" "$TMP/$peer-r$r.reply" "$DIAG/r$r-$peer.stderr.txt"; rc=$?
     touch "$TMP/$peer-r$r.reply"; f=$(save "$peer" "$r" $side); pin_saved "$peer" "$r" $side
     tamper_check "round $r $peer"
@@ -251,8 +268,13 @@ for ((r = 2; r <= ROUNDS; r++)); do
     if [ $side = 1 ]; then a=$f; else b=$f; fi
   done
 done
+verify_evidence "end of run"
 {
   echo "- Finished: $(date -u +%FT%TZ)"
+  echo
+  echo "## Files written by this run"
+  echo
+  for f in "${!EVIDENCE[@]}"; do echo "- \`$(basename "$f")\` sha256 \`${EVIDENCE[$f]%% *}\`"; done | sort
   echo
   echo "## Final dispositions"
   echo

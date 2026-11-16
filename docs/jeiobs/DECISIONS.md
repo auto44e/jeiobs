@@ -109,7 +109,10 @@ The lead may merge its own PR only when all of these hold:
      each other's replies; the lineage that did not write the change (`-a`)
      speaks first.
    - Confinement, exactly as enforced:
-     - Claude has only the Read, Glob and Grep tools and no MCP servers.
+     - Claude has only the Read, Glob and Grep tools, no MCP servers, and user
+       settings only (`--setting-sources user`). The run refuses a commit that
+       contains `.claude/` or `CLAUDE.md`, so a change cannot configure its own
+       reviewer.
      - Codex runs the `codex-cli` engine directly (the toolbox launcher injects
        MCP servers) with a dedicated `CODEX_HOME`. Its config has no MCP,
        plugin or project sections (the engine adds telemetry sections itself),
@@ -120,11 +123,13 @@ The lead may merge its own PR only when all of these hold:
        entries and flags, tracked diffs, untracked and ignored file contents,
        `.git/config` and hooks) or the review checkout's HEAD or files changed.
        The runner also keeps, in its own memory, the sha256 of the context and
-       ledger snapshots and of every saved prompt and reply, and verifies them
-       before each prompt and after each turn; cleanup fails the run if the
-       review checkout changed at the end. The check detects writes to the
-       repository and to the run's evidence; it cannot detect reads, network
-       use, or writes elsewhere.
+       ledger snapshots, of `00-meta.md`, of each prompt (before its turn) and
+       of each reply (once saved), and verifies them before each prompt, after
+       each turn and at the end; cleanup fails the run if the review checkout
+       changed. This detects later changes to those files and to the
+       repository. It cannot detect reads, network use, writes elsewhere, or a
+       change to a reply while its peer is still writing it. `00-meta.md` lists
+       the files the run wrote, with their hashes; only those are committed.
    - Every prompt and reply is committed. stderr logs stay in a local
      diagnostics folder, because they contain tool output.
    - The run fails closed if a turn times out, errors or is empty, lacks a
