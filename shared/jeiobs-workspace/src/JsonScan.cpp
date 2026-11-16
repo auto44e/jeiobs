@@ -156,6 +156,7 @@ class Parser final {
 		std::size_t value_index = kNoIndex;
 		std::size_t pending_member = kNoIndex;
 		std::size_t next_array_index = 0U;
+		bool after_comma = false; // a "," was just read: a closing bracket here is a trailing comma
 		std::unordered_set<std::string> keys;
 	};
 
@@ -503,11 +504,15 @@ class Parser final {
 				return Fail(MakeError(ErrorCode::Json));
 			}
 			if (bytes_[position_] == '}') {
+				if (frame.after_comma) {
+					return Fail(MakeError(ErrorCode::Json));
+				}
 				return CloseContainer();
 			}
 			if (bytes_[position_] != '"') {
 				return Fail(MakeError(ErrorCode::Json));
 			}
+			frame.after_comma = false;
 			std::string key;
 			std::size_t key_start = 0U;
 			std::size_t key_end = 0U;
@@ -553,6 +558,7 @@ class Parser final {
 			}
 			if (bytes_[position_] == ',') {
 				++position_;
+				frame.after_comma = true;
 				frame.state = FrameState::ObjectKeyOrEnd;
 				return true;
 			}
@@ -574,8 +580,12 @@ class Parser final {
 				return Fail(MakeError(ErrorCode::Json));
 			}
 			if (bytes_[position_] == ']') {
+				if (frame.after_comma) {
+					return Fail(MakeError(ErrorCode::Json));
+				}
 				return CloseContainer();
 			}
+			frame.after_comma = false;
 			frame.state = FrameState::ArrayCommaOrEnd;
 			next_pointer_ = ChildPointer(frame.pointer, std::to_string(frame.next_array_index));
 			++frame.next_array_index;
@@ -588,6 +598,7 @@ class Parser final {
 			}
 			if (bytes_[position_] == ',') {
 				++position_;
+				frame.after_comma = true;
 				frame.state = FrameState::ArrayValueOrEnd;
 				return true;
 			}

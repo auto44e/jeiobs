@@ -266,7 +266,7 @@ std::vector<DecodedRange> UrlRanges(std::string_view value)
 		}
 		const std::size_t at = value.rfind('@', authority_end == 0U ? 0U : authority_end - 1U);
 		if (at != std::string_view::npos && at >= authority_start) {
-			ranges.push_back({authority_start, at + 1U});
+			ranges.push_back({authority_start, at}); // the userinfo only; the "@" stays
 		}
 		const std::size_t query = value.find('?', authority_start);
 		if (query != std::string_view::npos && query < value.find('#', query)) {
@@ -551,12 +551,16 @@ void RedactBasicWithBytes(std::vector<Edit> &edits, std::string_view bytes, cons
 		}
 	}
 	unreviewed += unknown_sections.size();
+	bool ffurl_counted = false; // a set FFURL counts once, however often it is repeated
 	for (const IniKeyOccurrence &key : scan.keys) {
 		if ((key.section == "Twitch" || key.section == "Restream" || key.section == "YouTube") &&
 		    (key.key == "Token" || key.key == "RefreshToken")) {
 			AddEdit(edits, key.pointer, "oauth_token", key.value_start, key.value_end, {});
 		} else if (key.section == "AdvOut" && key.key == "FFURL" && key.value_start != key.value_end) {
-			++unreviewed;
+			if (!ffurl_counted) {
+				++unreviewed;
+				ffurl_counted = true;
+			}
 			AddIniUrlEdit(edits, bytes, key);
 		}
 	}
