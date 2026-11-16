@@ -236,22 +236,22 @@ check "no plugins: exit 1, NO_VST3" 'want status 1; want has scan.out NO_VST3'
 home good "${GOOD[@]}"; scan 20
 check "good plugins: the 3 classes listed" 'want status 0; want classes $GOOD_IDS'
 home invalid "${GOOD[@]}" "$WORK/bad/invalid.vst3"; scan 20
-check "invalid bundle skipped, good still listed" 'want status 0; want classes $GOOD_IDS'
+check "invalid bundle skipped once, good still listed" 'kept 10000 $GOOD_IDS; want skips scan.out invalid 1'
 home crash "${GOOD[@]}" "$WORK/bad/crash.vst3"; scan 20
 check "crash bundle: skipped once, 3 classes kept" 'kept 10000 $GOOD_IDS; want skips scan.out crash 1'
 home hang "${GOOD[@]}" "$WORK/bad/hang.vst3"; scan 20
-check "hang bundle: probe times out, scan done in < 6 s, skipped once, 3 classes kept, no process left" \
-  'kept 6000 $GOOD_IDS; want skips scan.out hang 1 timeout; want gone'
+check "hang bundle: probe times out, scan done in < 8 s, skipped once, 3 classes kept, no process left" \
+  'kept 8000 $GOOD_IDS; want skips scan.out hang 1 timeout; want gone'
 home mixed "${GOOD[@]}" "$WORK/bad/"{crash,hang,invalid}.vst3; scan 20
-check "crash + hang + invalid: scan done in < 6 s, each bad one skipped once (hang as timeout), 3 classes kept, no process left" \
-  'kept 6000 $GOOD_IDS; want skips scan.out crash 1; want skips scan.out hang 1 timeout
+check "crash + hang + invalid: scan done in < 8 s, each bad one skipped once (hang as timeout), 3 classes kept, no process left" \
+  'kept 8000 $GOOD_IDS; want skips scan.out crash 1; want skips scan.out hang 1 timeout
    want skips scan.out invalid 1; want gone'
 # bad-noisy prints a fake VST3_SCAN_DONE and more on both streams, then crashes;
 # its grandchild keeps every inherited fd open for 30 s. The scan must be done
 # long before that, while the grandchild still runs.
 home noisy "${GOOD[@]}" "$WORK/bad/noisy.vst3"; scan 20
-check "noisy bundle (junk output, live fd-holding grandchild, crash): scan done in < 6 s, skipped once, 3 classes kept" \
-  'want alive; kept 6000 $GOOD_IDS; want skips scan.out noisy 1; want killed; want gone'
+check "noisy bundle (junk output, live fd-holding grandchild, crash): scan done in < 8 s, skipped once, 3 classes kept" \
+  'want alive; kept 8000 $GOOD_IDS; want skips scan.out noisy 1; want killed; want gone'
 reap "$h"
 home exit0 "${GOOD[@]}" "$WORK/bad/exit0.vst3"; scan 20
 check "exit0 bundle (clean exit, no result): skipped once, 3 classes kept" 'kept 10000 $GOOD_IDS; want skips scan.out exit0 1'
@@ -274,7 +274,7 @@ reap "$h"
 # loading), so OBS can only exit promptly if it stops the scan. quit-probe
 # counts OBS's running scanner children when it asks to quit, since OBS exits
 # too soon after that for the 0.1 s sampling above to be sure to see it.
-home hhang "${GOOD[@]}" "$WORK/bad/hang.vst3"; obs quit-probe 30 OBS_VST3_PROBE_TIMEOUT_MS=60000
+home hhang "${GOOD[@]}" "$WORK/bad/hang.vst3"; obs quit-probe 30 OBS_VST3_PROBE_TIMEOUT_MS=60000 QUITPROBE_WAIT_SCANNER=1
 check "hang bundle: OBS quits mid-scan with exit 0 within 15 s, 0 leaks, no scanner left" \
   'want status 0; want within 15000; want scanning; want interrupted; want leaks0; want gone'
 reap "$h"

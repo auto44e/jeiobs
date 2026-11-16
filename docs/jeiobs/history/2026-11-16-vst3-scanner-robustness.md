@@ -1,30 +1,22 @@
 # VST3 scanner robustness — 2026-11-16
 
-Branch: `wip/vst3-scanner-impl`
+Task 003, branch `jeiobs/vst3-scanner-robustness`. Design, evidence and gaps:
+[task 003](../tasks/003-vst3-scanner-robustness.md).
 
-Implemented the task 003 scanner coordinator design:
+How it was built (worker mode, AI-assisted; not human review):
 
-- Added `os_process_pipe_kill` for POSIX and Windows.
-- Moved scanner code-loading behind sequential self-probes.
-- Added probe watchdogs, POSIX parent-death detection, output hygiene,
-  nonce-checked atomic result files and bounded child-pipe draining.
-- Preserved usable classes when another bundle crashes or times out.
-- Made module-info parsing distinguish “parsed” from “has audio classes” and
-  made valid empty caches usable.
-- Made discovery permission-tolerant, architecture-filtered on Windows and
-  deterministic.
-- Added host pipe locking and unload cancellation before joining the scan
-  thread.
-
-Evidence:
-
-- `cmake --build _build -j10`: passed.
-- Isolated Linux scanner with `adelay`, `again-sample-accurate`, crash and
-  hang bundles, `OBS_VST3_PROBE_TIMEOUT_MS=2000`: exit 0 in about 2 seconds,
-  three classes in the cache, one crash skip and one timeout skip.
-- Disposable OBS quit probe with the same bad bundles and a 10000 ms probe
-  timeout: exit 0 in about 5 seconds, zero reported memory leaks.
-
-Windows/macOS compilation and runtime behavior were not tested. The Windows
-handle-inheritance and architecture-folder branches, macOS process spawning,
-and platform-specific VST3 loader behavior remain release risks.
+1. Design: Codex and Claude reviewed one brief independently (read-only). Both
+   chose a libobs kill API and per-bundle probe children; they differed on
+   stdout markers vs result files (result files chosen) and on an overall
+   deadline (none).
+2. Round 1: Codex wrote the implementation, Claude the tests, in separate
+   worktrees. The tests failed 9/9 new checks on the old code and passed 15/15
+   on the new one. The lead added logging of skipped bundles in the host.
+3. Cross-review: Claude reviewed the implementation (found a Windows timeout
+   blocker, inherited pipe handles, single-file plugins dropped by the
+   architecture filter, and smaller issues). Codex reviewed the tests (counts
+   instead of exact classes, unproven fixtures, loose timeouts, fail-open
+   process checks).
+4. Round 2: both workers fixed the adjudicated findings. The lead fixed a
+   missing-folder warning the test worker found. Round-2 diffs were reviewed
+   again by the other lineage.

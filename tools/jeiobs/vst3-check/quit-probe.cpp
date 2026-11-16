@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -38,12 +39,26 @@ static int runningScanners() {
 }
 bool obs_module_load(void) {
   obs_frontend_add_event_callback([](enum obs_frontend_event e, void *) {
-    if (e == OBS_FRONTEND_EVENT_FINISHED_LOADING)
-      QTimer::singleShot(2000, [] {
-        fprintf(stderr, "QUITPROBE requesting quit; obs-vst3-scanner children running: %d\n", runningScanners());
-        auto *mw = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-        if (mw) mw->close();
-      });
+    if (e != OBS_FRONTEND_EVENT_FINISHED_LOADING) return;
+    // Normally quit 2 s after loading. With QUITPROBE_WAIT_SCANNER=1, quit as
+    // soon as a scanner child is running (at least 0.5 s in), or after 10 s, so
+    // a slow start cannot make the quit happen before the scan begins.
+    const bool waitScanner = getenv("QUITPROBE_WAIT_SCANNER") != nullptr;
+    auto *poll = new QTimer;
+    auto *elapsedMs = new int(0);
+    QObject::connect(poll, &QTimer::timeout, [poll, elapsedMs, waitScanner] {
+      *elapsedMs += 100;
+      const int running = runningScanners();
+      const bool due = waitScanner ? ((*elapsedMs >= 500 && running > 0) || *elapsedMs >= 10000) : *elapsedMs >= 2000;
+      if (!due) return;
+      poll->stop();
+      fprintf(stderr, "QUITPROBE requesting quit; obs-vst3-scanner children running: %d\n", running);
+      auto *mw = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+      if (mw) mw->close();
+      poll->deleteLater();
+      delete elapsedMs;
+    });
+    poll->start(100);
   }, nullptr);
   return true;
 }
