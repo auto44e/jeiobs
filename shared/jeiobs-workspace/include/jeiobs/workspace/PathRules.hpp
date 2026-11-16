@@ -21,6 +21,12 @@ enum class PathStatus {
 	Invalid,
 };
 
+// Length rules ("path", "components", "component") are reported as E_LIMIT, the rest as E_PATH.
+[[nodiscard]] inline bool IsPathLimitRule(std::string_view rule) noexcept
+{
+	return rule == "path" || rule == "components" || rule == "component";
+}
+
 struct PathResult {
 	PathStatus status = PathStatus::Invalid;
 	std::string rule;

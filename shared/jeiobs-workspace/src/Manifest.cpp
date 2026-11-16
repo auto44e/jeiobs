@@ -274,10 +274,11 @@ public:
 		return Attach(std::move(value));
 	}
 
-	bool parse_error(std::size_t, const std::string &, const nlohmann::detail::exception &) override
+	bool parse_error(std::size_t, const std::string &, const nlohmann::detail::exception &error) override
 	{
 		if (error_.ok()) {
-			error_ = MakeError(ErrorCode::Json);
+			// nlohmann reports a number that overflows double (1e400) as out_of_range 406.
+			error_ = MakeError(error.id == 406 ? ErrorCode::Nonfinite : ErrorCode::Json);
 		}
 		return false;
 	}
@@ -468,7 +469,8 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 		const std::string path = entry.at("path").get<std::string>();
 		const PathResult path_result = ValidatePath(path);
 		if (!path_result.ok()) {
-			return MakeError(ErrorCode::Path, path_result.rule);
+			return MakeError(IsPathLimitRule(path_result.rule) ? ErrorCode::Limit : ErrorCode::Path,
+					 path_result.rule);
 		}
 		if (path_result.status == PathStatus::Unchecked) {
 			unchecked_paths = true;
@@ -584,7 +586,8 @@ Error ValidateReferences(const Json &document, ManifestMode mode, const std::uno
 		return Schema("entries");
 	}
 	for (const Json &entry : document.at("entries")) {
-		if (entry.contains("bak") && !entry_ids.count(entry.at("bak").get<std::string>())) {
+		if (entry.contains("bak") &&
+		    (!entry_ids.count(entry.at("bak").get<std::string>()) || entry.at("bak") == entry.at("id"))) {
 			return Schema("bak");
 		}
 	}
@@ -621,8 +624,11 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 			return {std::nullopt, Schema(field)};
 		}
 	}
-	if (!document.at("target").is_object() || !IsObjectWithString(document.at("target"), "os")) {
+	if (!document.at("target").is_object()) {
 		return {std::nullopt, Schema("target")};
+	}
+	if (!IsObjectWithString(document.at("target"), "os")) {
+		return {std::nullopt, Schema("target.os")};
 	}
 	if (!document.at("app_keys").is_array()) {
 		return {std::nullopt, Schema("app_keys")};

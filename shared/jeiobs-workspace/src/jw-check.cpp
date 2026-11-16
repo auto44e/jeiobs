@@ -116,7 +116,8 @@ int CheckPath(const std::string &path)
 {
 	const auto result = Jeiobs::Workspace::ValidatePath(path);
 	if (!result.ok()) {
-		PrintError({ErrorCode::Path, result.rule});
+		PrintError({Jeiobs::Workspace::IsPathLimitRule(result.rule) ? ErrorCode::Limit : ErrorCode::Path,
+			    result.rule});
 		return 1;
 	}
 	std::cout << "OK";
