@@ -17,8 +17,11 @@
 
 #pragma once
 
+#include <obs-data.h>
+#include <public.sdk/source/vst/hosting/module.h>
 #include <public.sdk/source/vst/moduleinfo/moduleinfo.h>
 
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -43,22 +46,33 @@ struct ModuleCache {
 	std::vector<VST3ClassInfo> classes;
 };
 
+void saveVST3ClassInfo(obs_data_t *obj, const VST3ClassInfo &classInfo);
+VST3ClassInfo loadVST3ClassInfo(obs_data_t *obj);
+
 class VST3Scanner {
 public:
+	using ModuleProbe = std::function<bool(const std::string &, std::vector<VST3ClassInfo> &)>;
+
 	std::vector<std::string> getDefaultSearchPaths();
 	std::string getNameById(const std::string &class_id) const;
 	std::string getPathById(const std::string &class_id) const;
 	bool moduleHasMultipleClasses(const std::string &bundlePath) const;
 	bool hasVST3();
 	bool addModuleClasses(const std::string &bundlePath);
+	bool loadModuleClassesInProcess(const std::string &bundlePath);
 	bool scanForVST3Plugins();
 	std::vector<VST3ClassInfo> pluginList;
 	void sort();
 	std::unordered_map<std::string, size_t> classCount;
 	void updateModulesList(std::unordered_map<std::string, ModuleCache> &modules);
+	void setModuleProbe(ModuleProbe probe);
 
 private:
-	std::unordered_set<std::string> getVST3Paths();
+	std::vector<std::string> getVST3Paths();
 	bool tryReadModuleInfo(const std::string &bundlePath);
 	bool loadFromModuleInfo(const Steinberg::ModuleInfo &info, const std::string &bundlePath);
+	void appendClassInfo(VST3ClassInfo classInfo, const std::string &bundlePath);
+
+	ModuleProbe moduleProbe_;
+	VST3::Hosting::Module::Ptr loadedModule_;
 };

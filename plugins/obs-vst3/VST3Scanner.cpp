@@ -30,11 +30,142 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <system_error>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+void saveVST3ClassInfo(obs_data_t *obj, const VST3ClassInfo &classInfo)
+{
+	if (!obj) {
+		return;
+	}
+
+	obs_data_set_string(obj, "name", classInfo.name.c_str());
+	obs_data_set_string(obj, "id", classInfo.id.c_str());
+	obs_data_set_string(obj, "path", classInfo.path.c_str());
+	obs_data_set_string(obj, "pluginName", classInfo.pluginName.c_str());
+	obs_data_set_bool(obj, "discardable", classInfo.discardable);
+	obs_data_set_bool(obj, "isFX", classInfo.isFX);
+}
+
+VST3ClassInfo loadVST3ClassInfo(obs_data_t *obj)
+{
+	VST3ClassInfo classInfo;
+	if (!obj) {
+		return classInfo;
+	}
+
+	classInfo.name = obs_data_get_string(obj, "name");
+	classInfo.id = obs_data_get_string(obj, "id");
+	classInfo.path = obs_data_get_string(obj, "path");
+	classInfo.pluginName = obs_data_get_string(obj, "pluginName");
+	classInfo.discardable = obs_data_get_bool(obj, "discardable");
+	classInfo.isFX = obs_data_get_bool(obj, "isFX");
+	return classInfo;
+}
+
+namespace {
+namespace fs = std::filesystem;
+
+bool isPermissionDenied(const std::error_code &error)
+{
+	return error == std::errc::permission_denied ||
+	       error.default_error_condition() == std::errc::permission_denied;
+}
+
+#ifdef _WIN32
+bool isWindowsVST3Architecture(const fs::path &path)
+{
+	if (path.parent_path().parent_path().filename() != "Contents") {
+		return true;
+	}
+
+	const std::string architecture = path.parent_path().filename().u8string();
+#if defined(_M_ARM64EC)
+	return architecture == "arm64ec-win" || architecture == "arm64x-win" || architecture == "x86_64-win";
+#elif defined(_M_ARM64) || defined(__aarch64__)
+	return architecture == "arm64-win";
+#else
+	return architecture == "x86_64-win";
+#endif
+}
+#endif
+
+bool isVST3Entry(const fs::directory_entry &entry, std::error_code &error)
+{
+#ifdef _WIN32
+	if (!entry.is_regular_file(error) || error || entry.path().extension() != ".vst3") {
+		return false;
+	}
+
+	return isWindowsVST3Architecture(entry.path());
+#else
+	return entry.is_directory(error) && !error && entry.path().extension() == ".vst3";
+#endif
+}
+
+bool isMissingPath(const std::error_code &error)
+{
+	return error == std::errc::no_such_file_or_directory ||
+	       error.default_error_condition() == std::errc::no_such_file_or_directory;
+}
+
+void logDirectoryIterationError(const fs::path &root, const std::error_code &error)
+{
+	/* Search folders are optional: a missing one is normal, not an error. */
+	if (error && !isPermissionDenied(error) && !isMissingPath(error)) {
+		blog(LOG_WARNING, "[VST3 Scanner] Directory iteration stopped at %s: %s", root.u8string().c_str(),
+		     error.message().c_str());
+	}
+}
+
+bool collectVST3Paths(const std::vector<std::string> &searchPaths, std::vector<std::string> &paths,
+		      bool stopAfterFirst)
+{
+	for (const auto &folder : searchPaths) {
+		const fs::path root = fs::u8path(folder);
+		std::error_code error;
+		if (!fs::is_directory(root, error) || error) {
+			logDirectoryIterationError(root, error);
+			continue;
+		}
+
+		fs::recursive_directory_iterator entries(root, fs::directory_options::skip_permission_denied, error);
+		const fs::recursive_directory_iterator end;
+		while (entries != end) {
+			if (error) {
+				logDirectoryIterationError(root, error);
+				error.clear();
+				entries.increment(error);
+				continue;
+			}
+
+			const auto &entry = *entries;
+			std::error_code entryError;
+			if (isVST3Entry(entry, entryError)) {
+				paths.push_back(entry.path().u8string());
+				if (stopAfterFirst) {
+					return true;
+				}
+			}
+
+			entries.increment(error);
+		}
+
+		logDirectoryIterationError(root, error);
+	}
+
+	return !paths.empty();
+}
+
+std::string pluginNameForBundle(const std::string &bundlePath)
+{
+	return fs::u8path(bundlePath).stem().u8string();
+}
+} // namespace
 
 std::vector<std::string> VST3Scanner::getDefaultSearchPaths()
 {
@@ -69,30 +200,13 @@ std::vector<std::string> VST3Scanner::getDefaultSearchPaths()
 	return paths;
 }
 
-std::unordered_set<std::string> VST3Scanner::getVST3Paths()
+std::vector<std::string> VST3Scanner::getVST3Paths()
 {
-	std::unordered_set<std::string> fsPaths;
+	std::vector<std::string> fsPaths;
+	collectVST3Paths(getDefaultSearchPaths(), fsPaths, false);
 
-	for (const auto &folder : getDefaultSearchPaths()) {
-		if (!std::filesystem::exists(std::filesystem::u8path(folder))) {
-			continue;
-		}
-
-		for (const auto &entry :
-		     std::filesystem::recursive_directory_iterator(std::filesystem::u8path(folder))) {
-			if (!entry.exists()) {
-				continue;
-			}
-
-#ifdef _WIN32
-			if (entry.is_regular_file() && entry.path().extension() == ".vst3")
-#else
-			if (entry.is_directory() && entry.path().extension() == ".vst3")
-#endif
-				fsPaths.insert(entry.path().u8string());
-		}
-	}
-
+	std::sort(fsPaths.begin(), fsPaths.end());
+	fsPaths.erase(std::unique(fsPaths.begin(), fsPaths.end()), fsPaths.end());
 	return fsPaths;
 }
 
@@ -131,38 +245,8 @@ void VST3Scanner::sort()
 
 bool VST3Scanner::hasVST3()
 {
-	auto paths = getDefaultSearchPaths();
-
-	for (const auto &folder : paths) {
-		if (!std::filesystem::exists(std::filesystem::u8path(folder))) {
-			continue;
-		}
-
-		try {
-			for (const auto &entry :
-			     std::filesystem::recursive_directory_iterator(std::filesystem::u8path(folder))) {
-				if (!entry.exists()) {
-					continue;
-				}
-
-				const auto &p = entry.path();
-
-#ifdef _WIN32
-				if (entry.is_regular_file() && p.extension() == ".vst3") {
-					return true;
-				}
-#else
-				if (entry.is_directory() && p.extension() == ".vst3") {
-					return true;
-				}
-#endif
-			}
-		} catch (const std::exception &e) {
-			(void)e;
-		}
-	}
-
-	return false;
+	std::vector<std::string> paths;
+	return collectVST3Paths(getDefaultSearchPaths(), paths, true);
 }
 
 static bool isInstrument(const std::vector<std::string> &subCategories)
@@ -193,10 +277,11 @@ bool VST3Scanner::scanForVST3Plugins()
 
 void VST3Scanner::updateModulesList(std::unordered_map<std::string, ModuleCache> &modules)
 {
-	std::unordered_set<std::string> fsPaths = getVST3Paths();
+	const std::vector<std::string> fsPaths = getVST3Paths();
+	const std::unordered_set<std::string> fsPathSet(fsPaths.begin(), fsPaths.end());
 
 	for (auto it = modules.begin(); it != modules.end();) {
-		if (!fsPaths.count(it->first)) {
+		if (!fsPathSet.count(it->first)) {
 			it = modules.erase(it);
 		} else {
 			++it;
@@ -218,15 +303,16 @@ bool VST3Scanner::tryReadModuleInfo(const std::string &bundlePath)
 
 	fs::path p = fs::u8path(bundlePath);
 	fs::path bundleRoot;
+	std::error_code error;
 
 #ifdef _WIN32
-	if (!fs::is_regular_file(p)) {
+	if (!fs::is_regular_file(p, error) || error) {
 		return false;
 	}
 
 	bundleRoot = p.parent_path().parent_path().parent_path();
 #else
-	if (!fs::is_directory(p)) {
+	if (!fs::is_directory(p, error) || error) {
 		return false;
 	}
 
@@ -235,7 +321,8 @@ bool VST3Scanner::tryReadModuleInfo(const std::string &bundlePath)
 
 	fs::path jsonPath = bundleRoot / "Contents" / "Resources" / "moduleinfo.json";
 
-	if (!fs::exists(jsonPath) || !fs::is_regular_file(jsonPath)) {
+	error.clear();
+	if (!fs::is_regular_file(jsonPath, error) || error) {
 		return false;
 	}
 
@@ -255,10 +342,12 @@ bool VST3Scanner::tryReadModuleInfo(const std::string &bundlePath)
 	bool discardable = parsed.value().factoryInfo.flags & Steinberg::PFactoryInfo::kClassesDiscardable;
 
 	if (discardable) {
-		return addModuleClasses(bundlePath);
+		addModuleClasses(bundlePath);
+		return true;
 	}
 
-	return loadFromModuleInfo(*parsed, bundleRoot.u8string());
+	loadFromModuleInfo(*parsed, bundleRoot.u8string());
+	return true;
 }
 
 bool VST3Scanner::loadFromModuleInfo(const Steinberg::ModuleInfo &info, const std::string &bundleRoot)
@@ -279,8 +368,7 @@ bool VST3Scanner::loadFromModuleInfo(const Steinberg::ModuleInfo &info, const st
 		entry.discardable = discardable;
 		entry.isFX = !isInstrument(c.subCategories);
 
-		pluginList.push_back(std::move(entry));
-		++classCount[bundleRoot];
+		appendClassInfo(std::move(entry), bundleRoot);
 		++added;
 	}
 
@@ -289,18 +377,36 @@ bool VST3Scanner::loadFromModuleInfo(const Steinberg::ModuleInfo &info, const st
 
 bool VST3Scanner::addModuleClasses(const std::string &bundlePath)
 {
-	std::string error;
-	const std::string pluginName = std::filesystem::u8path(bundlePath).stem().u8string();
-	size_t added = 0;
-	VST3::Hosting::Module::Ptr module = VST3::Hosting::Module::create(bundlePath, error);
-
-	if (!module) {
-		// uncomment for debugging
-		//blog(LOG_ERROR, "[VST3 Scanner] Module failed to load with error %s", error.c_str());
+	if (!moduleProbe_) {
 		return false;
 	}
 
-	VST3::Hosting::PluginFactory factory = module->getFactory();
+	std::vector<VST3ClassInfo> classes;
+	if (!moduleProbe_(bundlePath, classes)) {
+		return false;
+	}
+
+	const std::string pluginName = pluginNameForBundle(bundlePath);
+	for (auto &classInfo : classes) {
+		classInfo.path = bundlePath;
+		classInfo.pluginName = pluginName;
+		appendClassInfo(std::move(classInfo), bundlePath);
+	}
+
+	return true;
+}
+
+bool VST3Scanner::loadModuleClassesInProcess(const std::string &bundlePath)
+{
+	std::string error;
+	const std::string pluginName = pluginNameForBundle(bundlePath);
+	loadedModule_ = VST3::Hosting::Module::create(bundlePath, error);
+
+	if (!loadedModule_) {
+		return false;
+	}
+
+	VST3::Hosting::PluginFactory factory = loadedModule_->getFactory();
 	bool discardable = factory.info().classesDiscardable();
 	for (const auto &classInfo : factory.classInfos()) {
 		if (classInfo.category() != kVstAudioEffectClass) {
@@ -315,12 +421,21 @@ bool VST3Scanner::addModuleClasses(const std::string &bundlePath)
 		entry.discardable = discardable;
 		entry.isFX = !isInstrument(classInfo.subCategories());
 
-		pluginList.push_back(std::move(entry));
-		++classCount[bundlePath];
-		++added;
+		appendClassInfo(std::move(entry), bundlePath);
 	}
 
-	return added > 0;
+	return true;
+}
+
+void VST3Scanner::appendClassInfo(VST3ClassInfo classInfo, const std::string &bundlePath)
+{
+	pluginList.push_back(std::move(classInfo));
+	++classCount[bundlePath];
+}
+
+void VST3Scanner::setModuleProbe(ModuleProbe probe)
+{
+	moduleProbe_ = std::move(probe);
 }
 
 bool VST3Scanner::moduleHasMultipleClasses(const std::string &bundlePath) const
