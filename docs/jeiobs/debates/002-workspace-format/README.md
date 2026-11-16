@@ -10,7 +10,8 @@
   dropped).
 - `07`, `08`: black-box test brief for the Claude worker (written without reading the library)
   and its report.
-- The PR's review run is added under this folder.
+- `review-01/`, `review-02/`: review runs on `6c8269596` and `4f5738264`; `09`–`13` are the
+  fix round between them; [findings.md](findings.md) is the ledger.
 
 The workers committed on detached HEADs in local worktrees (`9f1133475`, `778797801`); those
 commits were never pushed and reached the branch by cherry-pick.
