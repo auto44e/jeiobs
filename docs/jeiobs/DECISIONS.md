@@ -1,8 +1,10 @@
 # Decision records and PR review (jeiobs)
 
-Status: **accepted**, 2026-11-16. The owner cleared this PR (#18) for a
-self-merge after fixes and peer review (quoted below). Later changes to this
-document stay owner-merged unless the owner clears them the same way. Adapted
+Status: **accepted**, 2026-11-16. The owner cleared PR #18 for a self-merge
+after fixes and peer review (quoted below), then merged it at `374f842c7`. The
+review-tooling hardening after that merge (review runs 06–12) is PR #19, which
+the owner merges. Later changes to this document stay owner-merged unless the
+owner clears them the same way. Adapted
 from the JeiOS decision-record policy (its ADR 0000).
 
 ## Owner directive (2026-11-16, verbatim from the chat)
@@ -56,6 +58,9 @@ Each decision, in a task doc, `HANDOFF.md` or a PR description, has:
    - Keep each prompt verbatim and each final answer verbatim. Drop Codex
      tool-call output.
    - Replace the home directory with `~`. `/tmp` scratch paths may stay.
+   - Strip trailing whitespace, and show relative markdown links inside run
+     folders as plain text. These edits change file hashes, so the hashes in a
+     run's `00-meta.md` are of the files as the runner wrote them.
    - The fork identity `auto44e@gmail.com` is public commit metadata and may
      stay. No other personal or corporate address, and never a secret (the Slack
      webhook in particular).
@@ -113,9 +118,13 @@ The lead may merge its own PR only when all of these hold:
        settings only (`--setting-sources user`), so it reads no project
        settings, hooks or `CLAUDE.md` from the checkout.
      - Codex runs the `codex-cli` engine directly (the toolbox launcher injects
-       MCP servers) with a dedicated `CODEX_HOME`. Its config has no MCP,
-       plugin or project sections (the engine adds telemetry sections itself),
-       uses a "core" shell environment, and passes `--sandbox read-only` and
+       MCP servers) with a `CODEX_HOME` kept for review runs. The run refuses
+       to start while another process uses it, and fails if one appears or its
+       `config.toml` changes. That config may only have
+       `[shell_environment_policy]`, `[analytics]`, `[otel]` (telemetry to a
+       local collector) and `[model_providers.*]` tables, with no MCP, plugin,
+       project or profile keys. Codex gets a "core" shell environment,
+       `--sandbox read-only` and
        `project_doc_max_bytes=0`, so it reads no `AGENTS.md` or
        `AGENTS.override.md` from the checkout. The run fails if a Codex session
        log from the run shows project instructions for the checkout. The
@@ -233,8 +242,9 @@ bubblewrap needs an AppArmor change on the host (owner action).
 ## Review record for this PR
 
 [debates/018-decision-records](debates/018-decision-records/) holds both
-round-1 reviews, the two-round cross-talk, the findings ledger and the final
-review of the fixed head.
+round-1 reviews, the two-round cross-talk, the findings ledger and the review
+runs: `05-final` reviewed #18 before the owner merged it at `374f842c7`; runs
+06–12 reviewed the follow-up commits that became #19.
 
 ## Flex
 

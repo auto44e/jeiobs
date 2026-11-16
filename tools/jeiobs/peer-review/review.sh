@@ -26,9 +26,12 @@
 #   settings only (--setting-sources user): project settings, hooks and
 #   CLAUDE.md in the reviewed checkout are not loaded.
 # - Codex runs the codex-cli engine directly (the toolbox launcher in bin/
-#   injects MCP servers into its config) with a dedicated CODEX_HOME whose
-#   config.toml has no [mcp_servers] (the engine itself adds analytics/otel
-#   telemetry sections), a "core" shell environment, --sandbox read-only, and
+#   injects MCP servers into its config) with a CODEX_HOME kept for review runs:
+#   the run refuses to start while another process uses it, and fails if one
+#   appears or config.toml changes during the run. config.toml may only have
+#   [shell_environment_policy], [analytics], [otel] (telemetry to a local
+#   collector) and [model_providers.*] tables, with no MCP, plugin, project or
+#   profile keys. Codex gets a "core" shell environment, --sandbox read-only, and
 #   project_doc_max_bytes=0 so it reads no AGENTS.md or AGENTS.override.md from
 #   the checkout. The run fails if a Codex session log from this run shows
 #   project instructions for the checkout. The provider config runs the toolbox
@@ -37,7 +40,7 @@
 # - The run refuses a reviewed commit that contains .claude, CLAUDE.md,
 #   AGENTS.override.md, .agents (Codex repo skills) or .codex anywhere, so a change
 #   cannot configure its reviewer. Codex still loads the engine's bundled system
-#   skills from the dedicated CODEX_HOME, which the lead controls.
+#   skills from CODEX_HOME/skills/.system.
 # - Where Codex's sandbox cannot start (bubblewrap needs unprivileged user
 #   namespaces; Ubuntu 24.04 AppArmor blocks them), Codex commands run
 #   unsandboxed. 00-meta.md says so. Nothing then stops a peer from writing;
@@ -97,13 +100,25 @@ CODEX_BIN="${REVIEW_CODEX_BIN:-$(ls -d "$HOME"/.toolbox/tools/codex/*/codex 2>/d
 REVIEW_CODEX_HOME="${REVIEW_CODEX_HOME:-$HOME/.config/jeiobs-agent/codex-review}"
 command -v claude >/dev/null && [ -x "$CODEX_BIN" ] || { echo "error: claude and codex needed" >&2; exit 2; }
 [ -f "$REVIEW_CODEX_HOME/config.toml" ] || { echo "error: no $REVIEW_CODEX_HOME/config.toml (model/provider only)" >&2; exit 2; }
-if grep -qE '^\[(mcp_servers|plugins|marketplaces|projects)' "$REVIEW_CODEX_HOME/config.toml" \
-  || ! grep -qE '^inherit = "core"' "$REVIEW_CODEX_HOME/config.toml"; then
-  echo "error: $REVIEW_CODEX_HOME/config.toml must have no MCP/plugin/project sections and inherit = \"core\"" >&2; exit 2
+# Allowlist of table headers; no top-level key may name MCP servers, plugins, projects or profiles.
+CFG="$REVIEW_CODEX_HOME/config.toml"
+if grep -E '^[[:space:]]*\[' "$CFG" | grep -vqE '^\[(shell_environment_policy|analytics|otel|model_providers\.[A-Za-z0-9_.-]+)\][[:space:]]*$' \
+  || grep -qiE '^[[:space:]]*"?(mcp_servers|plugins|marketplaces|projects|profiles?|notify|experimental_[a-z_]*)"?[[:space:]]*[.=]' "$CFG" \
+  || ! grep -qE '^inherit = "core"' "$CFG"; then
+  echo "error: $CFG may only have [shell_environment_policy], [analytics], [otel] and [model_providers.*] tables, no MCP/plugin/project/profile keys, and inherit = \"core\"" >&2; exit 2
 fi
+CFG_HASH="$(sha256sum < "$CFG")"
+codex_home_users() { # PIDs whose environment uses REVIEW_CODEX_HOME (checked when no turn is running)
+  local p
+  for p in /proc/[0-9]*; do
+    tr '\0' '\n' 2>/dev/null < "$p/environ" | grep -qxF "CODEX_HOME=$REVIEW_CODEX_HOME" && echo "${p#/proc/}"
+  done
+}
+[ -z "$(codex_home_users)" ] || { echo "error: another process uses $REVIEW_CODEX_HOME; review runs need it to themselves" >&2; exit 2; }
 mkdir -p "$REVIEW_CODEX_HOME/sessions" || exit 2   # searched by the tamper check
 REPO="$(git rev-parse --show-toplevel)" || exit 2
 FULLSHA="$(git -C "$REPO" rev-parse --verify "$SHA^{commit}")" || { echo "error: $SHA is not a commit" >&2; exit 2; }
+[ ! -e "$OUT" ] || [ -z "$(ls -A "$OUT" 2>/dev/null)" ] || { echo "error: $OUT must be new or empty" >&2; exit 2; }
 mkdir -p "$OUT" || exit 2
 OUT="$(cd "$OUT" && pwd)"
 DIAG="${REVIEW_DIAG_DIR:-$HOME/.cache/jeiobs-review}/$(basename "$OUT")-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -180,6 +195,8 @@ tamper_check() { # label
     [ -n "$f" ] && [ "$f" -nt "$TMP/started" ] && hits="$hits $f"
   done <<< "$logs"
   [ -z "$hits" ] || fail "$1: Codex loaded project instructions from the review checkout"
+  [ "$(sha256sum < "$CFG" 2>/dev/null)" = "$CFG_HASH" ] || fail "$1: $CFG changed"
+  [ -z "$(codex_home_users)" ] || fail "$1: another process uses $REVIEW_CODEX_HOME"
 }
 BASE_STATE="$(repo_state)"
 if bwrap --ro-bind / / true >/dev/null 2>&1; then SANDBOX="available"
@@ -342,7 +359,8 @@ verify_evidence "end of run"
   echo '```text'
   grep -hE '^(FINDING|VERDICT)' "$a" "$b"
   echo '```'
-} >> "$OUT/00-meta.md"
+} >> "$OUT/00-meta.md" || fail "cannot append to 00-meta.md"
+tail -n 1 "$OUT/00-meta.md" | grep -qxF '```' || fail "00-meta.md did not get its final section"
 pin "$OUT/00-meta.md"
 grep -hE '^(FINDING|VERDICT)' "$a" "$b"
 echo

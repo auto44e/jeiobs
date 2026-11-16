@@ -1,4 +1,7 @@
-# PR #18 peer correspondence
+# PR #18 and #19 peer correspondence
+
+The owner merged #18 at `374f842c7`. Runs 06–12 reviewed the commits after it,
+which are PR #19.
 
 - `01`, `02`: round-1 reviews (Codex, Claude), prompt and answer verbatim.
 - `03`, `04`: round-2 cross-talk with `~/.kiro/bin/peer-debate.sh`. Its context
