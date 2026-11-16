@@ -18,11 +18,11 @@ codex-4 | Minor | accepted-fix | codex | review-02/04-r2-codex.reply.md (FINDING
 claude-5 | Minor | open | claude | review-02/03-r2-claude.reply.md (FINDING claude-5) | follow-up (Minor, less sticky direction): use the same clock as the libobs pipe wait for the deadline decision
 codex-5 | Minor | open | codex | review-02/04-r2-codex.reply.md (FINDING codex-5) | follow-up (Minor): say in the task doc that the loader accepts only kind failure or timeout
 
-## PR #22 (follow-ups), review `followup-review-01` on `7adc69a8b`
+## PR #22 (follow-ups), reviews `followup-review-01` (`7adc69a8b`) and `followup-review-02` (`26b40c2c4`)
 
-Both peers approved; codex-1 to codex-5 and claude-1 to claude-5 accepted.
+Both peers approved both runs; codex-1 to codex-5 and claude-1 to claude-5 accepted.
 
 ID | severity | status | finder | source | lead's note
 --- | --- | --- | --- | --- | ---
-claude-6 | Minor | open → fixed (awaiting finder) | claude | followup-review-01/03-r2-claude.reply.md (FINDING claude-6) | Outcomes table and Not done now state the 100 ms slack
-codex-6 | Minor | open (accepted trade-off, documented) | codex | followup-review-01/04-r2-codex.reply.md (FINDING codex-6) | a wait error within 100 ms of the deadline after a successful kill counts as a strike; cost at most one extra backoff; written in task 005 Not done
+claude-6 | Minor | accepted-fix | claude | followup-review-02/03-r2-claude.reply.md (FINDING claude-6) | —
+codex-6 | Minor | see followup-review-02 | codex | followup-review-02/04-r2-codex.reply.md (FINDING codex-6) | a wait error within 100 ms of the deadline after a successful kill counts as a strike; cost at most one extra backoff; written in task 005 Not done
