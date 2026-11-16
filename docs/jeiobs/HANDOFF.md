@@ -1,18 +1,4 @@
-# Current planning update — 2026-11-16
-
-Implemented task 003 on branch `wip/vst3-scanner-impl`: VST3 discovery now
-probes code-loading bundles in short-lived child processes with per-bundle
-timeouts, crash/hang skipping, nonce-checked atomic results and deterministic
-ordering. The host can kill the coordinator before joining during unload.
-Linux verification passed the configured `cmake --build _build -j10`, a
-throwaway crash/hang scan (three good classes retained, two skips, about two
-seconds with a 2000 ms timeout), and a disposable OBS quit probe (exit 0,
-zero leaks while a 10000 ms probe was active). Windows and macOS builds and
-runtime checks remain untested.
-
----
-
-Earlier planning update — 2026-11-15
+# Current planning update — 2026-11-15
 
 Inspected main at `5e17d4f99b2c15756b2ff5bbeb2e4454b80feb8a`. Added the
 [workspace saving/offline proposal](WORKSPACE_SAVING.md) and
@@ -55,11 +41,19 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
   `obs-vst3.so` loads; SDK 3.8.0 is MIT and fetched, not vendored. Runtime plugin
   tests are still open; see [task 001](tasks/001-vst3.md#progress-2026-11-15-branch-jeiobsvst3-upstream).
 - Task 001 runtime check (2026-11-15, `jeiobs/vst3-runtime-check`):
-  `tools/jeiobs/vst3-check/run.sh` passes 7/7 with two SDK sample effects. ADelay
+  `tools/jeiobs/vst3-check/run.sh` passes 6/6 with two SDK sample effects. ADelay
   delays real audio by 1.078 s (expected 1.000). Inherited gaps: one crashing
   plugin hides all plugins, a hanging one has no timeout and blocks OBS exit, and
   AGain outputs silence. See [task 001](tasks/001-vst3.md#runtime-evidence-2026-11-15-branch-jeiobsvst3-runtime-check)
   and the proposed [task 003](tasks/003-vst3-scanner-robustness.md).
+- Task 003 scanner robustness (2026-11-16, `jeiobs/vst3-scanner-robustness`):
+  the scanner probes each code-loading bundle in its own child process with a
+  watchdog, so a crashing or hanging plugin is skipped (and logged) instead of
+  hiding all plugins; OBS kills a running scan on exit. New libobs export
+  `os_process_pipe_kill`. `run.sh` grows to 15 checks: 15/15 on the fix, and the
+  9 new ones fail on the old code. Built in worker mode (Codex implementation,
+  Claude tests, each cross-reviewed twice by the other lineage). Linux only;
+  Windows/macOS not compiled. See [task 003](tasks/003-vst3-scanner-robustness.md).
 
 ## Evidence
 
