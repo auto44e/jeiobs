@@ -2,8 +2,8 @@
 
 Status: **accepted**, 2026-11-16. The owner cleared PR #18 for a self-merge
 after fixes and peer review (quoted below), then merged it at `374f842c7`. The
-review-tooling hardening after that merge (review runs 06–12) is PR #19, which
-the owner merges. Later changes to this document stay owner-merged unless the
+review-tooling hardening after that merge (review runs 07 onwards; run 06
+reviewed the merged head itself) is PR #19, which the owner merges. Later changes to this document stay owner-merged unless the
 owner clears them the same way. Adapted
 from the JeiOS decision-record policy (its ADR 0000).
 
@@ -122,8 +122,10 @@ The lead may merge its own PR only when all of these hold:
        to start while another process uses it, and fails if one appears or its
        `config.toml` changes. That config may only have
        `[shell_environment_policy]`, `[analytics]`, `[otel]` (telemetry to a
-       local collector) and `[model_providers.*]` tables, with no MCP, plugin,
-       project or profile keys. Codex gets a "core" shell environment,
+       local collector) and `[model_providers.*]` tables; it is parsed as TOML
+       and every key must be on an exact allowlist. Its `skills/` folder may
+       hold only the engine's bundled `.system` set, pinned by hash, and
+       `00-meta.md` names the home and both hashes. Codex gets a "core" shell environment,
        `--sandbox read-only` and
        `project_doc_max_bytes=0`, so it reads no `AGENTS.md` or
        `AGENTS.override.md` from the checkout. The run fails if a Codex session
@@ -243,8 +245,8 @@ bubblewrap needs an AppArmor change on the host (owner action).
 
 [debates/018-decision-records](debates/018-decision-records/) holds both
 round-1 reviews, the two-round cross-talk, the findings ledger and the review
-runs: `05-final` reviewed #18 before the owner merged it at `374f842c7`; runs
-06–12 reviewed the follow-up commits that became #19.
+runs: `05-final` reviewed #18 at `ac008df4c` and run 06 at `374f842c7`, the head
+the owner merged; runs 07 onwards reviewed the follow-up commits that became #19.
 
 ## Flex
 

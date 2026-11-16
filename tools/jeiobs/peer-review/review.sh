@@ -30,8 +30,11 @@
 #   the run refuses to start while another process uses it, and fails if one
 #   appears or config.toml changes during the run. config.toml may only have
 #   [shell_environment_policy], [analytics], [otel] (telemetry to a local
-#   collector) and [model_providers.*] tables, with no MCP, plugin, project or
-#   profile keys. Codex gets a "core" shell environment, --sandbox read-only, and
+#   collector) and [model_providers.*] tables. It is parsed as TOML and every key
+#   must be on an exact allowlist (anything else, such as MCP servers, plugins,
+#   projects, profiles or instructions, refuses the run). Its skills/ folder may
+#   hold only the engine's bundled .system set, pinned by hash. 00-meta.md names
+#   the home and both hashes. Codex gets a "core" shell environment, --sandbox read-only, and
 #   project_doc_max_bytes=0 so it reads no AGENTS.md or AGENTS.override.md from
 #   the checkout. The run fails if a Codex session log from this run shows
 #   project instructions for the checkout. The provider config runs the toolbox
@@ -100,14 +103,50 @@ CODEX_BIN="${REVIEW_CODEX_BIN:-$(ls -d "$HOME"/.toolbox/tools/codex/*/codex 2>/d
 REVIEW_CODEX_HOME="${REVIEW_CODEX_HOME:-$HOME/.config/jeiobs-agent/codex-review}"
 command -v claude >/dev/null && [ -x "$CODEX_BIN" ] || { echo "error: claude and codex needed" >&2; exit 2; }
 [ -f "$REVIEW_CODEX_HOME/config.toml" ] || { echo "error: no $REVIEW_CODEX_HOME/config.toml (model/provider only)" >&2; exit 2; }
-# Allowlist of table headers; no top-level key may name MCP servers, plugins, projects or profiles.
+# config.toml is parsed as TOML (python3 tomllib) and must match this exact allowlist: anything
+# else (MCP servers, plugins, projects, profiles, instructions, any unknown key) refuses the run.
 CFG="$REVIEW_CODEX_HOME/config.toml"
-if grep -E '^[[:space:]]*\[' "$CFG" | grep -vqE '^\[(shell_environment_policy|analytics|otel|model_providers\.[A-Za-z0-9_.-]+)\][[:space:]]*$' \
-  || grep -qiE '^[[:space:]]*"?(mcp_servers|plugins|marketplaces|projects|profiles?|notify|experimental_[a-z_]*)"?[[:space:]]*[.=]' "$CFG" \
-  || ! grep -qE '^inherit = "core"' "$CFG"; then
-  echo "error: $CFG may only have [shell_environment_policy], [analytics], [otel] and [model_providers.*] tables, no MCP/plugin/project/profile keys, and inherit = \"core\"" >&2; exit 2
-fi
-CFG_HASH="$(sha256sum < "$CFG")"
+CFG_HASH="$(sha256sum < "$CFG")"   # hashed before the parse; re-checked after it and after every turn
+python3 - "$CFG" <<'PYCFG' || exit 2
+import sys, tomllib
+S, B, L, D = str, bool, list, dict
+ALLOWED = {
+    "model_provider": S, "model_reasoning_effort": S, "model": S, "forced_login_method": S,
+    "check_for_update_on_startup": B, "chatgpt_base_url": S, "approvals_reviewer": ("auto_review",),
+    "shell_environment_policy": {"inherit": ("core",)},
+    "model_providers": {"*": {"aws": {"region": S, "credential_export": {"command": S, "args": L}}}},
+    "analytics": {"enabled": B},
+    "otel": {"log_user_prompt": B, "exporter": D, "metrics_exporter": D, "trace_exporter": D, "environment": S},
+}
+def check(value, rule, path):
+    if isinstance(rule, tuple):
+        if value not in rule:
+            sys.exit(f"error: {path} must be one of {rule}")
+    elif isinstance(rule, dict):
+        if not isinstance(value, dict):
+            sys.exit(f"error: {path} must be a table")
+        for key, item in value.items():
+            sub = rule.get(key, rule.get("*"))
+            if sub is None:
+                sys.exit(f"error: {path}.{key} is not an allowed review config key")
+            check(item, sub, f"{path}.{key}")
+    elif not isinstance(value, rule):
+        sys.exit(f"error: {path} has the wrong type")
+try:
+    config = tomllib.load(open(sys.argv[1], "rb"))
+except Exception as error:
+    sys.exit(f"error: cannot parse {sys.argv[1]}: {error}")
+check(config, ALLOWED, "config")
+if config.get("shell_environment_policy", {}).get("inherit") != "core":
+    sys.exit('error: config needs shell_environment_policy.inherit = "core"')
+PYCFG
+# The engine installs its bundled system skills once per CODEX_HOME; nothing else may be there.
+SKILLS="$REVIEW_CODEX_HOME/skills"
+[ -f "$SKILLS/.system/.codex-system-skills.marker" ] || { echo "error: $SKILLS/.system is not initialized; run one Codex session with this CODEX_HOME first" >&2; exit 2; }
+[ -z "$(find "$SKILLS" -mindepth 1 -maxdepth 1 ! -name .system -print -quit)" ] || { echo "error: $SKILLS has skills other than the engine's .system set" >&2; exit 2; }
+skills_hash() { (cd "$SKILLS" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) | sha256sum; }
+SKILLS_HASH="$(skills_hash)"
+[ "$(sha256sum < "$CFG")" = "$CFG_HASH" ] || { echo "error: $CFG changed while it was checked" >&2; exit 2; }
 codex_home_users() { # PIDs whose environment uses REVIEW_CODEX_HOME (checked when no turn is running)
   local p
   for p in /proc/[0-9]*; do
@@ -189,13 +228,18 @@ tamper_check() { # label
   [ -z "$(git -C "$TREE" ls-files -v | grep -v '^H ')" ] || fail "$1: index flags were set in the review checkout"
   local logs f hits=""
   # Collected into variables (no pipeline into grep -q), so pipefail cannot turn a hit into a pass.
-  logs="$(grep -rlF "instructions for $TREE" --include='*.jsonl' "$REVIEW_CODEX_HOME/sessions" 2>/dev/null)"
+  # The engine writes project docs as a JSON string value that starts with
+  # "# AGENTS.md instructions for <dir>". Matching the unescaped '":"' before it means a peer
+  # that quotes this text in a reply (JSON-escaped inside a later prompt) cannot trip the check.
+  logs="$(grep -rlE "\":\"# [A-Za-z._-]+ instructions for ${TREE//./\\.}([^A-Za-z0-9._/-]|\$)" \
+    --include='*.jsonl' "$REVIEW_CODEX_HOME/sessions" 2>/dev/null)"
   case $? in 0 | 1) ;; *) fail "$1: cannot search the Codex session logs" ;; esac
   while IFS= read -r f; do
     [ -n "$f" ] && [ "$f" -nt "$TMP/started" ] && hits="$hits $f"
   done <<< "$logs"
   [ -z "$hits" ] || fail "$1: Codex loaded project instructions from the review checkout"
   [ "$(sha256sum < "$CFG" 2>/dev/null)" = "$CFG_HASH" ] || fail "$1: $CFG changed"
+  [ "$(skills_hash)" = "$SKILLS_HASH" ] || fail "$1: $SKILLS changed"
   [ -z "$(codex_home_users)" ] || fail "$1: another process uses $REVIEW_CODEX_HOME"
 }
 BASE_STATE="$(repo_state)"
@@ -213,6 +257,7 @@ SELF="$(readlink -f "$0")"
   echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1) (engine started directly; the toolbox launcher runs only as Bedrock credential helper), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME config without MCP/plugin/project sections, shell env \"core\", no project instructions (project_doc_max_bytes=0); --sandbox read-only, sandbox $SANDBOX"
   echo "- Round 1 is an independent first pass, not isolated (see the script header)"
   echo "- Script: \`tools/jeiobs/peer-review/review.sh\`, sha256 \`$(sha256sum "$SELF" | cut -c1-64)\`"
+  echo "- Codex home: \`${REVIEW_CODEX_HOME/#$HOME/\~}\`; config.toml sha256 \`${CFG_HASH%% *}\`; skills sha256 \`${SKILLS_HASH%% *}\`"
   echo "- Context sha256 \`$(sha256sum "$CTX" | cut -c1-64)\`; ledger sha256 \`$(sha256sum "$LEDGER" | cut -c1-64)\`"
   echo "- stderr logs: kept locally (not committed), \`$(basename "$DIAG")\`"
   echo "- Topic: $TOPIC"

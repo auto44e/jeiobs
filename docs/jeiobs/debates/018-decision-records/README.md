@@ -1,7 +1,7 @@
 # PR #18 and #19 peer correspondence
 
-The owner merged #18 at `374f842c7`. Runs 06–12 reviewed the commits after it,
-which are PR #19.
+The owner merged #18 at `374f842c7` (run 06 reviewed that head). Runs 07
+onwards reviewed the commits after it, which are PR #19.
 
 - `01`, `02`: round-1 reviews (Codex, Claude), prompt and answer verbatim.
 - `03`, `04`: round-2 cross-talk with `~/.kiro/bin/peer-debate.sh`. Its context
@@ -14,6 +14,8 @@ which are PR #19.
 - `11-run/` failed closed in round 1 (the lead fetched during the turn and the
   tamper check caught the moved ref); it has no evidence list, and its files are
   kept as written apart from the edits below.
+- `13-run/` failed closed after round 2 on a false positive of the session-log
+  check (a peer quoted the search string); it has no evidence list.
 - [findings.md](findings.md): the ledger.
 
 Transcripts are verbatim except that trailing whitespace was stripped (the

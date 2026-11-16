@@ -8,8 +8,11 @@ finder's latest, taken from its own FINDING lines in the last completed review r
 means the lead changed something and the finder has not yet accepted it.
 Run 11 failed closed in round 1 because the lead ran `git fetch` in the
 repository during the turn (the tamper check saw `refs/remotes/origin/main`
-move). A failed run is not a review: its dispositions are not counted, but the
-new findings it raised are listed.
+move). Run 13 failed closed after round 2: Claude's reply quoted the search
+string with the live checkout path, Codex's next prompt carried that quote into
+its session log, and the check matched it. The check now matches only the JSON
+structure the engine writes. A failed run is not a review: its dispositions are
+not counted, but the new findings it raised are listed.
 
 ID | severity | status | finder | source | lead's note
 --- | --- | --- | --- | --- | ---
@@ -86,7 +89,8 @@ codex-17 | Major | accepted-fix | codex | 12-run/04-r2-codex.reply.md (FINDING c
 claude-18 | Major | accepted-fix | claude | 12-run/03-r2-claude.reply.md (FINDING claude-18) | —
 claude-19 | Minor | accepted-fix | claude | 12-run/03-r2-claude.reply.md (FINDING claude-19) | —
 codex-18 | Major | accepted-fix | codex | 12-run/04-r2-codex.reply.md (FINDING codex-18) | —
-claude-20 | Major | open → fixed (awaiting finder) | claude | 12-run/03-r2-claude.reply.md (FINDING claude-20) | workers now use their own CODEX_HOME (codex-worker); the runner refuses to start while another process uses the review CODEX_HOME and fails if one appears; config.toml hashed at start and checked after every turn; table-header allowlist and key denylist instead of one regex; wording fixed ("kept for review runs", telemetry sections described, system skills named)
-claude-21 | Minor | open → fixed (awaiting finder) | claude | 12-run/03-r2-claude.reply.md (FINDING claude-21) | DECISIONS status, review record, README and ledger titles now say the owner merged #18 at 374f842c7 and runs 06-12 reviewed #19; DECISIONS item 4 lists the whitespace and link edits and their effect on hashes
+claude-20 | Major | open → fixed (awaiting finder) | claude | 13-run/03-r2-claude.reply.md (FINDING claude-20) | config.toml is parsed as TOML (tomllib) against an exact key allowlist (quoted keys, developer_instructions, inherit elsewhere all refused; approvals_reviewer pinned to auto_review); hashed before the parse and re-checked; skills/ may hold only the engine .system set, pinned by content hash and checked after every turn; 00-meta names the home and both hashes. Run 13 failed closed (false positive, see below), so this is from its round-2 reply
+claude-21 | Minor | open → fixed (awaiting finder) | claude | 13-run/03-r2-claude.reply.md (FINDING claude-21) | DECISIONS and README: 05-final reviewed #18 at ac008df4c, run 06 the merged head 374f842c7, runs 07 onwards the #19 commits
 codex-19 | Major | open → fixed (awaiting finder) | codex | 12-run/04-r2-codex.reply.md (FINDING codex-19) | OUT must be new or empty (a stale 00-meta.md cannot be reused); the final append is checked and its last line verified before the file is pinned again
+codex-20 | Major | open → fixed (awaiting finder) | codex | 13-run/04-r2-codex.reply.md (FINDING codex-20) | as claude-20: TOML parse with an exact allowlist instead of line regexes
 CI | Major | fixed | owner | owner instruction (DECISIONS.md, verbatim) | quick checks failed after the force push (runs 43805282657, 43805282753, "bad object"); workflow falls back to HEAD
