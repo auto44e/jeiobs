@@ -34,8 +34,10 @@
 #   project instructions for the checkout. The provider config runs the toolbox
 #   launcher as Bedrock credential helper (credential-process) only; it does not
 #   start Codex.
-# - The run refuses a reviewed commit that contains .claude, CLAUDE.md or
-#   AGENTS.override.md anywhere, so a change cannot configure its reviewer.
+# - The run refuses a reviewed commit that contains .claude, CLAUDE.md,
+#   AGENTS.override.md, .agents (Codex repo skills) or .codex anywhere, so a change
+#   cannot configure its reviewer. Codex still loads the engine's bundled system
+#   skills from the dedicated CODEX_HOME, which the lead controls.
 # - Where Codex's sandbox cannot start (bubblewrap needs unprivileged user
 #   namespaces; Ubuntu 24.04 AppArmor blocks them), Codex commands run
 #   unsandboxed. 00-meta.md says so. Nothing then stops a peer from writing;
@@ -64,7 +66,8 @@
 #   the other's in-progress reply. Nothing relies on it being unseen.
 
 # Fails closed (exit 3, writes FAILED) on a timeout, a non-zero exit, an empty
-# reply, a missing or malformed VERDICT or FINDING line, a ledger row or earlier
+# reply, a missing, repeated or not-last VERDICT line, a malformed or repeated
+# FINDING line, a ledger row or earlier
 # finding the peer did not dispose of, or a tamper-check failure. Exit 0 means
 # every turn completed; it is not approval. stderr logs go to a local
 # diagnostics folder (they contain tool output) and are not committed.
@@ -98,6 +101,7 @@ if grep -qE '^\[(mcp_servers|plugins|marketplaces|projects)' "$REVIEW_CODEX_HOME
   || ! grep -qE '^inherit = "core"' "$REVIEW_CODEX_HOME/config.toml"; then
   echo "error: $REVIEW_CODEX_HOME/config.toml must have no MCP/plugin/project sections and inherit = \"core\"" >&2; exit 2
 fi
+mkdir -p "$REVIEW_CODEX_HOME/sessions" || exit 2   # searched by the tamper check
 REPO="$(git rev-parse --show-toplevel)" || exit 2
 FULLSHA="$(git -C "$REPO" rev-parse --verify "$SHA^{commit}")" || { echo "error: $SHA is not a commit" >&2; exit 2; }
 mkdir -p "$OUT" || exit 2
@@ -128,8 +132,9 @@ cleanup() {
 }
 trap cleanup EXIT
 git -C "$REPO" worktree add --detach "$TREE" "$FULLSHA" >/dev/null 2>&1 || { echo "error: cannot check out $FULLSHA" >&2; exit 2; }
-if [ -n "$(find "$TREE" -path "$TREE/.git" -prune -o \( -name .claude -o -name CLAUDE.md -o -name AGENTS.override.md \) -print -quit)" ]; then
-  echo "error: the reviewed commit contains .claude, CLAUDE.md or AGENTS.override.md; refusing to review (a change must not configure its reviewer)" >&2; exit 2
+if [ -n "$(find "$TREE" -path "$TREE/.git" -prune -o \( -name .claude -o -name CLAUDE.md -o -name AGENTS.override.md \
+    -o -name .agents -o -name .codex \) -print -quit)" ]; then
+  echo "error: the reviewed commit contains .claude, CLAUDE.md, AGENTS.override.md, .agents or .codex; refusing to review (a change must not configure its reviewer)" >&2; exit 2
 fi
 touch "$TMP/started"   # Codex session logs newer than this belong to this run
 
@@ -167,9 +172,14 @@ tamper_check() { # label
   [ "$(git -C "$TREE" rev-parse HEAD)" = "$FULLSHA" ] || fail "$1: the review checkout's HEAD moved"
   [ -z "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching)" ] || fail "$1: the review checkout was modified"
   [ -z "$(git -C "$TREE" ls-files -v | grep -v '^H ')" ] || fail "$1: index flags were set in the review checkout"
-  ! grep -rlF "instructions for $TREE" --include='*.jsonl' "$REVIEW_CODEX_HOME/sessions" 2>/dev/null \
-    | while IFS= read -r f; do [ "$f" -nt "$TMP/started" ] && echo "$f"; done | grep -q . \
-    || fail "$1: Codex loaded project instructions from the review checkout"
+  local logs f hits=""
+  # Collected into variables (no pipeline into grep -q), so pipefail cannot turn a hit into a pass.
+  logs="$(grep -rlF "instructions for $TREE" --include='*.jsonl' "$REVIEW_CODEX_HOME/sessions" 2>/dev/null)"
+  case $? in 0 | 1) ;; *) fail "$1: cannot search the Codex session logs" ;; esac
+  while IFS= read -r f; do
+    [ -n "$f" ] && [ "$f" -nt "$TMP/started" ] && hits="$hits $f"
+  done <<< "$logs"
+  [ -z "$hits" ] || fail "$1: Codex loaded project instructions from the review checkout"
 }
 BASE_STATE="$(repo_state)"
 if bwrap --ro-bind / / true >/dev/null 2>&1; then SANDBOX="available"
@@ -252,7 +262,12 @@ end_peer() { # peer  (kills what is left of the turn's process group)
 validate() { # peer round reply
   local peer=$1 r=$2 f=$3 id bad
   [ -s "$f" ] || fail "$peer r$r returned an empty reply"
-  grep -qE '^VERDICT: (approve|request changes)[[:space:]]*$' "$f" || fail "$peer r$r gave no valid VERDICT line"
+  # Exactly one VERDICT line, and it is the last non-empty line; each finding ID at most once.
+  [ "$(grep -c '^VERDICT' "$f")" = 1 ] || fail "$peer r$r must have exactly one VERDICT line"
+  grep -v '^[[:space:]]*$' "$f" | tail -n 1 | grep -qE '^VERDICT: (approve|request changes)[[:space:]]*$' \
+    || fail "$peer r$r: the last line must be a valid VERDICT line"
+  bad=$(grep -oE "^FINDING $ID_RE \|" "$f" | sort | uniq -d | head -1)
+  [ -z "$bad" ] || fail "$peer r$r lists a finding more than once: $bad"
   grep -q '^FINDING ' "$f" || fail "$peer r$r gave no FINDING line"
   bad=$(grep '^FINDING ' "$f" | grep -vE "^FINDING none[[:space:]]*$" \
     | grep -vE "^FINDING $ID_RE \| (Blocker|Major|Minor) \| (open|accepted-fix|withdrawn) \| .+" || true)

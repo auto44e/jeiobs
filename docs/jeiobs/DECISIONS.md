@@ -121,9 +121,9 @@ The lead may merge its own PR only when all of these hold:
        log from the run shows project instructions for the checkout. The
        provider config runs the toolbox launcher as the Bedrock credential
        helper (`credential-process`) only.
-     - The run refuses a reviewed commit that contains `.claude`, `CLAUDE.md`
-       or `AGENTS.override.md` anywhere, so a change cannot configure its own
-       reviewer.
+     - The run refuses a reviewed commit that contains `.claude`, `CLAUDE.md`,
+       `AGENTS.override.md`, `.agents` (Codex repo skills) or `.codex` anywhere,
+       so a change cannot configure its own reviewer.
      - Where Codex's sandbox cannot start on the host, its commands run
        unsandboxed and `00-meta.md` says so. Nothing then stops a peer from
        writing; the runner has tripwires only. After every turn the lead's
@@ -148,8 +148,8 @@ The lead may merge its own PR only when all of these hold:
        allowed above.
    - Every prompt and reply is committed. stderr logs stay in a local
      diagnostics folder, because they contain tool output.
-   - The run fails closed if a turn times out, errors or is empty, lacks a
-     valid VERDICT line, has a malformed FINDING line, or skips a ledger row or
+   - The run fails closed if a turn times out, errors or is empty, does not end
+     with exactly one valid VERDICT line, has a malformed or repeated FINDING line, or skips a ledger row or
      an earlier finding of that peer. A failed run is not a review.
    - Design consults (for example `~/.kiro/bin/peer-debate.sh` debates before
      code is written) are not gate reviews. Their transcripts are still

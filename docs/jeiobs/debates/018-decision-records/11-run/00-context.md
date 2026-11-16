@@ -1,0 +1,7 @@
+# PR #18 review run 11 — head b98df7b23
+
+Your working directory is a checkout of this commit. Since run 10 (reviewed 02d4c28ee): `git diff 02d4c28ee HEAD` (the 10-run transcripts are now committed under docs/jeiobs/debates/018-decision-records/10-run/). Open findings from 10-run are answered in docs/jeiobs/debates/018-decision-records/findings.md (lead's note). Lead's tests of the runner with stub peers in a scratch repo: normal run exits 0 and the printed evidence verifies with sha256sum -c; a leftover background process started by a turn is killed; a Codex session log containing checkout instructions fails the run; a skip-worktree flag set in the review checkout fails the run; a reviewed commit with sub/AGENTS.override.md is refused (exit 2). Live test: codex exec with -c project_doc_max_bytes=0 in a dir whose AGENTS.md says to start replies with PINEAPPLE answered without it, and its session log had no 'AGENTS.md instructions' item; without the flag it obeyed and the log had the item; AGENTS.override.md with the flag was also ignored.
+
+Owner instruction (verbatim): "you all are clear to self merge #18 and onwards after fixing an error in one of the commits and after peer review".
+
+Severity: Blocker = must not merge; Major = must be fixed before a self-merge; Minor = follow-up. Note: other unrelated agent work may be running on this host in separate worktrees; it does not touch this checkout.

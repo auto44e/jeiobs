@@ -8,6 +8,9 @@
   Every prompt and reply is kept. stderr logs are kept locally, not here
   (they contain tool output); run 06 was trimmed to match. `00-meta.md` names
   the reviewed commit and the final dispositions.
+- `11-run/` failed closed in round 1 (the lead fetched during the turn and the
+  tamper check caught the moved ref); it has no evidence list, and its files are
+  kept as written apart from the edits below.
 - [findings.md](findings.md): the ledger.
 
 Transcripts are verbatim except that trailing whitespace was stripped (the
