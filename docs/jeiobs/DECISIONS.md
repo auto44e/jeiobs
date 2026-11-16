@@ -102,11 +102,12 @@ The lead may merge its own PR only when all of these hold:
    rounds:
    - The peers read a detached checkout of the reviewed commit, not the lead's
      working tree.
-   - Round 1 is blind by protocol and timing: both peers start at the same
-     time and are not told where the other writes. This is not enforced; a peer
-     that can read the filesystem could look. From round 2 the peers see each
-     other's replies; the lineage that did not write the change (`-a`) speaks
-     first.
+   - Round 1 is an independent first pass: both peers start together and their
+     prompts do not include the other's reply. It is not isolated (a peer that
+     can read the filesystem could find the other's in-progress reply), and
+     nothing in the gate depends on it being unseen. From round 2 the peers see
+     each other's replies; the lineage that did not write the change (`-a`)
+     speaks first.
    - Confinement, exactly as enforced:
      - Claude has only the Read, Glob and Grep tools and no MCP servers.
      - Codex runs the `codex-cli` engine directly (the toolbox launcher injects
@@ -118,8 +119,12 @@ The lead may merge its own PR only when all of these hold:
        if, after any turn, the lead's repository changed (refs, HEAD, index
        entries and flags, tracked diffs, untracked and ignored file contents,
        `.git/config` and hooks) or the review checkout's HEAD or files changed.
-       The check detects writes to the repository; it cannot detect reads,
-       network use, or writes elsewhere.
+       The runner also keeps, in its own memory, the sha256 of the context and
+       ledger snapshots and of every saved prompt and reply, and verifies them
+       before each prompt and after each turn; cleanup fails the run if the
+       review checkout changed at the end. The check detects writes to the
+       repository and to the run's evidence; it cannot detect reads, network
+       use, or writes elsewhere.
    - Every prompt and reply is committed. stderr logs stay in a local
      diagnostics folder, because they contain tool output.
    - The run fails closed if a turn times out, errors or is empty, lacks a

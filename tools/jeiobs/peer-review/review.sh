@@ -17,8 +17,9 @@
 #               cross-talk rounds; for "lead", Claude speaks first.
 #   CI_SUMMARY  optional file with the CI state for the reviewed SHA; copied
 #               into 00-meta.md
-#   ROUNDS      at least 2 (default 2). Round 1 is blind: both peers run at the
-#               same time and neither reply exists while the other works.
+#   ROUNDS      at least 2 (default 2). Round 1 is an independent first pass:
+#               both peers start together and their prompts do not include the
+#               other's reply (not an isolation guarantee; see below).
 #
 # What is enforced, and what is not:
 # - Claude gets only the Read, Glob and Grep tools and no MCP servers.
@@ -32,8 +33,11 @@
 #   after every turn, the lead's repository (refs, HEAD, index flags, tracked
 #   diffs, untracked and ignored file contents, .git/config and hooks, except
 #   OUTDIR) and the review checkout (HEAD and status) must be unchanged.
-# - Blindness in round 1 is by protocol and timing, not enforced: a peer that
-#   can read the filesystem could look for the other's in-progress files.
+# - Round 1 is not isolated: a peer that can read the filesystem could find
+#   the other's in-progress reply. Nothing relies on it being unseen.
+# - The runner keeps the sha256 of the context and ledger snapshots and of every
+#   saved prompt and reply in its own memory, and checks them before each
+#   prompt and after each turn, so a peer cannot alter the inputs or evidence.
 #
 # Fails closed (exit 3, writes FAILED) on a timeout, a non-zero exit, an empty
 # reply, a missing or malformed VERDICT or FINDING line, a ledger row or earlier
@@ -81,10 +85,14 @@ TMP="$(mktemp -d)"
 TREE="$TMP/tree"
 fail() { echo "FAILED: $1" | tee "$OUT/FAILED" >&2; exit 3; }
 cleanup() {
-  if [ -d "$TREE" ] && [ -n "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching 2>/dev/null)" ]; then
+  local rc=$?
+  if [ -d "$TREE" ] && { [ "$(git -C "$TREE" rev-parse HEAD 2>/dev/null)" != "${FULLSHA:-}" ] ||
+    [ -n "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching 2>/dev/null)" ]; }; then
     echo "FAILED: the review checkout was modified" | tee -a "$OUT/FAILED" >&2
+    rc=3
   fi
   git -C "$REPO" worktree remove --force "$TREE" >/dev/null 2>&1; rm -rf "$TMP"
+  exit $rc
 }
 trap cleanup EXIT
 git -C "$REPO" worktree add --detach "$TREE" "$FULLSHA" >/dev/null 2>&1 || { echo "error: cannot check out $FULLSHA" >&2; exit 2; }
@@ -92,6 +100,15 @@ git -C "$REPO" worktree add --detach "$TREE" "$FULLSHA" >/dev/null 2>&1 || { ech
 # Snapshots: peers always see the context and ledger as they were at the start.
 cp "$CTX" "$OUT/00-context.md"; cp "$LEDGER" "$OUT/00-ledger-in.md"
 CTX="$OUT/00-context.md"; LEDGER="$OUT/00-ledger-in.md"
+declare -A EVIDENCE=()   # path -> sha256, held only in this process
+pin() { EVIDENCE["$1"]="$(sha256sum < "$1")"; }
+verify_evidence() { # label
+  local f
+  for f in "${!EVIDENCE[@]}"; do
+    [ "$(sha256sum < "$f" 2>/dev/null)" = "${EVIDENCE[$f]}" ] || fail "$1: $(basename "$f") changed after it was saved"
+  done
+}
+pin "$CTX"; pin "$LEDGER"
 
 REL_OUT="${OUT#"$REPO"/}"
 repo_state() {
@@ -109,6 +126,7 @@ repo_state() {
 }
 TREE_HEAD=""
 tamper_check() { # label
+  verify_evidence "$1"
   [ "$(repo_state)" = "$BASE_STATE" ] || fail "$1: the lead's repository changed during the turn"
   [ "$(git -C "$TREE" rev-parse HEAD)" = "$FULLSHA" ] || fail "$1: the review checkout's HEAD moved"
   [ -z "$(git -C "$TREE" status --porcelain --untracked-files=all --ignored=matching)" ] || fail "$1: the review checkout was modified"
@@ -126,7 +144,7 @@ SELF="$(readlink -f "$0")"
   echo "- Author: $AUTHOR; rounds: $ROUNDS (round 1 blind, both at once); cross-talk order: $FIRST, $SECOND; timeout per turn: ${TIMEOUT}s"
   echo "- Claude: $(claude --version 2>/dev/null | head -1), model ${PR_CLAUDE_MODEL:-opus}, effort ${PR_CLAUDE_EFFORT:-max}; tools Read, Glob, Grep; no MCP"
   echo "- Codex: $("$CODEX_BIN" --version 2>/dev/null | head -1) (engine, not the toolbox launcher), effort ${PR_CODEX_EFFORT:-xhigh}; CODEX_HOME config without MCP/plugin/project sections, shell env \"core\"; --sandbox read-only, sandbox $SANDBOX"
-  echo "- Round 1 is blind by protocol and timing, not enforced (see the script header)"
+  echo "- Round 1 is an independent first pass, not isolated (see the script header)"
   echo "- Script: \`tools/jeiobs/peer-review/review.sh\`, sha256 \`$(sha256sum "$SELF" | cut -c1-64)\`"
   echo "- Context sha256 \`$(sha256sum "$CTX" | cut -c1-64)\`; ledger sha256 \`$(sha256sum "$LEDGER" | cut -c1-64)\`"
   echo "- stderr logs: kept locally (not committed), \`$(basename "$DIAG")\`"
@@ -162,6 +180,7 @@ declare -A REQ=([claude]="$(owned_ids claude)" [codex]="$(owned_ids codex)")
 
 prompt() { # peer round own_prev other_latest -> path
   local peer=$1 r=$2 own=$3 other=$4 p
+  verify_evidence "prompt $peer r$r"
   p="$TMP/$peer-r$r.prompt"
   {
     echo "$PREAMBLE"; echo; echo "REVIEWED COMMIT: $FULLSHA"; echo; echo "TOPIC: $TOPIC"
@@ -202,6 +221,10 @@ save() { # peer round slot  (copies the prompt and reply into OUT)
   cp "$TMP/$1-r$2.reply" "$OUT/$n-r$2-$1.reply.md"
   echo "$OUT/$n-r$2-$1.reply.md"
 }
+pin_saved() { # peer round slot
+  local n; n=$(printf '%02d' $(( ($2 - 1) * 2 + $3 )))
+  pin "$OUT/$n-r$2-$1.prompt.md"; pin "$OUT/$n-r$2-$1.reply.md"
+}
 
 # Round 1: blind. Both peers start together; both are waited for even if one
 # fails, then the tamper check runs, then the files are saved, then validated.
@@ -211,6 +234,7 @@ run_peer "$SECOND" "$pb" "$TMP/$SECOND-r1.reply" "$DIAG/r1-$SECOND.stderr.txt" &
 wait $ja; ra=$?; wait $jb; rb=$?
 touch "$TMP/$FIRST-r1.reply" "$TMP/$SECOND-r1.reply"
 a=$(save "$FIRST" 1 1); b=$(save "$SECOND" 1 2)
+pin_saved "$FIRST" 1 1; pin_saved "$SECOND" 1 2
 tamper_check "round 1"
 [ $ra -eq 0 ] || fail "$FIRST r1 exited $ra"
 [ $rb -eq 0 ] || fail "$SECOND r1 exited $rb"
@@ -220,7 +244,7 @@ for ((r = 2; r <= ROUNDS; r++)); do
     if [ $side = 1 ]; then peer=$FIRST own=$a other=$b; else peer=$SECOND own=$b other=$a; fi
     p=$(prompt "$peer" "$r" "$own" "$other")
     run_peer "$peer" "$p" "$TMP/$peer-r$r.reply" "$DIAG/r$r-$peer.stderr.txt"; rc=$?
-    touch "$TMP/$peer-r$r.reply"; f=$(save "$peer" "$r" $side)
+    touch "$TMP/$peer-r$r.reply"; f=$(save "$peer" "$r" $side); pin_saved "$peer" "$r" $side
     tamper_check "round $r $peer"
     [ $rc -eq 0 ] || fail "$peer r$r exited $rc"
     validate "$peer" "$r" "$f"
