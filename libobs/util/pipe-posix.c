@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <spawn.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "bmem.h"
 #include "pipe.h"
@@ -138,6 +139,11 @@ os_process_pipe_t *os_process_pipe_create2(const os_process_args_t *args, const 
 {
 	char **argv = os_process_args_get_argv(args);
 	return os_process_pipe_create_internal(argv[0], argv, type);
+}
+
+bool os_process_pipe_kill(os_process_pipe_t *pp)
+{
+	return pp && kill(pp->pid, SIGKILL) == 0;
 }
 
 int os_process_pipe_destroy(os_process_pipe_t *pp)

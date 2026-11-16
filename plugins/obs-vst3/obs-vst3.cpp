@@ -169,8 +169,10 @@ void unloadHost()
 // -------------------- initial scanning ------------------
 VST3Scanner *list;
 std::atomic<bool> vst3ScanDone;
+static std::atomic<bool> vst3ScanCancelled;
 static std::thread vst3ScanThread;
 os_process_pipe_t *vst3ScanPipe;
+static std::mutex vst3ScanPipeMutex;
 
 static os_process_pipe_t *start_pipe(const char *jsonpath)
 {
@@ -210,15 +212,7 @@ static bool vst3JSONLoad()
 	size_t jsonPluginNumber = obs_data_array_count(jsonPluginList);
 	for (size_t i = 0; i < jsonPluginNumber; ++i) {
 		obs_data_t *obj = obs_data_array_item(jsonPluginList, i);
-		VST3ClassInfo classInfo;
-
-		classInfo.name = obs_data_get_string(obj, "name");
-		classInfo.id = obs_data_get_string(obj, "id");
-		classInfo.path = obs_data_get_string(obj, "path");
-		classInfo.pluginName = obs_data_get_string(obj, "pluginName");
-		classInfo.discardable = obs_data_get_bool(obj, "discardable");
-		classInfo.isFX = obs_data_get_bool(obj, "isFX");
-
+		VST3ClassInfo classInfo = loadVST3ClassInfo(obj);
 		obs_data_release(obj);
 
 		if (classInfo.path.empty()) {
@@ -247,6 +241,12 @@ static bool vst3JSONLoad()
 
 static void getScanResult(obs_source_t *src)
 {
+	os_process_pipe_t *scanPipe = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(vst3ScanPipeMutex);
+		scanPipe = vst3ScanPipe;
+	}
+
 	char data[64];
 	char scanData[4096];
 	std::string status = "";
@@ -255,9 +255,11 @@ static void getScanResult(obs_source_t *src)
 	bool noVst3 = false;
 
 	for (;;) {
-		size_t len = os_process_pipe_read(vst3ScanPipe, reinterpret_cast<uint8_t *>(data), sizeof(data));
+		size_t len = os_process_pipe_read(scanPipe, reinterpret_cast<uint8_t *>(data), sizeof(data));
 		if (len == 0) {
-			blog(LOG_ERROR, "[VST3 Scanner] Pipe closed before result");
+			if (!vst3ScanCancelled.load(std::memory_order_acquire)) {
+				blog(LOG_ERROR, "[VST3 Scanner] Pipe closed before result");
+			}
 			break;
 		}
 
@@ -275,18 +277,21 @@ static void getScanResult(obs_source_t *src)
 	}
 
 	bool ready = false;
-	if (noVst3) {
-		list->pluginList.clear();
-		list->classCount.clear();
-		ready = true;
-	} else if (scanCompleted) {
-		ready = vst3JSONLoad();
-		if (!ready) {
-			blog(LOG_ERROR, "[VST3 Scanner] Failed to load VST3 list");
+	const bool cancelled = vst3ScanCancelled.load(std::memory_order_acquire);
+	if (!cancelled) {
+		if (noVst3) {
+			list->pluginList.clear();
+			list->classCount.clear();
+			ready = true;
+		} else if (scanCompleted) {
+			ready = vst3JSONLoad();
+			if (!ready) {
+				blog(LOG_ERROR, "[VST3 Scanner] Failed to load VST3 list");
+			}
 		}
 	}
 
-	if (ready) {
+	if (ready && !cancelled) {
 		blog(LOG_INFO, "[VST3 Scanner] Available plugins:");
 		for (const auto &plugin : list->pluginList) {
 			if (!plugin.isFX) {
@@ -297,8 +302,7 @@ static void getScanResult(obs_source_t *src)
 	}
 
 	for (;;) {
-		size_t len =
-			os_process_pipe_read_err(vst3ScanPipe, reinterpret_cast<uint8_t *>(scanData), sizeof(scanData));
+		size_t len = os_process_pipe_read_err(scanPipe, reinterpret_cast<uint8_t *>(scanData), sizeof(scanData));
 		if (len == 0) {
 			break;
 		}
@@ -306,18 +310,26 @@ static void getScanResult(obs_source_t *src)
 	}
 	blog(LOG_INFO, "%s", scanInfo.c_str());
 
-	os_process_pipe_destroy(vst3ScanPipe);
-	vst3ScanPipe = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(vst3ScanPipeMutex);
+		if (vst3ScanPipe == scanPipe) {
+			os_process_pipe_destroy(vst3ScanPipe);
+			vst3ScanPipe = nullptr;
+		}
+	}
 
 	vst3ScanDone.store(true, std::memory_order_release);
 	if (src) {
-		obs_source_update_properties(src);
+		if (!cancelled) {
+			obs_source_update_properties(src);
+		}
 		obs_source_release(src);
 	}
 }
 
 bool retrieveVst3List(obs_source_t *src)
 {
+	vst3ScanCancelled.store(false, std::memory_order_release);
 	vst3ScanDone.store(false, std::memory_order_relaxed);
 	list = new VST3Scanner();
 	if (!list->hasVST3()) {
@@ -331,24 +343,41 @@ bool retrieveVst3List(obs_source_t *src)
 
 	char *filepath = obs_module_config_path("vst3list.json");
 
-	vst3ScanPipe = start_pipe(filepath);
+	os_process_pipe_t *scanPipe = start_pipe(filepath);
 	bfree(filepath);
-	if (!vst3ScanPipe) {
+	if (!scanPipe) {
 		blog(LOG_ERROR, "[VST3 Scanner] Could not start scanner");
 		vst3ScanDone.store(true, std::memory_order_release);
 		return false;
 	}
 
+	{
+		std::lock_guard<std::mutex> lock(vst3ScanPipeMutex);
+		vst3ScanPipe = scanPipe;
+	}
 	vst3ScanThread = std::thread(getScanResult, obs_source_get_ref(src));
 
 	return true;
 }
 
-void freeVst3List()
+void cancelVst3Scan()
 {
+	vst3ScanCancelled.store(true, std::memory_order_release);
+	{
+		std::lock_guard<std::mutex> lock(vst3ScanPipeMutex);
+		if (vst3ScanPipe) {
+			os_process_pipe_kill(vst3ScanPipe);
+		}
+	}
+
 	if (vst3ScanThread.joinable()) {
 		vst3ScanThread.join();
 	}
+}
+
+void freeVst3List()
+{
+	cancelVst3Scan();
 	delete list;
 	list = nullptr;
 }
