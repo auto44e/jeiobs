@@ -1,11 +1,19 @@
 """Read and edit the files of one skip-list check (task 005) for skip-list.sh.
 Always run as python3 -I.
 
-  skiplist.py entry SKIP BUNDLE BINARY FAILURES
+  skiplist.py entry SKIP BUNDLE BINARY FAILURES [timeout|failure]
       SKIP (vst3skip.json) has exactly one entry for BUNDLE; it names BINARY,
       records BINARY's current size and CRC32, `failures` FAILURES and an
-      obs_version
+      obs_version; with timeout its kind is "timeout", with failure any other
+      non-empty string
   skiplist.py noentry SKIP BUNDLE       no entry for BUNDLE (no SKIP file is none)
+  skiplist.py remember SKIP BUNDLE OUT  save BUNDLE's entry in OUT
+  skiplist.py unchanged SKIP BUNDLE OUT BUNDLE's entry is still the one saved in OUT
+  skiplist.py retype SKIP BUNDLE FIELD double|string|missing
+                                        make the integer FIELD of BUNDLE's entry a
+                                        double or a string of the same value, or
+                                        remove it
+  skiplist.py fileversion SKIP JSON     set SKIP's version to the JSON value
   skiplist.py backoff SKIP BUNDLE       BUNDLE's retry_after is 7 days after its
                                         last_failed (in seconds, ms, us, 100 ns or ns)
   skiplist.py past SKIP BUNDLE          move retry_after to 7 days before last_failed
@@ -65,9 +73,13 @@ def save_skip(path, root):
     os.replace(path + ".vst3check", path)
 
 
+def is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def integer(entry, key):
     value = entry.get(key)
-    if isinstance(value, bool) or not isinstance(value, int):
+    if not is_int(value):
         raise ValueError(f"{key} is {value!r}, not an integer")
     return value
 
@@ -101,22 +113,32 @@ def describe(e):
             f"obs_version {e.get('obs_version')!r}")
 
 
-def entry(skip, bundle, binary, failures):
+KINDS = {
+    "timeout": lambda k: k == "timeout",
+    "failure": lambda k: isinstance(k, str) and k not in ("", "timeout"),
+}
+
+
+def entry(skip, bundle, binary, failures, *kind):
+    if len(kind) > 1 or (kind and kind[0] not in KINDS):
+        raise ValueError(f"unknown kind {kind}")
     e = the_entry(load_skip(skip), bundle)
     st = os.stat(binary)
     stored = e.get("binary")
     problems = []
     if not isinstance(stored, str) or os.path.normpath(os.path.join(bundle, stored)) != os.path.normpath(binary):
         problems.append(f"binary {stored!r}")
-    if e.get("size") != st.st_size or isinstance(e.get("size"), bool):
+    if not is_int(e.get("size")) or e["size"] != st.st_size:
         problems.append(f"size {e.get('size')!r} != {st.st_size}")
     crc = crc32_of(binary)
     if not same_crc(e.get("crc32"), crc):
         problems.append(f"crc32 {e.get('crc32')!r} != {crc}")
-    if e.get("failures") != int(failures) or isinstance(e.get("failures"), bool):
+    if not is_int(e.get("failures")) or e["failures"] != int(failures):
         problems.append(f"failures {e.get('failures')!r} != {failures}")
     if not isinstance(e.get("obs_version"), str) or not e.get("obs_version"):
         problems.append(f"obs_version {e.get('obs_version')!r}")
+    if kind and not KINDS[kind[0]](e.get("kind")):
+        problems.append(f"kind {e.get('kind')!r}, not a {kind[0]}")
     if problems:
         return False, "entry wrong: " + "; ".join(problems) + f" ({describe(e)})"
     return True, f"entry ({describe(e)}; binary, size and crc32 match)"
@@ -130,6 +152,50 @@ def noentry(skip, bundle):
     if hits:
         return False, f"{len(hits)} entry/entries ({describe(hits[0])})"
     return True, f"no entry ({len(root['bundles'])} other(s))"
+
+
+def canonical(e):
+    return json.dumps(e, sort_keys=True)
+
+
+def remember(skip, bundle, out):
+    e = the_entry(load_skip(skip), bundle)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(canonical(e))
+    return True, f"entry saved ({describe(e)})"
+
+
+def unchanged(skip, bundle, saved):
+    with open(saved, encoding="utf-8") as f:
+        before = json.load(f)
+    now = the_entry(load_skip(skip), bundle)
+    if canonical(now) == canonical(before):
+        return True, f"entry unchanged ({describe(now)})"
+    changed = sorted(k for k in set(now) | set(before) if canonical(now.get(k)) != canonical(before.get(k)))
+    return False, "entry changed: " + ", ".join(f"{k} {before.get(k)!r} -> {now.get(k)!r}" for k in changed)
+
+
+def retype(skip, bundle, field, how):
+    root = load_skip(skip)
+    e = the_entry(root, bundle)
+    value = integer(e, field)
+    if how == "double":
+        e[field] = float(value)
+    elif how == "string":
+        e[field] = str(value)
+    elif how == "missing":
+        del e[field]
+    else:
+        raise ValueError(f"unknown retype {how}")
+    save_skip(skip, root)
+    return True, f"{field} {value} " + ("removed" if how == "missing" else f"written as {json.dumps(e[field])}")
+
+
+def fileversion(skip, value):
+    root = load_skip(skip)
+    root["version"] = json.loads(value)
+    save_skip(skip, root)
+    return True, f"version written as {json.dumps(root['version'])}"
 
 
 def week(e):
@@ -268,7 +334,8 @@ def same(directory, saved):
 
 
 COMMANDS = {
-    "entry": entry, "noentry": noentry, "backoff": backoff, "past": past, "version": version,
+    "entry": entry, "noentry": noentry, "remember": remember, "unchanged": unchanged, "retype": retype,
+    "fileversion": fileversion, "backoff": backoff, "past": past, "version": version,
     "v1list": v1list, "at": at, "nskipped": nskipped, "loads": loads, "flip": flip, "flipped": flipped,
     "snap": snap, "same": same,
 }

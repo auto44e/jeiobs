@@ -121,6 +121,29 @@ diagnostics only.
 11. Scoped valid-then-fails: ADelay at P, P removed for a scan, crash.so at P →
     P absent from `vst3list.json`, failure remembered, one load over two scans.
 
+Added after review run 01 (finding claude-4 and the lead's decisions on
+claude-1, codex-2/claude-2 and codex-3), by the same test author, from the spec,
+those decisions and the review replies, without reading the implementation; the
+fixtures log every load:
+12. `load-failed` with a stable fingerprint: a module that loads but exports no
+    `GetPluginFactory`, and a `.so` that is not ELF → remembered, skipped on the
+    next scan without a load.
+13. `setup`, then `_exit(0)` in the module (no result) → remembered failure.
+14. Deadline kill: the probe is stopped (SIGSTOP) inside the module once its load
+    is logged, so after `setup`, and only the scanner's kill ends it → `kind`
+    `timeout`, `failures` 1; probed again on the next scan (2, 7-day backoff).
+15. Exit codes that may only downgrade: `setup`, then `_exit(90)` → no entry,
+    probed again; a remembered crash is unchanged by a `--retry-failed` probe
+    that exits 90. `_exit(91)` → timeout strike (1, then 2 with backoff, then
+    skipped).
+16. Hand-edited `vst3skip.json` (its `.bak` removed): `size` as a double (`N.0`)
+    or a string, `failures` as a string or missing → the entry is ignored;
+    `version` 1.5 or 2 → the file is ignored. Either way the crash is probed
+    once more, remembered in exactly one new entry (`failures` 1), then skipped.
+17. Valid result without a status marker: a shim deletes the probe's
+    `<result>.status` while it is loaded, then forwards to ADelay → after a
+    remembered crash, `--retry-failed` lists ADelay and removes the entry.
+
 The checks were written from this spec by a different lineage than the
 implementation. Where the spec was silent the test author fixed these readings,
 and the implementation matches them: `vst3skip.json` and `vst3scan.lock` sit
@@ -129,6 +152,11 @@ scan, also when 0; a crash after Rescan raises `failures` to 2; a torn
 `vst3skip.json` with a valid `.bak` uses the `.bak`; stale-file cleanup runs
 under the lock, so a blocked scanner changes nothing.
 
+Checks 12–17 add these readings: the `kind` of a remembered failure is any
+non-empty string other than `timeout`; an ignored entry or file leaves exactly
+one entry for the path after the extra probe; the shim of #17 finds the marker
+as `A.status` for an argument A of the probe's command line (the result path).
+
 ## Evidence (Linux, Ubuntu 24.04, `ENABLE_VST3=ON`)
 
 | Build | Result |
@@ -136,6 +164,7 @@ under the lock, so a blocked scanner changes nothing.
 | this branch | **32 PASS, 0 FAIL** (`tools/jeiobs/vst3-check/run.sh`): the 16 task-003 checks and 16 skip-list checks. |
 | implementation before the lead's fix | 31 PASS; #8 "stale temp files" FAILED: the lock-less fallback wrote `<dir>/tmp-<pid>` and never removed a stale one. Fixed: `<list>.tmp-<pid>`, removed after 1 h. |
 | unfixed (main, with the new checks) | the 16 task-003 checks PASS, **all 16 skip-list checks FAIL** (no `vst3skip.json` is written). |
+| `6fb0cd502` (before the review run 01 fixes), with checks 12–17 | 35 PASS, **5 FAIL**: #15 exit 90 (remembered as a failure; a Rescan raises `failures`), #15 exit 91 (a failure, not a timeout strike), #16 entries (`size` `N.0` accepted), #16 versions (1.5 accepted), #17 (the valid result rejected: "probe produced no valid status"). #12–#14 PASS. |
 
 As root, #6 prints `SKIP` (the process limit does not apply to root) without
 changing the exit status.
@@ -146,6 +175,11 @@ changing the exit status.
   `CreateFileW`/`LockFileEx` (Windows) and `CFBundleCopyExecutableURL` with
   CoreFoundation linkage (macOS).
 - Not covered by a check: the 30-day `missing_since` pruning, the lock-less
-  fallback (ENOLCK), unknown `vst3skip.json` versions and malformed entries, and
-  the host side (Rescan passing `--retry-failed`, the warning text).
+  fallback (ENOLCK), and the host side (Rescan passing `--retry-failed`, the
+  warning text). From review run 01, also without a check: a wait error that is
+  not a deadline kill (codex-1; needs fault injection), the race between the
+  `setup` marker and the watchdog (codex-4), a `save-failed` or unknown marker
+  beside a valid result (#17 covers a missing one), a deadline kill before
+  `setup`, and the architecture directory on a machine that is not x86_64
+  (claude-3: on x86_64 the old mapping and `uname -m` agree).
 - The non-goals above.

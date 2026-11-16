@@ -17,14 +17,18 @@ AGAIN=("$SAMPLES/again-sample-accurate.vst3") # 2 of GOOD's classes; ADelay come
 AGAIN_IDS="C18D3C1E719E4E29924D3ECAA5E4DA18 CC48BF25529043DA80223510FFE8BD02"
 mkdir -p "$F/adelay-as/scoped.vst3/Contents/x86_64-linux" &&
   cp "$SAMPLES/adelay.vst3/Contents/x86_64-linux/adelay.so" "$F/adelay-impl.so" || die "cannot prepare $F"
-marked() { # MODE BUNDLE [ARCH_DIR [NAME]]: build marked.c in MODE (crash, hang or shim)
-  # as $F/BUNDLE.vst3/Contents/ARCH_DIR/NAME.so (default: x86_64-linux, BUNDLE)
+marked() { # MODE BUNDLE [ARCH_DIR [NAME]]: build marked.c in MODE (crash, hang, exitN,
+  # nofactory, shim or unmark) as $F/BUNDLE.vst3/Contents/ARCH_DIR/NAME.so (default:
+  # x86_64-linux, BUNDLE)
   local -a defs=()
   local dir="$F/$2.vst3/Contents/${3:-x86_64-linux}"
   case $1 in
     crash) ;;
     hang) defs=(-DHANG) ;;
+    exit[0-9] | exit[0-9][0-9]) defs=("-DEXIT_CODE=${1#exit}") ;;
+    nofactory) defs=(-DNOFACTORY) ;;
     shim) defs=(-DSHIM "-DADELAY_SO=\"$F/adelay-impl.so\"") ;;
+    unmark) defs=(-DSHIM -DUNMARK "-DADELAY_SO=\"$F/adelay-impl.so\"") ;;
     *) die "marked: unknown mode $1" ;;
   esac
   mkdir -p "$dir" && gcc -shared -fPIC "${defs[@]}" "$HERE/marked.c" -o "$dir/${4:-$2}.so" ||
@@ -33,6 +37,13 @@ marked() { # MODE BUNDLE [ARCH_DIR [NAME]]: build marked.c in MODE (crash, hang 
 for b in mcrash mcrash2 scoped; do marked crash "$b"; done
 marked hang mhang
 marked shim shim
+# Outcomes from the task 005 review: a load failure with a fingerprint, a clean
+# exit after setup, the two exit codes that may only downgrade (90: no result and
+# no save-failed marker; 91: the watchdog could not write timeout), and a valid
+# result whose status marker is gone.
+for c in 0 90 91; do marked "exit$c" "mexit$c"; done
+marked nofactory mnofactory
+marked unmark munmark
 # Binaries the SDK cannot resolve: no x86_64-linux directory (a module for
 # another architecture only), and that directory without <stem>.so (another .so).
 marked crash noarch aarch64-linux
@@ -81,8 +92,14 @@ loaded() { about "$1" loads "$h/loads.log" "$(mod "$1")" "$2"; } # BUNDLE N: loa
 nocode() { # BUNDLE: no module inside BUNDLE was ever loaded
   local n; n=$(grep -cF -- "$(realpath -m "$h/.vst3/$1.vst3")/" "$h/loads.log" 2>/dev/null)
   note "$1 ${n:-0} module load(s)"; [ "${n:-0}" = 0 ]; }
-entry() { about "$1" entry "$C/vst3skip.json" "$h/.vst3/$1.vst3" "$(mod "$1")" "$2"; } # BUNDLE FAILURES
+entry() { about "$1" entry "$C/vst3skip.json" "$h/.vst3/$1.vst3" "$(mod "$1")" "${@:2}"; } # BUNDLE FAILURES [timeout|failure]
 noentry() { about "$1" noentry "$C/vst3skip.json" "$h/.vst3/$1.vst3"; }
+remember() { about "$1" remember "$C/vst3skip.json" "$h/.vst3/$1.vst3" "$h/$1.entry"; } # BUNDLE: save its entry
+unchanged() { about "$1" unchanged "$C/vst3skip.json" "$h/.vst3/$1.vst3" "$h/$1.entry"; } # BUNDLE: still the saved one
+unmarked() { # N: munmark removed a probe status marker on N loads so far ($h/unmark.log)
+  local n other; n=$(grep -c '^removed ' "$h/unmark.log" 2>/dev/null)
+  other=$(grep -v '^removed ' "$h/unmark.log" 2>/dev/null | head -n 1)
+  note "${n:-0} status marker(s) removed by munmark${other:+ ($other)}"; [ "${n:-0}" = "$1" ]; }
 backoff() { about "$1" backoff "$C/vst3skip.json" "$h/.vst3/$1.vst3"; }
 listed_at() { about "$2" at "$C/vst3list.json" "$1" "$h/.vst3/$2.vst3"; } # ID BUNDLE
 nskipped() { sl nskipped "$h/scan$SCAN.out" "$@"; } # [N]
@@ -97,6 +114,10 @@ version_is() { # BUNDLE VERSION: its entry's obs_version is VERSION
   local v; v=$(python3 -I "$HERE/skiplist.py" version "$C/vst3skip.json" "$h/.vst3/$1.vst3") ||
     { note "$1 obs_version: $v"; return 1; }
   note "$1 obs_version $v"; [ -n "$2" ] && [ "$v" = "$2" ]; }
+nobak() { rm -f "$C/vst3skip.json.bak" || die "cannot remove $C/vst3skip.json.bak"; }
+retype() { nobak; about "$1" retype "$C/vst3skip.json" "$h/.vst3/$1.vst3" "$2" "$3"; } # BUNDLE FIELD double|string|missing
+fileversion() { nobak; sl fileversion "$C/vst3skip.json" "$1"; } # JSON: the version of vst3skip.json
+# (Both remove vst3skip.json.bak first, so the edited file is all there is to read.)
 flip() { # BUNDLE: change one byte of its module, then touch -r it back to its old mtime
   local so s; so=$(mod "$1")
   cp -p "$so" "$h/flip.orig" && python3 -I "$HERE/skiplist.py" flip "$so" >/dev/null &&
@@ -183,6 +204,13 @@ orphan() { # the frozen probe outlived its scanner: still stopped, now with anot
   local a b st pp
   [ -n "$FROZE" ] && { read -r a b st pp _ <"/proc/$FROZE/stat"; } 2>/dev/null || { note "no frozen probe left"; return 1; }
   note "probe $FROZE state $st, parent $pp"; [ "$st" = T ] && [ "$pp" != "$SCANNER" ]; }
+loadwait() { # BUNDLE N: during sscan_start, wait until its module has N logged loads, at most
+  # until 1.5 s into the scan (the probe's own watchdog fires at 2 s); the caller checks the count
+  local so; so=$(realpath -m "$(mod "$1")")
+  while [ $(($(ms) - T0)) -lt 1500 ]; do
+    [ "$(grep -cxF -- "$so" "$h/loads.log" 2>/dev/null)" -ge "$2" ] 2>/dev/null && return 0
+    sleep 0.02
+  done; }
 SKIPS=0
 skipped() { SKIPS=$((SKIPS + 1)); echo "SKIP  $1  ($2)"; } # LABEL WHY
 
@@ -297,3 +325,67 @@ check "#11 valid, then failing at one path P (P removed for a scan in between): 
   cp -r "$F/scoped.vst3" "$h/.vst3/" || die "cannot install the crash at P"
   sscan; want ran; want ids $AGAIN_IDS; want loaded scoped 1; want line scoped 1 fresh; want entry scoped 1
   sscan; want ran; want ids $AGAIN_IDS; want loaded scoped 1; want line scoped 1 remembered'
+
+# --- 7. Review gaps (task 005 review run 01: claude-4 and the lead's decisions) ----
+shome skip-loadfail "${GOOD[@]}" "$F/mnofactory.vst3" "$WORK/bad/invalid.vst3"
+check "#12 load-failed with a stable fingerprint (mnofactory.so loads but exports no GetPluginFactory; invalid.so is not ELF): remembered failures, skipped as remembered on the next scan without a load" '
+  sscan; want ran; want ids $GOOD_IDS; want loaded mnofactory 1; want line mnofactory 1 fresh
+  want entry mnofactory 1 failure; want line invalid 1 fresh; want entry invalid 1 failure
+  sscan; want ran; want ids $GOOD_IDS; want loaded mnofactory 1; want line mnofactory 1 remembered
+  want line invalid 1 remembered; want nskipped 2'
+
+shome skip-exit0 "${GOOD[@]}" "$F/mexit0.vst3"
+check "#13 setup, then a clean exit without a result (_exit(0) in mexit0.so): a remembered failure, skipped as remembered on the next scan without a load" '
+  sscan; want ran; want ids $GOOD_IDS; want loaded mexit0 1; want line mexit0 1 fresh; want entry mexit0 1 failure
+  sscan; want ran; want ids $GOOD_IDS; want loaded mexit0 1; want line mexit0 1 remembered'
+
+# The probe is stopped once mhang.so has logged its load (so after setup),
+# before its own watchdog fires: only the scanner's deadline kill can end it.
+shome skip-deadline "${GOOD[@]}" "$F/mhang.vst3"
+check "#14 deadline kill after setup (probe frozen in mhang.so, killed by the scanner): a timeout strike (kind timeout, failures 1), so probed again on the next scan (failures 2, backed off)" '
+  sscan_start; loadwait mhang 1; freeze mhang; scan_wait; want froze; want ran; want ids $GOOD_IDS
+  want loaded mhang 1; want line mhang 1 killed; want entry mhang 1 timeout; want gone; reap "$h"
+  sscan; want ran; want loaded mhang 2; want line mhang 1 timeout; want entry mhang 2 timeout; want backoff mhang'
+reap "$h"
+
+shome skip-exit90 "${GOOD[@]}" "$F/mexit90.vst3"
+check "#15 exit 90 after setup (no result, no save-failed marker): no entry, probed again; a remembered crash (VST3CHK_CRASH=1) is unchanged by a --retry-failed probe that exits 90, then skipped" '
+  sscan; want ran; want ids $GOOD_IDS; want loaded mexit90 1; want line mexit90 1 fresh; want noentry mexit90
+  sscan; want ran; want loaded mexit90 2; want line mexit90 1 fresh; want noentry mexit90
+  sscan VST3CHK_CRASH=1; want ran; want loaded mexit90 3; want entry mexit90 1 failure; want remember mexit90
+  sscan --retry-failed; want ran; want ids $GOOD_IDS; want loaded mexit90 4; want line mexit90 1 fresh
+  want unchanged mexit90
+  sscan; want ran; want loaded mexit90 4; want line mexit90 1 remembered'
+
+shome skip-exit91 "${GOOD[@]}" "$F/mexit91.vst3"
+check "#15 exit 91 after setup (the watchdog could not write timeout): a timeout strike (kind timeout, failures 1), probed again (failures 2, backed off), then skipped as remembered" '
+  sscan; want ran; want ids $GOOD_IDS; want loaded mexit91 1; want line mexit91 1 fresh; want entry mexit91 1 timeout
+  sscan; want ran; want loaded mexit91 2; want line mexit91 1 fresh; want entry mexit91 2 timeout; want backoff mexit91
+  sscan; want ran; want loaded mexit91 2; want line mexit91 1 remembered'
+
+# Each case: a fresh home in which mcrash is remembered, then one hand edit of
+# vst3skip.json. Ignored, the edited entry or file costs one probe, after which
+# the crash is remembered afresh (exactly one entry, failures 1).
+recrash() { # CASE: fresh home skip-CASE, one scan, mcrash remembered
+  shome "skip-$1" "${GOOD[@]}" "$F/mcrash.vst3"; note "[$1]"
+  sscan; want ran; want loaded mcrash 1; want entry mcrash 1 failure; }
+ignored() { # the edit was ignored: mcrash probed again and remembered afresh, then skipped
+  sscan; want ran; want ids $GOOD_IDS; want loaded mcrash 2; want line mcrash 1 fresh; want entry mcrash 1 failure
+  sscan; want ran; want loaded mcrash 2; want line mcrash 1 remembered; }
+check "#16 malformed entries (size as a double N.0 or a string, failures as a string or missing; no .bak): each entry ignored, so the crash is probed again and remembered afresh, then skipped" '
+  recrash size-double; want retype mcrash size double; ignored
+  recrash size-string; want retype mcrash size string; ignored
+  recrash failures-string; want retype mcrash failures string; ignored
+  recrash failures-missing; want retype mcrash failures missing; ignored'
+check "#16 vst3skip.json version 1.5 or 2 (no .bak): the file is ignored, so the crash is probed again and remembered in a version 1 file, then skipped" '
+  recrash version-1.5; want fileversion 1.5; ignored
+  recrash version-2; want fileversion 2; ignored'
+
+# munmark deletes the probe's status marker while the probe loads it, then
+# forwards to ADelay: a valid result with the matching nonce, but no marker.
+shome skip-unmarked "${AGAIN[@]}" "$F/munmark.vst3"
+check "#17 valid result without a status marker (munmark.so deletes it, then forwards to ADelay): after a remembered crash, --retry-failed lists ADelay and forgets the entry" '
+  sscan VST3CHK_SHIM_CRASH=1; want ran; want ids $AGAIN_IDS; want loaded munmark 1; want entry munmark 1 failure
+  sscan --retry-failed; want ran; want unmarked 1; want ids $AGAIN_IDS $ADELAY; want listed_at $ADELAY munmark
+  want loaded munmark 2; want line munmark 0; want noentry munmark
+  sscan; want ran; want ids $AGAIN_IDS $ADELAY; want loaded munmark 2'
