@@ -151,6 +151,10 @@ The lead may merge its own PR only when all of these hold:
        use, writes elsewhere, changes undone before a check, a reply changed
        during its own turn, and changes after the run by a process that left
        its process group. Only the sandbox stops a peer that evades them.
+       Everything the runner trusts (the review home, `~/.claude` user settings,
+       the toolbox launcher that serves Bedrock credentials, the CLI binaries,
+       `python3`) is writable by any process of the same user; a run pins its
+       home's `config.toml` and skills, not the binaries or `~/.claude`.
      - At exit the runner prints the sha256 of every file it wrote, the final
        `00-meta.md` included; `00-meta.md` lists the same files (its own entry
        is the hash of its header). Before committing a run, the lead checks the

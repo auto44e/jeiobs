@@ -68,6 +68,11 @@
 #   its own final hash); the lead checks the files against that output before
 #   committing them. Hashes are of the files as written, before the transcript
 #   edits in DECISIONS.md.
+# - Everything the runner trusts (the review CODEX_HOME, ~/.claude user settings,
+#   the toolbox launcher that serves Bedrock credentials, the claude and codex
+#   binaries, python3) is writable by any process of the same user, so an
+#   unsandboxed peer could change it for a later run. A run pins its home's
+#   config.toml and skills; it does not pin the binaries or ~/.claude.
 # - Round 1 is not isolated: a peer that can read the filesystem could find
 #   the other's in-progress reply. Nothing relies on it being unseen.
 
@@ -107,25 +112,38 @@ command -v claude >/dev/null && [ -x "$CODEX_BIN" ] || { echo "error: claude and
 # else (MCP servers, plugins, projects, profiles, instructions, any unknown key) refuses the run.
 CFG="$REVIEW_CODEX_HOME/config.toml"
 CFG_HASH="$(sha256sum < "$CFG")"   # hashed before the parse; re-checked after it and after every turn
-python3 - "$CFG" <<'PYCFG' || exit 2
-import sys, tomllib
+python3 -I - "$CFG" "$HOME" <<'PYCFG' || exit 2
+import re, sys, tomllib
 S, B, L, D = str, bool, list, dict
+HOME = sys.argv[2]
+LAUNCHER = (HOME + "/.toolbox/bin/codex",)          # Bedrock credential helper only
+HEADER = re.compile(r"x-amzn-credential-source(-since)?")
+def otlp(kind):                                       # telemetry only to the local collector
+    endpoint = re.compile(r"http://127\.0\.0\.1:[0-9]{1,5}/v1/" + kind)
+    return {"otlp-http": {"endpoint": endpoint, "protocol": ("binary",), "headers": {"*": S, "@key": HEADER}}}
 ALLOWED = {
     "model_provider": S, "model_reasoning_effort": S, "model": S, "forced_login_method": S,
     "check_for_update_on_startup": B, "chatgpt_base_url": S, "approvals_reviewer": ("auto_review",),
     "shell_environment_policy": {"inherit": ("core",)},
-    "model_providers": {"*": {"aws": {"region": S, "credential_export": {"command": S, "args": L}}}},
+    "model_providers": {"*": {"aws": {"region": S,
+        "credential_export": {"command": LAUNCHER, "args": (["amzn", "credential-process"],)}}}},
     "analytics": {"enabled": B},
-    "otel": {"log_user_prompt": B, "exporter": D, "metrics_exporter": D, "trace_exporter": D, "environment": S},
+    "otel": {"log_user_prompt": B, "exporter": otlp("logs"), "metrics_exporter": otlp("metrics"),
+             "trace_exporter": otlp("traces"), "environment": S},
 }
 def check(value, rule, path):
     if isinstance(rule, tuple):
         if value not in rule:
             sys.exit(f"error: {path} must be one of {rule}")
+    elif isinstance(rule, re.Pattern):
+        if not isinstance(value, str) or not rule.fullmatch(value):
+            sys.exit(f"error: {path} does not match {rule.pattern}")
     elif isinstance(rule, dict):
         if not isinstance(value, dict):
             sys.exit(f"error: {path} must be a table")
         for key, item in value.items():
+            if "@key" in rule and not rule["@key"].fullmatch(key):
+                sys.exit(f"error: {path}.{key} is not an allowed key")
             sub = rule.get(key, rule.get("*"))
             if sub is None:
                 sys.exit(f"error: {path}.{key} is not an allowed review config key")
@@ -149,8 +167,11 @@ SKILLS_HASH="$(skills_hash)"
 [ "$(sha256sum < "$CFG")" = "$CFG_HASH" ] || { echo "error: $CFG changed while it was checked" >&2; exit 2; }
 codex_home_users() { # PIDs whose environment uses REVIEW_CODEX_HOME (checked when no turn is running)
   local p
+  local p env
   for p in /proc/[0-9]*; do
-    tr '\0' '\n' 2>/dev/null < "$p/environ" | grep -qxF "CODEX_HOME=$REVIEW_CODEX_HOME" && echo "${p#/proc/}"
+    # Read first, then match (a pipeline into grep -q could fail open under pipefail).
+    env="$(tr '\0' '\n' 2>/dev/null < "$p/environ")" || continue
+    case $'\n'"$env"$'\n' in *$'\n'"CODEX_HOME=$REVIEW_CODEX_HOME"$'\n'*) echo "${p#/proc/}" ;; esac
   done
 }
 [ -z "$(codex_home_users)" ] || { echo "error: another process uses $REVIEW_CODEX_HOME; review runs need it to themselves" >&2; exit 2; }
@@ -228,10 +249,10 @@ tamper_check() { # label
   [ -z "$(git -C "$TREE" ls-files -v | grep -v '^H ')" ] || fail "$1: index flags were set in the review checkout"
   local logs f hits=""
   # Collected into variables (no pipeline into grep -q), so pipefail cannot turn a hit into a pass.
-  # The engine writes project docs as a JSON string value that starts with
-  # "# AGENTS.md instructions for <dir>". Matching the unescaped '":"' before it means a peer
-  # that quotes this text in a reply (JSON-escaped inside a later prompt) cannot trip the check.
-  logs="$(grep -rlE "\":\"# [A-Za-z._-]+ instructions for ${TREE//./\\.}([^A-Za-z0-9._/-]|\$)" \
+  # The engine writes project docs as a user message item {"type":"input_text","text":"# AGENTS.md
+  # instructions for <dir>...}. Only the engine writes that unescaped structure: a peer's reply
+  # or command output that contains the text is a JSON-escaped string value elsewhere.
+  logs="$(grep -rlE "\"type\":\"input_text\",\"text\":\"# [A-Za-z._-]+ instructions for ${TREE//./\\.}([^A-Za-z0-9._/-]|\$)" \
     --include='*.jsonl' "$REVIEW_CODEX_HOME/sessions" 2>/dev/null)"
   case $? in 0 | 1) ;; *) fail "$1: cannot search the Codex session logs" ;; esac
   while IFS= read -r f; do

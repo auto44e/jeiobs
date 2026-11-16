@@ -1,0 +1,48 @@
+Run-13 fixes accepted: codex-19 and codex-20 are resolved (`review.sh:160`, `407-409`, `110-141`).
+
+Remaining:
+
+- `codex-21` Major: `python3 - "$CFG"` imports `tomllib` without isolation; a reviewed checkout can shadow it with `tomllib.py` (`review.sh:110-112`).
+- `codex-22` Major: `credential_export.command`/`args` and nested OTEL dictionaries are arbitrary, so the declared toolbox-only helper is not enforced (`review.sh:117-119`; `DECISIONS.md:133-134`).
+
+FINDING c1 | Blocker | withdrawn | prior withdrawal stands (findings.md:53)
+FINDING c2 | Major | withdrawn | prior withdrawal stands (findings.md:54)
+FINDING c3 | Major | withdrawn | prior withdrawal stands (findings.md:55)
+FINDING c4 | Major | withdrawn | prior withdrawal stands (findings.md:56)
+FINDING c5 | Minor | accepted-fix | prior acceptance stands (findings.md:57)
+FINDING c6 | Major | withdrawn | prior withdrawal stands (findings.md:58)
+FINDING c7 | Minor | accepted-fix | prior acceptance stands (findings.md:59)
+FINDING c8 | Major | withdrawn | prior withdrawal stands (findings.md:60)
+FINDING M1 | Major | accepted-fix | prior acceptance stands (findings.md:61)
+FINDING M2 | Major | accepted-fix | prior acceptance stands (findings.md:62)
+FINDING M3 | Major | accepted-fix | prior acceptance stands (findings.md:63)
+FINDING N1 | Major | accepted-fix | prior acceptance stands (findings.md:64)
+FINDING N2 | Major | accepted-fix | prior acceptance stands (findings.md:65)
+FINDING N3 | Major | accepted-fix | prior acceptance stands (findings.md:66)
+FINDING N4 | Major | accepted-fix | prior acceptance stands (findings.md:67)
+FINDING N5 | Minor | accepted-fix | prior acceptance stands (findings.md:68)
+FINDING N6 | Major | accepted-fix | prior acceptance stands (findings.md:69)
+FINDING N7 | Major | accepted-fix | prior acceptance stands (findings.md:70)
+FINDING codex-1 | Major | accepted-fix | prior acceptance stands (findings.md:71)
+FINDING codex-2 | Major | accepted-fix | prior acceptance stands (findings.md:72)
+FINDING codex-3 | Major | accepted-fix | prior acceptance stands (findings.md:73)
+FINDING codex-4 | Minor | accepted-fix | prior acceptance stands (findings.md:74)
+FINDING codex-5 | Major | accepted-fix | prior acceptance stands (findings.md:75)
+FINDING codex-6 | Major | accepted-fix | prior acceptance stands (findings.md:76)
+FINDING codex-7 | Major | accepted-fix | prior acceptance stands (findings.md:77)
+FINDING codex-8 | Minor | accepted-fix | prior acceptance stands (findings.md:78)
+FINDING codex-9 | Major | accepted-fix | prior acceptance stands (findings.md:79)
+FINDING codex-10 | Major | accepted-fix | prior acceptance stands (findings.md:80)
+FINDING codex-11 | Major | accepted-fix | prior acceptance stands (findings.md:81)
+FINDING codex-12 | Minor | accepted-fix | prior acceptance stands (findings.md:82)
+FINDING codex-13 | Major | accepted-fix | prior acceptance stands (findings.md:83)
+FINDING codex-14 | Major | accepted-fix | prior acceptance stands (findings.md:84)
+FINDING codex-15 | Major | accepted-fix | prior acceptance stands (findings.md:86)
+FINDING codex-16 | Minor | accepted-fix | prior acceptance stands (findings.md:87)
+FINDING codex-17 | Major | accepted-fix | prior acceptance stands (findings.md:88)
+FINDING codex-18 | Major | accepted-fix | prior acceptance stands (findings.md:91)
+FINDING codex-19 | Major | accepted-fix | nonempty OUT and final metadata checks are enforced (review.sh:160, 407-409)
+FINDING codex-20 | Major | accepted-fix | TOML parsing and exact top-level validation replace regex checks (review.sh:110-141)
+FINDING codex-21 | Major | open | “python3 - "$CFG"” is non-isolated and permits reviewed-tree tomllib shadowing (review.sh:110-112)
+FINDING codex-22 | Major | open | credential_export command/args and OTEL nested keys remain arbitrary (review.sh:117-119)
+VERDICT: request changes
