@@ -96,7 +96,12 @@ bool IsAsciiEqual(std::string_view value, std::string_view expected)
 bool IsDeviceName(std::string_view component)
 {
 	const std::size_t dot = component.find('.');
-	const std::string_view stem = component.substr(0U, dot);
+	std::string_view stem = component.substr(0U, dot);
+	if (dot != std::string_view::npos) {
+		while (!stem.empty() && stem.back() == ' ') {
+			stem.remove_suffix(1U);
+		}
+	}
 	if (IsAsciiEqual(stem, "CON") || IsAsciiEqual(stem, "PRN") || IsAsciiEqual(stem, "AUX") ||
 	    IsAsciiEqual(stem, "NUL") || IsAsciiEqual(stem, "CONIN$") || IsAsciiEqual(stem, "CONOUT$")) {
 		return true;
@@ -192,6 +197,9 @@ PathResult ValidatePath(std::string_view path)
 		}
 		if (component.size() > Limits::kComponentBytes) {
 			return {PathStatus::Invalid, "component"};
+		}
+		if (component.find('.') != std::string_view::npos && IsDeviceName(component)) {
+			return {PathStatus::Invalid, "device-name"};
 		}
 		if (component.back() == '.' || component.back() == ' ') {
 			return {PathStatus::Invalid, "trailing-dot-space"};

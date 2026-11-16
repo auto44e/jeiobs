@@ -13,12 +13,8 @@
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
-#include <fstream>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <string_view>
 
@@ -52,28 +48,6 @@ void PrintManifestOk(const Manifest &manifest)
 		std::cout << " unchecked-paths";
 	}
 	std::cout << '\n';
-}
-
-bool ReadFile(const std::string &path, std::string &bytes)
-{
-	std::ifstream input;
-	Jeiobs::Workspace::Detail::OpenUtf8(input, path);
-	if (!input.is_open()) {
-		return false;
-	}
-	input.seekg(0, std::ios::end);
-	const std::streamoff size = input.tellg();
-	if (size < 0 ||
-	    static_cast<std::uintmax_t>(size) > static_cast<std::uintmax_t>(std::numeric_limits<std::size_t>::max())) {
-		return false;
-	}
-	input.seekg(0, std::ios::beg);
-	bytes.resize(static_cast<std::size_t>(size));
-	if (!bytes.empty()) {
-		input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-		return input.gcount() == static_cast<std::streamsize>(bytes.size());
-	}
-	return true;
 }
 
 bool ParseRevisionName(const std::string &path, std::uint64_t &sequence, std::string &revision_id)
@@ -149,7 +123,12 @@ int CheckRevision(const std::string &path)
 		PrintError({ErrorCode::Name, {}});
 		return 1;
 	}
-	const auto hash = Jeiobs::Workspace::HashFile(path);
+	const auto bytes = Jeiobs::Workspace::ReadFile(path);
+	if (!bytes.ok()) {
+		PrintError(bytes.error);
+		return 1;
+	}
+	const auto hash = Jeiobs::Workspace::HashBytes(bytes.bytes);
 	if (!hash.ok()) {
 		PrintError(hash.error);
 		return 1;
@@ -158,7 +137,7 @@ int CheckRevision(const std::string &path)
 		PrintError({ErrorCode::Revid, {}});
 		return 1;
 	}
-	const auto result = Jeiobs::Workspace::LoadManifest(path, ManifestMode::Local);
+	const auto result = Jeiobs::Workspace::ParseManifest(bytes.bytes, ManifestMode::Local);
 	if (!result.ok()) {
 		PrintError(result.error);
 		return 1;
@@ -200,7 +179,13 @@ int CheckChild(const std::string &parent_path, const std::string &draft_path)
 		PrintError(result.error);
 		return 1;
 	}
-	std::cout << result.value->dump() << '\n';
+	const std::string child_bytes = result.value->dump();
+	const auto validated_child = Jeiobs::Workspace::ParseManifest(child_bytes, ManifestMode::Local);
+	if (!validated_child.ok()) {
+		PrintError(validated_child.error);
+		return 1;
+	}
+	std::cout << child_bytes << '\n';
 	return 0;
 }
 
@@ -211,16 +196,14 @@ int CheckExport(const std::string &manifest_path, const std::string &decisions_p
 		PrintError(manifest.error);
 		return 1;
 	}
-	std::string decisions_bytes;
-	if (!ReadFile(decisions_path, decisions_bytes)) {
-		PrintError({ErrorCode::Io, {}});
+	const auto decisions_bytes = Jeiobs::Workspace::ReadFile(decisions_path);
+	if (!decisions_bytes.ok()) {
+		PrintError(decisions_bytes.error);
 		return 1;
 	}
-	Json decisions;
-	try {
-		decisions = Json::parse(decisions_bytes);
-	} catch (...) {
-		PrintError({ErrorCode::Json, {}});
+	const auto decisions = Jeiobs::Workspace::ParseJson(decisions_bytes.bytes);
+	if (!decisions.ok()) {
+		PrintError(decisions.error);
 		return 1;
 	}
 	const auto hash = Jeiobs::Workspace::HashFile(manifest_path);
@@ -228,12 +211,13 @@ int CheckExport(const std::string &manifest_path, const std::string &decisions_p
 		PrintError(hash.error);
 		return 1;
 	}
-	const auto result = Jeiobs::Workspace::ProjectForExport(*manifest.value, hash.value, decisions, now);
+	const auto result = Jeiobs::Workspace::ProjectForExport(*manifest.value, hash.value, *decisions.value, now);
 	if (!result.ok()) {
 		PrintError(result.error);
 		return 1;
 	}
-	std::cout << result.value->dump() << '\n';
+	const std::string exported_bytes = result.value->dump();
+	std::cout << exported_bytes << '\n';
 	return 0;
 }
 
@@ -247,31 +231,36 @@ void PrintUsage()
 
 int Run(int argc, char **argv)
 {
-	if (argc < 3) {
+	try {
+		if (argc < 3) {
+			PrintUsage();
+			return 2;
+		}
+		const std::string command = argv[1];
+		if (command == "hash" && argc == 3) {
+			return CheckHash(argv[2]);
+		}
+		if (command == "path" && argc == 3) {
+			return CheckPath(argv[2]);
+		}
+		if (command == "manifest" && (argc == 3 || (argc == 4 && std::string(argv[3]) == "--export"))) {
+			return CheckManifest(argv[2], argc == 4 ? ManifestMode::Export : ManifestMode::Local);
+		}
+		if (command == "revision" && argc == 3) {
+			return CheckRevision(argv[2]);
+		}
+		if (command == "child" && argc == 4) {
+			return CheckChild(argv[2], argv[3]);
+		}
+		if (command == "export" && argc == 6 && std::string(argv[4]) == "--now") {
+			return CheckExport(argv[2], argv[3], argv[5]);
+		}
 		PrintUsage();
 		return 2;
+	} catch (...) {
+		PrintError({ErrorCode::Json, {}});
+		return 1;
 	}
-	const std::string command = argv[1];
-	if (command == "hash" && argc == 3) {
-		return CheckHash(argv[2]);
-	}
-	if (command == "path" && argc == 3) {
-		return CheckPath(argv[2]);
-	}
-	if (command == "manifest" && (argc == 3 || (argc == 4 && std::string(argv[3]) == "--export"))) {
-		return CheckManifest(argv[2], argc == 4 ? ManifestMode::Export : ManifestMode::Local);
-	}
-	if (command == "revision" && argc == 3) {
-		return CheckRevision(argv[2]);
-	}
-	if (command == "child" && argc == 4) {
-		return CheckChild(argv[2], argv[3]);
-	}
-	if (command == "export" && argc == 6 && std::string(argv[4]) == "--now") {
-		return CheckExport(argv[2], argv[3], argv[5]);
-	}
-	PrintUsage();
-	return 2;
 }
 
 #ifdef _WIN32
@@ -285,22 +274,27 @@ int Run(int argc, char **argv)
 // library as UTF-8, as on the other platforms.
 int wmain(int argc, wchar_t **wargv)
 {
-	std::vector<std::string> args;
-	for (int i = 0; i < argc; ++i) {
-		const int bytes = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, nullptr, 0, nullptr, nullptr);
-		std::string arg(bytes > 0 ? static_cast<std::size_t>(bytes) : 1U, '\0');
-		if (bytes > 0) {
-			WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, arg.data(), bytes, nullptr, nullptr);
+	try {
+		std::vector<std::string> args;
+		for (int i = 0; i < argc; ++i) {
+			const int bytes = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, nullptr, 0, nullptr, nullptr);
+			std::string arg(bytes > 0 ? static_cast<std::size_t>(bytes) : 1U, '\0');
+			if (bytes > 0) {
+				WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, arg.data(), bytes, nullptr, nullptr);
+			}
+			arg.resize(std::char_traits<char>::length(arg.c_str()));
+			args.push_back(std::move(arg));
 		}
-		arg.resize(std::char_traits<char>::length(arg.c_str()));
-		args.push_back(std::move(arg));
+		std::vector<char *> argv;
+		for (std::string &arg : args) {
+			argv.push_back(arg.data());
+		}
+		argv.push_back(nullptr);
+		return Run(argc, argv.data());
+	} catch (...) {
+		PrintError({ErrorCode::Json, {}});
+		return 1;
 	}
-	std::vector<char *> argv;
-	for (std::string &arg : args) {
-		argv.push_back(arg.data());
-	}
-	argv.push_back(nullptr);
-	return Run(argc, argv.data());
 }
 #else
 int main(int argc, char **argv)

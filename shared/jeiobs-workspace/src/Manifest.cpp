@@ -20,7 +20,9 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <limits>
 #include <map>
 #include <set>
@@ -285,7 +287,7 @@ public:
 	}
 };
 
-JsonResult ParseJson(std::string_view bytes)
+JsonResult ParseJsonInternal(std::string_view bytes)
 {
 	if (bytes.size() >= 3U && static_cast<unsigned char>(bytes[0]) == 0xefU &&
 	    static_cast<unsigned char>(bytes[1]) == 0xbbU && static_cast<unsigned char>(bytes[2]) == 0xbfU) {
@@ -314,6 +316,43 @@ JsonResult ParseJson(std::string_view bytes)
 	return {sax.root(), {}};
 }
 
+BytesResult ReadFileInternal(const std::string &path)
+{
+	try {
+		const std::filesystem::path filesystem_path = std::filesystem::u8path(path);
+		std::error_code status_error;
+		const std::filesystem::file_status status = std::filesystem::status(filesystem_path, status_error);
+		if (status_error || !std::filesystem::is_regular_file(status)) {
+			return {{}, MakeError(ErrorCode::Io)};
+		}
+
+		std::error_code size_error;
+		const std::uintmax_t file_size = std::filesystem::file_size(filesystem_path, size_error);
+		if (size_error) {
+			return {{}, MakeError(ErrorCode::Io)};
+		}
+		if (file_size > Limits::kManifestBytes) {
+			return {{}, MakeError(ErrorCode::Limit, "manifest")};
+		}
+
+		std::ifstream input;
+		Jeiobs::Workspace::Detail::OpenUtf8(input, path);
+		if (!input.is_open()) {
+			return {{}, MakeError(ErrorCode::Io)};
+		}
+		std::string bytes(static_cast<std::size_t>(file_size), '\0');
+		if (!bytes.empty()) {
+			input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+			if (input.gcount() != static_cast<std::streamsize>(bytes.size())) {
+				return {{}, MakeError(ErrorCode::Io)};
+			}
+		}
+		return {std::move(bytes), {}};
+	} catch (...) {
+		return {{}, MakeError(ErrorCode::Io)};
+	}
+}
+
 bool IsInteger(const Json &value)
 {
 	return value.is_number_integer() || value.is_number_unsigned();
@@ -325,6 +364,14 @@ bool IsNonNegativeInteger(const Json &value)
 		return true;
 	}
 	return value.is_number_integer() && value.get<std::int64_t>() >= 0;
+}
+
+bool IsPositiveInteger(const Json &value)
+{
+	if (value.is_number_unsigned()) {
+		return value.get<std::uint64_t>() >= 1U;
+	}
+	return value.is_number_integer() && value.get<std::int64_t>() >= 1;
 }
 
 bool GetUnsigned(const Json &value, std::uint64_t &result)
@@ -429,6 +476,78 @@ Error ValidateRedactions(const Json &entry, ManifestMode mode, std::vector<std::
 	return {};
 }
 
+bool IsPathComponent(std::string_view value)
+{
+	return value.find('/') == std::string_view::npos && !value.empty() && ValidatePath(value).ok();
+}
+
+bool MatchesPathShape(std::string_view path, std::string_view prefix, std::string_view suffix)
+{
+	if (path.size() <= prefix.size() + suffix.size() || path.substr(0U, prefix.size()) != prefix ||
+	    path.substr(path.size() - suffix.size()) != suffix) {
+		return false;
+	}
+	return IsPathComponent(path.substr(prefix.size(), path.size() - prefix.size() - suffix.size()));
+}
+
+bool IsStoredEntryAllowed(std::string_view root, std::string_view role, std::string_view path)
+{
+	if (root == "user") {
+		return role == "app.user" && path == "user.ini";
+	}
+	if (root == "scenes") {
+		if (role == "collection") {
+			return MatchesPathShape(path, "basic/scenes/", ".json");
+		}
+		if (role == "collection.bak") {
+			return MatchesPathShape(path, "basic/scenes/", ".json.bak");
+		}
+		return false;
+	}
+	if (root == "profiles") {
+		if (role == "profile.basic") {
+			return MatchesPathShape(path, "basic/profiles/", "/basic.ini");
+		}
+		if (role == "profile.service") {
+			return MatchesPathShape(path, "basic/profiles/", "/service.json");
+		}
+		if (role == "profile.service.bak") {
+			return MatchesPathShape(path, "basic/profiles/", "/service.json.bak");
+		}
+		if (role == "profile.encoder.stream") {
+			return MatchesPathShape(path, "basic/profiles/", "/streamEncoder.json");
+		}
+		if (role == "profile.encoder.stream.bak") {
+			return MatchesPathShape(path, "basic/profiles/", "/streamEncoder.json.bak");
+		}
+		if (role == "profile.encoder.record") {
+			return MatchesPathShape(path, "basic/profiles/", "/recordEncoder.json");
+		}
+		if (role == "profile.encoder.record.bak") {
+			return MatchesPathShape(path, "basic/profiles/", "/recordEncoder.json.bak");
+		}
+		return false;
+	}
+	if (root == "plugin_manager") {
+		return role == "app.modules" && path == "plugin_manager/modules.json";
+	}
+	if (root == "config") {
+		if (role == "module.obs-websocket") {
+			return path == "plugin_config/obs-websocket/config.json";
+		}
+		if (role == "module.decklink-output-ui") {
+			return path == "plugin_config/decklink-output-ui/decklinkOutputProps.json" ||
+			       path == "plugin_config/decklink-output-ui/decklinkPreviewOutputProps.json";
+		}
+		if (role == "module.aja-output-ui") {
+			return path == "plugin_config/aja-output-ui/ajaOutputProps.json" ||
+			       path == "plugin_config/aja-output-ui/ajaPreviewOutputProps.json" ||
+			       path == "plugin_config/aja-output-ui/ajaMiscProps.json";
+		}
+	}
+	return false;
+}
+
 Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_paths,
 		      std::unordered_set<std::string> &entry_ids, std::vector<std::string> &redaction_refs,
 		      std::uint64_t &stored_bytes)
@@ -488,6 +607,9 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 		if (!IsObjectWithString(entry, status == "stored" ? "role" : "reason")) {
 			return Schema(status == "stored" ? "role" : "reason");
 		}
+		if (status == "stored" && !IsStoredEntryAllowed(root, entry.at("role").get<std::string>(), path)) {
+			return Schema("role");
+		}
 		if (!entry.contains("size") || !IsNonNegativeInteger(entry.at("size"))) {
 			return Schema("size");
 		}
@@ -519,8 +641,12 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 			if (mode == ManifestMode::Export && fidelity == "opaque-unreviewed") {
 				return Schema("fidelity");
 			}
-		} else if (entry.contains("hash")) {
-			return Schema("hash");
+		} else {
+			for (const char *field : {"fidelity", "hash", "redactions", "unreviewed", "parse"}) {
+				if (entry.contains(field)) {
+					return Schema(field);
+				}
+			}
 		}
 
 		for (const char *field : {"profile", "collection", "kind", "load_rule"}) {
@@ -531,18 +657,21 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 		if (entry.contains("bak") && !entry.at("bak").is_string()) {
 			return Schema("bak");
 		}
-		if (entry.contains("parse") &&
-		    (!entry.at("parse").is_string() || entry.at("parse").get<std::string>() != "invalid")) {
-			return Schema("parse");
-		}
+		const bool opaque = status == "stored" &&
+				    entry.at("fidelity").get<std::string>() == "opaque-unreviewed";
 		if (entry.contains("unreviewed")) {
 			const Json &unreviewed = entry.at("unreviewed");
-			if (!unreviewed.is_object() || !IsObjectWithString(unreviewed, "rules")) {
+			if (!opaque || !unreviewed.is_object() || !IsObjectWithString(unreviewed, "rules") ||
+			    unreviewed.at("rules").get_ref<const std::string &>().empty() ||
+			    !unreviewed.contains("count") || !IsPositiveInteger(unreviewed.at("count"))) {
 				return Schema("unreviewed");
 			}
-			if (unreviewed.contains("count") && !IsNonNegativeInteger(unreviewed.at("count"))) {
-				return Schema("count");
-			}
+		} else if (opaque) {
+			return Schema("unreviewed");
+		}
+		if (entry.contains("parse") &&
+		    (!opaque || !entry.at("parse").is_string() || entry.at("parse").get<std::string>() != "invalid")) {
+			return Schema("parse");
 		}
 		const Error redaction_error = ValidateRedactions(entry, mode, redaction_refs);
 		if (!redaction_error.ok()) {
@@ -595,6 +724,37 @@ Error ValidateReferences(const Json &document, ManifestMode mode, const std::uno
 	return {};
 }
 
+Error ValidateExportObjects(const Json &document, ManifestMode mode)
+{
+	if (mode != ManifestMode::Export) {
+		return {};
+	}
+
+	const Json &target = document.at("target");
+	for (const auto &[key, ignored] : target.items()) {
+		if (key != "os" && key != "audio") {
+			return Schema("target");
+		}
+	}
+	if (target.contains("audio")) {
+		if (!target.at("audio").is_object()) {
+			return Schema("target");
+		}
+		for (const auto &[key, ignored] : target.at("audio").items()) {
+			if (key != "sample_rate" && key != "channels") {
+				return Schema("target");
+			}
+		}
+	}
+	for (const Json &app_key : document.at("app_keys")) {
+		if (app_key.is_object() && app_key.contains("restore") && app_key.at("restore").is_string() &&
+		    app_key.at("restore").get<std::string>() == "never") {
+			return Schema("app_keys");
+		}
+	}
+	return {};
+}
+
 ManifestResult ValidateDocument(Json document, ManifestMode mode)
 {
 	if (!document.is_object()) {
@@ -636,6 +796,10 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 	}
 	if (!document.at("dropped_ext").is_array()) {
 		return {std::nullopt, Schema("dropped_ext")};
+	}
+	const Error export_object_error = ValidateExportObjects(document, mode);
+	if (!export_object_error.ok()) {
+		return {std::nullopt, export_object_error};
 	}
 	if (document.contains("label") && !document.at("label").is_string()) {
 		return {std::nullopt, Schema("label")};
@@ -746,6 +910,60 @@ std::vector<std::string> UnknownFields(const Json &value, bool entry)
 	return fields;
 }
 
+void AppendUnknownObjectFields(const Json &object, std::string_view prefix,
+			       const std::initializer_list<std::string_view> &known_fields,
+			       std::vector<std::string> &fields)
+{
+	if (!object.is_object()) {
+		return;
+	}
+	for (const auto &[key, ignored] : object.items()) {
+		if (std::find(known_fields.begin(), known_fields.end(), key) == known_fields.end()) {
+			std::string field_name(prefix);
+			field_name += '.';
+			field_name += key;
+			fields.push_back(std::move(field_name));
+		}
+	}
+}
+
+std::vector<std::string> ExportUnknownFields(const Json &document)
+{
+	std::vector<std::string> fields;
+	for (const auto &[key, ignored] : document.items()) {
+		if (!IsKnownTopLevel(key)) {
+			fields.push_back(key);
+		}
+	}
+	AppendUnknownObjectFields(document.at("creator"), "creator", {"app", "version", "commit", "obs_base"}, fields);
+	AppendUnknownObjectFields(document.at("active"), "active", {"profile", "collection"}, fields);
+	AppendUnknownObjectFields(document.at("compat"), "compat", {"incompat", "ro_compat"}, fields);
+
+	const Json &target = document.at("target");
+	AppendUnknownObjectFields(target, "target", {"os", "audio"}, fields);
+	if (target.contains("audio")) {
+		if (target.at("audio").is_object()) {
+			AppendUnknownObjectFields(target.at("audio"), "target.audio", {"sample_rate", "channels"},
+						  fields);
+		} else {
+			fields.emplace_back("target.audio");
+		}
+	}
+
+	for (const Json &app_key : document.at("app_keys")) {
+		if (!app_key.is_object()) {
+			fields.emplace_back("app_keys");
+			continue;
+		}
+		AppendUnknownObjectFields(app_key, "app_keys", {"root", "file", "section", "key", "value", "restore"},
+					  fields);
+	}
+
+	std::sort(fields.begin(), fields.end());
+	fields.erase(std::unique(fields.begin(), fields.end()), fields.end());
+	return fields;
+}
+
 void AppendDropped(Json &dropped, const Json &entry, std::vector<std::string> fields)
 {
 	if (fields.empty()) {
@@ -805,19 +1023,74 @@ Error ValidateDecisionObject(const Json &decision, std::string &action, std::str
 	if (action != "include" && action != "omit") {
 		return Schema("decisions");
 	}
-	if (action == "include") {
-		if (!decision.contains("fidelity") || !decision.at("fidelity").is_string()) {
+	for (const auto &[key, ignored] : decision.items()) {
+		if (key != "decision" && !(action == "include" && key == "fidelity")) {
 			return Schema("decisions");
 		}
-		fidelity = decision.at("fidelity").get<std::string>();
-		if (fidelity != "exact" && fidelity != "redacted") {
-			return Schema("decisions");
+	}
+	if (action == "include") {
+		if (decision.contains("fidelity")) {
+			if (!decision.at("fidelity").is_string()) {
+				return Schema("decisions");
+			}
+			fidelity = decision.at("fidelity").get<std::string>();
+			if (fidelity != "exact" && fidelity != "redacted") {
+				return Schema("decisions");
+			}
 		}
 	}
 	return {};
 }
 
+bool IsLeapYear(int year)
+{
+	return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+}
+
+bool IsValidNow(std::string_view now)
+{
+	if (now.size() != 20U || now[4] != '-' || now[7] != '-' || now[10] != 'T' || now[13] != ':' || now[16] != ':' ||
+	    now[19] != 'Z') {
+		return false;
+	}
+	for (std::size_t index = 0U; index < now.size(); ++index) {
+		if (index == 4U || index == 7U || index == 10U || index == 13U || index == 16U || index == 19U) {
+			continue;
+		}
+		if (now[index] < '0' || now[index] > '9') {
+			return false;
+		}
+	}
+
+	const int year = (now[0] - '0') * 1000 + (now[1] - '0') * 100 + (now[2] - '0') * 10 + (now[3] - '0');
+	const int month = (now[5] - '0') * 10 + (now[6] - '0');
+	const int day = (now[8] - '0') * 10 + (now[9] - '0');
+	const int hour = (now[11] - '0') * 10 + (now[12] - '0');
+	const int minute = (now[14] - '0') * 10 + (now[15] - '0');
+	const int second = (now[17] - '0') * 10 + (now[18] - '0');
+	if (year == 0 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) {
+		return false;
+	}
+
+	const int days_in_month[] = {31, IsLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	return day >= 1 && day <= days_in_month[month - 1];
+}
+
 } // namespace
+
+JsonResult ParseJson(std::string_view bytes)
+{
+	try {
+		return ParseJsonInternal(bytes);
+	} catch (...) {
+		return {std::nullopt, MakeError(ErrorCode::Json)};
+	}
+}
+
+BytesResult ReadFile(const std::string &path)
+{
+	return ReadFileInternal(path);
+}
 
 ManifestResult ParseManifest(std::string_view bytes, ManifestMode mode)
 {
@@ -833,28 +1106,11 @@ ManifestResult ParseManifest(std::string_view bytes, ManifestMode mode)
 
 ManifestResult LoadManifest(const std::string &path, ManifestMode mode)
 {
-	std::ifstream input;
-	Jeiobs::Workspace::Detail::OpenUtf8(input, path);
-	if (!input.is_open()) {
-		return {std::nullopt, MakeError(ErrorCode::Io)};
+	const BytesResult bytes = ReadFile(path);
+	if (!bytes.ok()) {
+		return {std::nullopt, bytes.error};
 	}
-	input.seekg(0, std::ios::end);
-	const std::streamoff file_size = input.tellg();
-	if (file_size < 0) {
-		return {std::nullopt, MakeError(ErrorCode::Io)};
-	}
-	if (static_cast<std::uintmax_t>(file_size) > Limits::kManifestBytes) {
-		return {std::nullopt, MakeError(ErrorCode::Limit, "manifest")};
-	}
-	input.seekg(0, std::ios::beg);
-	std::string bytes(static_cast<std::size_t>(file_size), '\0');
-	if (!bytes.empty()) {
-		input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-		if (input.gcount() != static_cast<std::streamsize>(bytes.size())) {
-			return {std::nullopt, MakeError(ErrorCode::Io)};
-		}
-	}
-	return ParseManifest(bytes, mode);
+	return ParseManifest(bytes.bytes, mode);
 }
 
 JsonResult CarryOver(const Manifest &parent, const Manifest &draft)
@@ -907,141 +1163,137 @@ JsonResult CarryOver(const Manifest &parent, const Manifest &draft)
 JsonResult ProjectForExport(const Manifest &manifest, std::string_view bytesHash, const Json &decisions,
 			    std::string_view now)
 {
-	if (manifest.mode != ManifestMode::Local) {
-		return {std::nullopt, Schema("manifest")};
-	}
-	if (manifest.readonly) {
-		return {std::nullopt, MakeError(ErrorCode::Major)};
-	}
-	if (manifest.roCompat) {
-		const Json &features = manifest.document.at("compat").at("ro_compat");
-		return {std::nullopt, MakeError(ErrorCode::RoCompat, features.front().get<std::string>())};
-	}
-	if (bytesHash.size() != 64U || std::any_of(bytesHash.begin(), bytesHash.end(), [](char character) {
-		    return !((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f'));
-	    })) {
-		return {std::nullopt, MakeError(ErrorCode::Revid)};
-	}
-	if (!decisions.is_object()) {
-		return {std::nullopt, Schema("decisions")};
-	}
-
-	std::unordered_map<std::string, const Json *> entries_by_id;
-	for (const Json &entry : manifest.document.at("entries")) {
-		entries_by_id.emplace(entry.at("id").get<std::string>(), &entry);
-	}
-	for (const auto &[id, decision] : decisions.items()) {
-		const auto iterator = entries_by_id.find(id);
-		if (iterator == entries_by_id.end() || !iterator->second->contains("fidelity") ||
-		    iterator->second->at("fidelity") != "opaque-unreviewed") {
+	try {
+		if (manifest.mode != ManifestMode::Local) {
+			return {std::nullopt, Schema("manifest")};
+		}
+		if (manifest.readonly) {
+			return {std::nullopt, MakeError(ErrorCode::Major)};
+		}
+		if (manifest.roCompat) {
+			const Json &features = manifest.document.at("compat").at("ro_compat");
+			return {std::nullopt, MakeError(ErrorCode::RoCompat, features.front().get<std::string>())};
+		}
+		if (bytesHash.size() != 64U || std::any_of(bytesHash.begin(), bytesHash.end(), [](char character) {
+			    return !((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f'));
+		    })) {
+			return {std::nullopt, MakeError(ErrorCode::Revid)};
+		}
+		if (!IsValidNow(now)) {
+			return {std::nullopt, Schema("now")};
+		}
+		if (!decisions.is_object()) {
 			return {std::nullopt, Schema("decisions")};
 		}
-		std::string action;
-		std::string fidelity;
-		const Error decision_error = ValidateDecisionObject(decision, action, fidelity);
-		if (!decision_error.ok()) {
-			return {std::nullopt, decision_error};
-		}
-		if (iterator->second->contains("parse") && action == "include") {
-			return {std::nullopt, Schema("decisions")};
-		}
-	}
 
-	for (const Json &entry : manifest.document.at("entries")) {
-		if (!entry.contains("fidelity") || entry.at("fidelity") != "opaque-unreviewed" ||
-		    (entry.contains("parse") && entry.at("parse") == "invalid")) {
-			continue;
+		std::unordered_map<std::string, const Json *> entries_by_id;
+		for (const Json &entry : manifest.document.at("entries")) {
+			entries_by_id.emplace(entry.at("id").get<std::string>(), &entry);
 		}
-		if (!decisions.contains(entry.at("id").get<std::string>())) {
-			return {std::nullopt, MakeError(ErrorCode::Undecided, entry.at("id").get<std::string>())};
-		}
-	}
-
-	Json result = Json::object();
-	for (const char *field : {"format", "major", "minor", "compat", "created_utc", "label", "creator", "active"}) {
-		if (manifest.document.contains(field)) {
-			result[field] = manifest.document.at(field);
-		}
-	}
-	result["origin"] = {
-		{"workspace_id", manifest.document.at("workspace_id")},
-		{"revision_id", std::string(bytesHash)},
-	};
-	result["exported_utc"] = std::string(now);
-
-	Json target = Json::object();
-	target["os"] = manifest.document.at("target").at("os");
-	if (manifest.document.at("target").contains("audio") &&
-	    manifest.document.at("target").at("audio").is_object()) {
-		const Json &audio = manifest.document.at("target").at("audio");
-		Json audio_copy = Json::object();
-		for (const char *field : {"sample_rate", "channels"}) {
-			if (audio.contains(field)) {
-				audio_copy[field] = audio.at(field);
+		for (const auto &[id, decision] : decisions.items()) {
+			const auto iterator = entries_by_id.find(id);
+			if (iterator == entries_by_id.end() || !iterator->second->contains("fidelity") ||
+			    iterator->second->at("fidelity") != "opaque-unreviewed") {
+				return {std::nullopt, Schema("decisions")};
 			}
-		}
-		if (!audio_copy.empty()) {
-			target["audio"] = std::move(audio_copy);
-		}
-	}
-	result["target"] = std::move(target);
-
-	Json app_keys = Json::array();
-	for (const Json &app_key : manifest.document.at("app_keys")) {
-		if (app_key.is_object() && app_key.contains("restore") && app_key.at("restore") == "never") {
-			continue;
-		}
-		if (!app_key.is_object()) {
-			app_keys.push_back(app_key);
-			continue;
-		}
-		Json app_key_copy = Json::object();
-		for (const char *field : {"root", "file", "section", "key", "value", "restore"}) {
-			if (app_key.contains(field)) {
-				app_key_copy[field] = app_key.at(field);
-			}
-		}
-		app_keys.push_back(std::move(app_key_copy));
-	}
-	result["app_keys"] = std::move(app_keys);
-
-	Json dropped_ext = manifest.document.at("dropped_ext");
-	std::vector<std::string> unknown_top_level;
-	for (const auto &[key, ignored] : manifest.document.items()) {
-		if (!IsKnownTopLevel(key)) {
-			unknown_top_level.push_back(key);
-		}
-	}
-	std::sort(unknown_top_level.begin(), unknown_top_level.end());
-	AppendDropped(dropped_ext, nullptr, std::move(unknown_top_level));
-
-	Json projected_entries = Json::array();
-	for (const Json &entry : manifest.document.at("entries")) {
-		const std::string id = entry.at("id").get<std::string>();
-		AppendDropped(dropped_ext, entry.at("id"), UnknownFields(entry, true));
-		if (entry.contains("parse") && entry.at("parse") == "invalid") {
-			Json omitted = Json::object();
-			for (const char *field : {"id", "root", "path", "role", "profile", "collection", "size"}) {
-				if (entry.contains(field)) {
-					omitted[field] = entry.at(field);
-				}
-			}
-			omitted["status"] = "omitted";
-			omitted["reason"] = "unparseable";
-			projected_entries.push_back(std::move(omitted));
-			continue;
-		}
-
-		const bool opaque = entry.contains("fidelity") && entry.at("fidelity") == "opaque-unreviewed";
-		if (opaque) {
-			const Json &decision = decisions.at(id);
 			std::string action;
 			std::string fidelity;
 			const Error decision_error = ValidateDecisionObject(decision, action, fidelity);
 			if (!decision_error.ok()) {
 				return {std::nullopt, decision_error};
 			}
-			if (action == "omit") {
+			if (action == "include") {
+				const Json &entry = *iterator->second;
+				const bool is_redacted = entry.contains("redactions") &&
+							 !entry.at("redactions").empty();
+				const std::string derived_fidelity = is_redacted ? "redacted" : "exact";
+				if (!fidelity.empty() && fidelity != derived_fidelity) {
+					return {std::nullopt, Schema("decisions")};
+				}
+			}
+			if (iterator->second->contains("parse") && action == "include") {
+				return {std::nullopt, Schema("decisions")};
+			}
+		}
+
+		for (const Json &entry : manifest.document.at("entries")) {
+			if (!entry.contains("fidelity") || entry.at("fidelity") != "opaque-unreviewed" ||
+			    (entry.contains("parse") && entry.at("parse") == "invalid")) {
+				continue;
+			}
+			if (!decisions.contains(entry.at("id").get<std::string>())) {
+				return {std::nullopt,
+					MakeError(ErrorCode::Undecided, entry.at("id").get<std::string>())};
+			}
+		}
+
+		Json result = Json::object();
+		for (const char *field : {"format", "major", "minor", "created_utc", "label"}) {
+			if (manifest.document.contains(field)) {
+				result[field] = manifest.document.at(field);
+			}
+		}
+		result["compat"] = Json::object();
+		for (const char *field : {"incompat", "ro_compat"}) {
+			result["compat"][field] = manifest.document.at("compat").at(field);
+		}
+		result["creator"] = Json::object();
+		for (const char *field : {"app", "version", "commit", "obs_base"}) {
+			if (manifest.document.at("creator").contains(field)) {
+				result["creator"][field] = manifest.document.at("creator").at(field);
+			}
+		}
+		result["active"] = Json::object();
+		for (const char *field : {"profile", "collection"}) {
+			if (manifest.document.at("active").contains(field)) {
+				result["active"][field] = manifest.document.at("active").at(field);
+			}
+		}
+		result["origin"] = {
+			{"workspace_id", manifest.document.at("workspace_id")},
+			{"revision_id", std::string(bytesHash)},
+		};
+		result["exported_utc"] = std::string(now);
+
+		Json target = Json::object();
+		target["os"] = manifest.document.at("target").at("os");
+		if (manifest.document.at("target").contains("audio") &&
+		    manifest.document.at("target").at("audio").is_object()) {
+			const Json &audio = manifest.document.at("target").at("audio");
+			Json audio_copy = Json::object();
+			for (const char *field : {"sample_rate", "channels"}) {
+				if (audio.contains(field)) {
+					audio_copy[field] = audio.at(field);
+				}
+			}
+			target["audio"] = std::move(audio_copy);
+		}
+		result["target"] = std::move(target);
+
+		Json app_keys = Json::array();
+		for (const Json &app_key : manifest.document.at("app_keys")) {
+			if (!app_key.is_object() || (app_key.contains("restore") && app_key.at("restore").is_string() &&
+						     app_key.at("restore").get<std::string>() == "never")) {
+				continue;
+			}
+			Json app_key_copy = Json::object();
+			for (const char *field : {"root", "file", "section", "key", "value", "restore"}) {
+				if (app_key.contains(field)) {
+					app_key_copy[field] = app_key.at(field);
+				}
+			}
+			app_keys.push_back(std::move(app_key_copy));
+		}
+		result["app_keys"] = std::move(app_keys);
+
+		Json dropped_ext = manifest.document.at("dropped_ext");
+		AppendDropped(dropped_ext, nullptr, ExportUnknownFields(manifest.document));
+
+		Json projected_entries = Json::array();
+		for (const Json &entry : manifest.document.at("entries")) {
+			const std::string id = entry.at("id").get<std::string>();
+			AppendDropped(dropped_ext, entry.at("id"), UnknownFields(entry, true));
+			if (entry.contains("parse") && entry.at("parse") == "invalid") {
 				Json omitted = Json::object();
 				for (const char *field :
 				     {"id", "root", "path", "role", "profile", "collection", "size"}) {
@@ -1050,28 +1302,56 @@ JsonResult ProjectForExport(const Manifest &manifest, std::string_view bytesHash
 					}
 				}
 				omitted["status"] = "omitted";
-				omitted["reason"] = "unreviewed";
+				omitted["reason"] = "unparseable";
 				projected_entries.push_back(std::move(omitted));
 				continue;
 			}
 
-			Json included = CopyKnownEntry(entry);
-			included["fidelity"] = fidelity;
-			included.erase("unreviewed");
-			included["review"] = {
-				{"rules", entry.at("unreviewed").at("rules")},
-				{"decision", "include"},
-			};
-			projected_entries.push_back(std::move(included));
-			continue;
-		}
+			const bool opaque = entry.contains("fidelity") && entry.at("fidelity") == "opaque-unreviewed";
+			if (opaque) {
+				const Json &decision = decisions.at(id);
+				std::string action;
+				std::string fidelity;
+				const Error decision_error = ValidateDecisionObject(decision, action, fidelity);
+				if (!decision_error.ok()) {
+					return {std::nullopt, decision_error};
+				}
+				if (action == "omit") {
+					Json omitted = Json::object();
+					for (const char *field :
+					     {"id", "root", "path", "role", "profile", "collection", "size"}) {
+						if (entry.contains(field)) {
+							omitted[field] = entry.at(field);
+						}
+					}
+					omitted["status"] = "omitted";
+					omitted["reason"] = "unreviewed";
+					projected_entries.push_back(std::move(omitted));
+					continue;
+				}
 
-		Json projected = CopyKnownEntry(entry);
-		projected_entries.push_back(std::move(projected));
+				Json included = CopyKnownEntry(entry);
+				const bool is_redacted = entry.contains("redactions") &&
+							 !entry.at("redactions").empty();
+				included["fidelity"] = is_redacted ? "redacted" : "exact";
+				included.erase("unreviewed");
+				included["review"] = {
+					{"rules", entry.at("unreviewed").at("rules")},
+					{"decision", "include"},
+				};
+				projected_entries.push_back(std::move(included));
+				continue;
+			}
+
+			Json projected = CopyKnownEntry(entry);
+			projected_entries.push_back(std::move(projected));
+		}
+		result["entries"] = std::move(projected_entries);
+		result["dropped_ext"] = std::move(dropped_ext);
+		return {std::move(result), {}};
+	} catch (...) {
+		return {std::nullopt, MakeError(ErrorCode::Json)};
 	}
-	result["entries"] = std::move(projected_entries);
-	result["dropped_ext"] = std::move(dropped_ext);
-	return {std::move(result), {}};
 }
 
 } // namespace Jeiobs::Workspace

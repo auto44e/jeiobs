@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -49,12 +50,16 @@ struct JsonResult {
 	[[nodiscard]] bool ok() const noexcept { return error.ok(); }
 };
 
-struct LoadedManifest {
+struct BytesResult {
 	std::string bytes;
-	ManifestResult result;
+	Error error;
 
-	[[nodiscard]] bool ok() const noexcept { return result.ok(); }
+	[[nodiscard]] bool ok() const noexcept { return error.ok(); }
 };
+
+[[nodiscard]] BytesResult ReadFile(const std::string &path);
+
+[[nodiscard]] JsonResult ParseJson(std::string_view bytes);
 
 [[nodiscard]] ManifestResult ParseManifest(std::string_view bytes, ManifestMode mode);
 
