@@ -1,4 +1,18 @@
-# Current planning update — 2026-11-15
+# Current planning update — 2026-11-16
+
+Implemented task 003 on branch `wip/vst3-scanner-impl`: VST3 discovery now
+probes code-loading bundles in short-lived child processes with per-bundle
+timeouts, crash/hang skipping, nonce-checked atomic results and deterministic
+ordering. The host can kill the coordinator before joining during unload.
+Linux verification passed the configured `cmake --build _build -j10`, a
+throwaway crash/hang scan (three good classes retained, two skips, about two
+seconds with a 2000 ms timeout), and a disposable OBS quit probe (exit 0,
+zero leaks while a 10000 ms probe was active). Windows and macOS builds and
+runtime checks remain untested.
+
+---
+
+Earlier planning update — 2026-11-15
 
 Inspected main at `5e17d4f99b2c15756b2ff5bbeb2e4454b80feb8a`. Added the
 [workspace saving/offline proposal](WORKSPACE_SAVING.md) and

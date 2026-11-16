@@ -199,6 +199,11 @@ os_process_pipe_t *os_process_pipe_create2(const os_process_args_t *args, const 
 	return ret;
 }
 
+bool os_process_pipe_kill(os_process_pipe_t *pp)
+{
+	return pp && !!TerminateProcess(pp->process, 1);
+}
+
 int os_process_pipe_destroy(os_process_pipe_t *pp)
 {
 	int ret = 0;
