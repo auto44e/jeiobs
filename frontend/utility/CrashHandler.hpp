@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <utility/RemoteTextThread.hpp>
 
 #include <util/base.h>
 
@@ -50,8 +49,6 @@ private:
 	bool isSentinelPresent_ = false;
 	bool isActiveCrashHandler_ = false;
 
-	std::unique_ptr<RemoteTextThread> crashLogUploadThread_;
-
 public:
 	CrashHandler() = default;
 	CrashHandler(QUuid appLaunchUUID);
@@ -65,7 +62,6 @@ public:
 	bool hasUncleanShutdown();
 	bool hasNewCrashLog();
 	std::filesystem::path getCrashLogDirectory() const;
-	void uploadLastCrashLog();
 
 	enum class CrashLogUpdateResult { InvalidResult, NotAvailable, NotUpdated, Updated };
 
@@ -77,21 +73,11 @@ private:
 	CrashLogUpdateResult updateLocalCrashLogState();
 	void updateCrashLogFromConfig();
 	void saveCrashLogToConfig();
-	void uploadCrashLogToServer();
-	void handleExistingCrashLogUpload();
 
 	PlatformType getPlatformType() const;
-
-private slots:
-	void crashLogUploadResultHandler(const std::string &uploadResult, const std::string &error);
 
 	// FIXME: Turn into private slot once OBSBasic does not handle application shutdown duties anymore.
 public slots:
 	void applicationShutdownHandler() noexcept;
-
-signals:
-	void crashLogUploadStarted() const;
-	void crashLogUploadFailed(const QString &errorMessage) const;
-	void crashLogUploadFinished(const QString &crashLogURL) const;
 };
 } // namespace OBS

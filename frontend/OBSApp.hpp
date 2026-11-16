@@ -51,7 +51,6 @@ namespace OBS {
 class CrashHandler;
 
 enum class LogFileType { NoType, CurrentAppLog, LastAppLog, CrashLog };
-enum class LogFileState { NoState, New, Uploaded };
 class PluginManager;
 } // namespace OBS
 
@@ -186,12 +185,6 @@ public:
 	const char *GetCurrentLog() const;
 
 	void openCrashLogDirectory() const;
-	void uploadLastAppLog() const;
-	void uploadCurrentAppLog() const;
-	void uploadLastCrashLog();
-
-	OBS::LogFileState getLogFileState(OBS::LogFileType type) const;
-
 	std::string GetVersionString(bool platform = true) const;
 	bool IsPortableMode();
 	bool IsUpdaterDisabled();
@@ -254,9 +247,6 @@ public slots:
 signals:
 	void logLineAdded(int logLevel, const QString &message);
 	void StyleChanged();
-
-	void logUploadFinished(OBS::LogFileType, const QString &fileUrl);
-	void logUploadFailed(OBS::LogFileType, const QString &errorMessage);
 };
 
 int GetAppConfigPath(char *path, size_t size, const char *name);

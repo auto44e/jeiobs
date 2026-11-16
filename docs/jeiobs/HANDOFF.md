@@ -36,6 +36,12 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
   notice after the unchanged `OBS <version>` line; dead Patreon code removed.
   Log upload to obsproject.com and other upstream links await owner decisions in
   [task 004](tasks/004-upstream-services.md).
+- No uploads (2026-11-15, `jeiobs/local-logs`): log and crash-report upload to
+  obsproject.com removed; Help > Log Files saves a local copy to
+  `Documents/JeiOBS/logs`. See [task 004](tasks/004-upstream-services.md).
+- Help links (2026-11-15, `jeiobs/help-links`): repository and release notes
+  point at the fork, Discord removed, help portal labelled upstream, What's New
+  off by default.
 - Local Linux baseline build (2026-11-15, Ubuntu 24.04, main `ab6332dd5`):
   configures and builds 624/624, 0 errors, and passes a headless smoke run with an
   isolated HOME. Needs FFmpeg 8.0.3, MbedTLS 3.6.7 and Qt 6.11.1 from a private
