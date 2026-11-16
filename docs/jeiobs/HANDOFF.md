@@ -1,3 +1,17 @@
+# Current roadmap direction — 2026-11-15
+
+Inspected main `2dbad5000837e1f18f1dc92a3efc2538f2cb6355`. Owner expanded implementation scope:
+full S1-S6 saving/offline delivery on Windows/macOS/Linux, OBS-compatible native saves,
+graceful audio recovery, PDC preserving A/V sync, sidechains, optional listen bus,
+full adopted plugin host-spec coverage, mixed-media timing and optional recording
+timecode. See [ROADMAP](ROADMAP.md) and [task 002](tasks/002-workspace-saving.md).
+These changes document authorized work; they do not implement runtime features.
+Current handoff below records VST3/Linux progress and native-platform gaps; those
+results were not rerun here. Next: progress S1 into S2-S6 and shared audio/timing
+contracts independently while completing VST3/native validation. Preserve small PRs.
+
+## Historical handoff (retained verbatim)
+
 # Current planning update — 2026-11-15
 
 Inspected main at `5e17d4f99b2c15756b2ff5bbeb2e4454b80feb8a`. Added the

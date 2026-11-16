@@ -1,9 +1,9 @@
 # Whole-workspace snapshots and offline configuration
 
-Status: proposed, not implemented. Owner request: 2026-11-15.
+Status: committed full implementation scope; runtime implementation pending. Owner request: 2026-11-15.
 Planning baseline: 5e17d4f99b2c15756b2ff5bbeb2e4454b80feb8a (main).
 This extends M1 persistence and connects to M2 master processing and M3 hosting.
-VST3 task 001 remains the first coding priority.
+Continue remaining VST3 validation alongside this independent implementation track.
 
 ## User outcomes
 
@@ -80,9 +80,9 @@ configuration together. A failed apply must leave the old revision usable.
 Do not apply topology/state changes while streaming/recording; require a safe
 stop boundary in the first implementation. Rollback must survive process restart.
 
-## Proposed architecture (not an existing API)
+## Implementation architecture (interfaces to finalize)
 
-A versioned Portable Workspace Format and Offline Configuration Engine are proposed.
+A versioned Portable Workspace Format and Offline Configuration Engine are required deliverables.
 Choose the container/extension and finalize the schema after inspecting actual
 persistence paths; no format or API is frozen by this planning PR.
 Suggested contents: manifest, profiles/collections/settings, logical routing,
@@ -102,7 +102,7 @@ A plugin scanner process is not isolation for runtime DSP.
 | S1 | Inventory actual persistence owners and propose versioned manifest/document model | Synthetic fixtures cover each saved domain; specify consistency/secret boundaries |
 | S2 | Local snapshot writer, history and transactional restore | Interrupted write/restore, disk-full, corruption and rollback tests; original OBS untouched |
 | S3 | Portable export/import, selected assets and dependency report | Missing assets, secret omission, relinking and malicious archive tests |
-| S4 | Inert offline editor and placeholder round-trip | Windows fixture edited on Mac without original devices/plugins; no hardware/network/plugin activation |
+| S4 | Inert offline editor and placeholder round-trip | All directed Windows/macOS/Linux pairs round-trip without original devices/plugins; no hardware/network/plugin activation |
 | S5 | Plugin identity/state and master-chain editing | VST3/CLAP state/version/channel cases, absent plugins, unchanged opaque blobs; integrate only available hosts |
 | S6 | Reviewable change sets and conflict-aware apply | Divergent recipient revisions, partial failure and restart-safe rollback; untouched routing preserved |
 
@@ -127,3 +127,13 @@ Keep PRs small and use risk-based checks, not mandatory full-milestone sign-offs
 
 This PR contains documentation only. No snapshot, offline editor, schema, plugin
 compatibility or restore safety has been implemented or runtime-tested.
+
+## Full delivery requirement
+
+Implement S1-S6 end to end, including user-facing save/restore/export/offline-edit/apply
+flows, native platform adapters, automated tests and supported-platform qualification.
+S1 is the starting slice, not the completion criterion. Pure offline editing must
+work in every direction between Windows, macOS and Linux and on the same OS.
+Use the cross-platform delivery and legacy-config compatibility requirements in
+[ROADMAP.md](ROADMAP.md). Native plugin execution remains platform-dependent.
+This documentation update does not itself implement these features.
