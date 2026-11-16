@@ -204,6 +204,11 @@ bool os_process_pipe_kill(os_process_pipe_t *pp)
 	return pp && !!TerminateProcess(pp->process, 1);
 }
 
+bool os_process_pipe_wait(os_process_pipe_t *pp, uint32_t timeout_ms)
+{
+	return pp && WaitForSingleObject(pp->process, timeout_ms) == WAIT_OBJECT_0;
+}
+
 int os_process_pipe_destroy(os_process_pipe_t *pp)
 {
 	int ret = 0;

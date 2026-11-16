@@ -276,9 +276,8 @@ static void getScanResult(obs_source_t *src)
 		}
 	}
 
-	/* The scanner reports each bundle it had to skip (crash, timeout, bad
-	 * result) on stdout, before the end marker. Pass those on, so the log
-	 * says which plugin is missing and why. */
+	/* Forward scanner messages from stdout, but keep the host-owned plugin list
+	 * as the single source for the "Available plugins" entries. */
 	for (size_t start = 0; start < status.size();) {
 		size_t end = status.find('\n', start);
 		if (end == std::string::npos) {
@@ -288,9 +287,32 @@ static void getScanResult(obs_source_t *src)
 		if (!line.empty() && line.back() == '\r') {
 			line.pop_back();
 		}
-		const size_t skipped = line.find("[VST3 Scanner] Skipped ");
-		if (skipped != std::string::npos) {
-			blog(LOG_WARNING, "%s", line.substr(skipped).c_str());
+
+		constexpr char scannerMarker[] = "[VST3 Scanner] ";
+		const size_t marker = line.find(scannerMarker);
+		if (marker != std::string::npos) {
+			int logLevel = LOG_INFO;
+			const char *message = line.c_str();
+			constexpr char warningPrefix[] = "warning: ";
+			constexpr char errorPrefix[] = "error: ";
+			constexpr char infoPrefix[] = "info: ";
+			if (line.compare(0, sizeof(warningPrefix) - 1, warningPrefix) == 0) {
+				logLevel = LOG_WARNING;
+				message += sizeof(warningPrefix) - 1;
+			} else if (line.compare(0, sizeof(errorPrefix) - 1, errorPrefix) == 0) {
+				logLevel = LOG_ERROR;
+				message += sizeof(errorPrefix) - 1;
+			} else if (line.compare(0, sizeof(infoPrefix) - 1, infoPrefix) == 0) {
+				message += sizeof(infoPrefix) - 1;
+			}
+
+			const std::string forwarded(message);
+			const size_t forwardedMarker = forwarded.find(scannerMarker);
+			const std::string scannerMessage =
+				forwarded.substr(forwardedMarker + sizeof(scannerMarker) - 1);
+			if (scannerMessage != "Available plugins:" && scannerMessage.compare(0, 2, "  ") != 0) {
+				blog(logLevel, "%s", forwarded.c_str());
+			}
 		}
 		start = end + 1;
 	}
