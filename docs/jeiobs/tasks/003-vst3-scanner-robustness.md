@@ -167,4 +167,5 @@ schema (path, mtime, size) and its own tests; it was kept out of an already
 large PR. Cost of this choice: every launch pays the timeout for each hanging
 plugin. If otherwise (remembering them in #16): a bigger PR, plus a persistence
 format with no tests behind it. Flex: **next task**. A skip list beside
-`vst3list.json`, retried on Rescan or when the fingerprint changes.
+`vst3list.json`, retried on Rescan or when the fingerprint changes. Done in
+[task 005](005-vst3-skip-list.md).

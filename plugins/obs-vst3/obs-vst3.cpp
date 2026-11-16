@@ -61,6 +61,7 @@ constexpr auto S_ERR = "vst3_error";
 constexpr auto S_NOGUI = "vst3_noview";
 constexpr auto S_RESCAN = "vst3_rescan";
 constexpr auto S_SCAN = "vst3_scan";
+constexpr auto S_SKIPPED = "vst3_skipped";
 constexpr auto S_SIDECHAIN_SOURCE = "sidechain_source";
 
 #define TEXT_EDITOR MT_("VST3.Button")
@@ -69,6 +70,7 @@ constexpr auto S_SIDECHAIN_SOURCE = "sidechain_source";
 #define TEXT_PLUGIN MT_("VST3.Plugin")
 #define TEXT_RESCAN MT_("VST3.Rescan")
 #define TEXT_SCAN MT_("VST3.Scanning")
+#define TEXT_SKIPPED MT_("VST3.Skipped")
 #define TEXT_SIDECHAIN_SOURCE  MT_("VST3.SidechainSource")
 
 #ifdef _WIN32
@@ -169,18 +171,22 @@ void unloadHost()
 // -------------------- initial scanning ------------------
 VST3Scanner *list;
 std::atomic<bool> vst3ScanDone;
+static std::atomic<size_t> vst3SkippedCount;
 static std::atomic<bool> vst3ScanCancelled;
 static std::thread vst3ScanThread;
 os_process_pipe_t *vst3ScanPipe;
 static std::mutex vst3ScanPipeMutex;
 
-static os_process_pipe_t *start_pipe(const char *jsonpath)
+static os_process_pipe_t *start_pipe(const char *jsonpath, bool retryFailed)
 {
 	char *exe = os_get_executable_path_ptr(VST3_SCANNER);
 	os_process_args_t *args = os_process_args_create(exe);
 	bfree(exe);
 
 	os_process_args_add_arg(args, jsonpath);
+	if (retryFailed) {
+		os_process_args_add_arg(args, "--retry-failed");
+	}
 
 	os_process_pipe_t *pipe = os_process_pipe_create2(args, "r");
 	os_process_args_destroy(args);
@@ -253,6 +259,7 @@ static void getScanResult(obs_source_t *src)
 	std::string scanInfo = "";
 	bool scanCompleted = false;
 	bool noVst3 = false;
+	size_t skippedCount = 0;
 
 	for (;;) {
 		size_t len = os_process_pipe_read(scanPipe, reinterpret_cast<uint8_t *>(data), sizeof(data));
@@ -287,6 +294,15 @@ static void getScanResult(obs_source_t *src)
 		if (!line.empty() && line.back() == '\r') {
 			line.pop_back();
 		}
+		constexpr char skippedPrefix[] = "VST3_SKIPPED ";
+		if (line.compare(0, sizeof(skippedPrefix) - 1, skippedPrefix) == 0) {
+			char *end = nullptr;
+			const unsigned long long parsed =
+				std::strtoull(line.c_str() + sizeof(skippedPrefix) - 1, &end, 10);
+			if (end != line.c_str() + sizeof(skippedPrefix) - 1 && *end == '\0') {
+				skippedCount = static_cast<size_t>(parsed);
+			}
+		}
 
 		constexpr char scannerMarker[] = "[VST3 Scanner] ";
 		const size_t marker = line.find(scannerMarker);
@@ -316,6 +332,7 @@ static void getScanResult(obs_source_t *src)
 		}
 		start = end + 1;
 	}
+	vst3SkippedCount.store(skippedCount, std::memory_order_release);
 
 	bool ready = false;
 	const bool cancelled = vst3ScanCancelled.load(std::memory_order_acquire);
@@ -368,10 +385,11 @@ static void getScanResult(obs_source_t *src)
 	}
 }
 
-bool retrieveVst3List(obs_source_t *src)
+bool retrieveVst3List(obs_source_t *src, bool retryFailed)
 {
 	vst3ScanCancelled.store(false, std::memory_order_release);
 	vst3ScanDone.store(false, std::memory_order_relaxed);
+	vst3SkippedCount.store(0, std::memory_order_relaxed);
 	list = new VST3Scanner();
 	if (!list->hasVST3()) {
 		vst3ScanDone.store(true, std::memory_order_release);
@@ -384,7 +402,7 @@ bool retrieveVst3List(obs_source_t *src)
 
 	char *filepath = obs_module_config_path("vst3list.json");
 
-	os_process_pipe_t *scanPipe = start_pipe(filepath);
+	os_process_pipe_t *scanPipe = start_pipe(filepath, retryFailed);
 	bfree(filepath);
 	if (!scanPipe) {
 		blog(LOG_ERROR, "[VST3 Scanner] Could not start scanner");
@@ -1332,7 +1350,7 @@ static bool vst3_rescan_callback(obs_properties_t *props, obs_property_t *proper
 	}
 
 	freeVst3List();
-	retrieveVst3List(source);
+	retrieveVst3List(source, true);
 
 	if (!vst3ScanDone.load(std::memory_order_acquire)) {
 		obs_property_set_enabled(obs_properties_get(props, S_PLUGIN), false);
@@ -1393,8 +1411,14 @@ static obs_properties_t *vst3Properties(void *data)
 	obs_property_text_set_info_type(noview, OBS_TEXT_INFO_WARNING);
 	rescan = obs_properties_add_button2(props, S_RESCAN, obs_module_text(TEXT_RESCAN), vst3_rescan_callback,
 					    filterData);
+	obs_property_set_long_description(rescan, obs_module_text("VST3.Rescan.Tooltip"));
 	obs_property_set_enabled(rescan, scanDone);
 	obs_property_set_visible(noview, pluginReady && !hasView);
+
+	if (scanDone && vst3SkippedCount.load(std::memory_order_acquire) > 0) {
+		obs_property_t *skipped = obs_properties_add_text(props, S_SKIPPED, TEXT_SKIPPED, OBS_TEXT_INFO);
+		obs_property_text_set_info_type(skipped, OBS_TEXT_INFO_WARNING);
+	}
 
 	if (filterData->lastInitFailed) {
 		obs_property_t *err = obs_properties_add_text(props, S_ERR, TEXT_ERR, OBS_TEXT_INFO);
