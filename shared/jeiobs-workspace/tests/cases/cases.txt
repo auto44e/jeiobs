@@ -3,18 +3,18 @@
 #
 # One case per line:   NAME | EXIT | EXPECTED | ARGS
 #   NAME      letters, digits, ".", "_", "-". A name ending in "@posix" is skipped on Windows
-#             (its argument holds bytes that are not UTF-8, which Windows cannot pass).
+#             (an argument holds bytes that are not UTF-8, or names a POSIX device such as /dev/null).
 #   EXIT      expected exit code: 0 OK, 1 ERR, 2 usage.
 #   EXPECTED  compared with stdout after trailing CR and LF characters are removed:
 #               TEXT     exact match, for example "OK readonly" or "ERR E_PATH dot"
 #               ~REGEX   CMake regular expression that must match stdout (anchor it)
 #               @FILE    stdout must be one JSON object equal to FILE (relative to this directory)
 #               *        stdout is not checked
-#             A leading "?" also accepts empty stdout when stderr has a matching line.
+#             TEXT and ~REGEX also need stdout to be one line: an ERR line comes alone, without JSON.
 #   ARGS      jw-check arguments, split on spaces and run from this directory.
 #             %XX is the byte 0xXX (%20 space, %25 percent), the token "" is an empty argument,
-#             ${WORK} is the scratch directory and ${P512}, ${P513}, ${C255}, ${C256}, ${C255U},
-#             ${C256U} are generated paths (see run-cases.cmake).
+#             ${WORK} is the scratch directory with the generated inputs, and ${P512}, ${P513},
+#             ${C255}, ${C256}, ${C255U}, ${C256U} are generated paths (see run-cases.cmake).
 # Fields are separated by " | ". Blank lines and lines starting with # are ignored.
 # Semicolons, square brackets and backslashes are not allowed anywhere in this file
 # (CMake list syntax). Write them as %3B, %5B, %5D and %5C.
@@ -40,6 +40,8 @@ hash-all-byte-values | 0 | 3a5b91318ada385f864a1818c610f9a065db64bab70269eead788
 hash-spec-local-example | 0 | a4fe0d4230c22c9446c170166feec748ec938e9546e8545a2a3ac190fa13f8b8 | hash fixtures/local-example.json
 hash-missing-file | 1 | ERR E_IO | hash fixtures/does-not-exist.bin
 hash-directory | 1 | ERR E_IO | hash fixtures
+hash-dev-null@posix | 1 | ERR E_IO | hash /dev/null
+hash-over-manifest-limit | 0 | 611dbb4c3483765adc22312022c809a126ce3443527c304aa0a010ae2a582d40 | hash ${WORK}/size-4194305.json
 
 # ---- path: PathRules and path limits (section 12), one fault per case
 path-ok-file | 0 | OK | path user.ini
@@ -112,6 +114,17 @@ path-device-lpt-superscript-2 | 1 | ERR E_PATH device-name | path lpt%C2%B2.txt
 path-device-com-superscript-3 | 1 | ERR E_PATH device-name | path Com%C2%B3
 path-device-middle-component | 1 | ERR E_PATH device-name | path a/con/b
 path-dotdot-after-non-ascii | 1 | ERR E_PATH dotdot | path caf%C3%A9/../x
+path-device-space-before-extension | 1 | ERR E_PATH device-name | path CON%20.txt
+path-device-spaces-before-extension | 1 | ERR E_PATH device-name | path nul%20%20.json
+path-device-space-before-trailing-dot | 1 | ERR E_PATH device-name | path aux%20.
+path-device-space-before-extension-com | 1 | ERR E_PATH device-name | path Com1%20.log
+path-device-space-before-extension-superscript | 1 | ERR E_PATH device-name | path lpt%C2%B9%20.txt
+path-device-space-before-extension-conin | 1 | ERR E_PATH device-name | path CONIN$%20.txt
+path-device-space-in-directory | 1 | ERR E_PATH device-name | path a/PRN%20.d/b
+path-device-name-then-space-only | 1 | ERR E_PATH trailing-dot-space | path CON%20
+path-ok-space-before-device-name | 0 | OK | path %20CON.txt
+path-ok-space-inside-device-name | 0 | OK | path CO%20N.txt
+path-ok-device-name-space-text | 0 | OK | path CON%20x.txt
 path-not-utf8-ff@posix | 1 | ERR E_PATH not-utf8 | path a%FFb
 path-not-utf8-continuation@posix | 1 | ERR E_PATH not-utf8 | path a%80b
 path-not-utf8-overlong@posix | 1 | ERR E_PATH not-utf8 | path a%C0%AFb
@@ -138,6 +151,8 @@ manifest-non-ascii-path | 0 | OK unchecked-paths | manifest fixtures/manifest/ma
 manifest-non-ascii-path-escaped | 0 | OK unchecked-paths | manifest fixtures/manifest/manifest-non-ascii-path-escaped.json
 manifest-whitespace-cr-tab | 0 | OK | manifest ${WORK}/whitespace-cr-tab.json
 manifest-missing-file | 1 | ERR E_IO | manifest fixtures/does-not-exist.json
+manifest-directory | 1 | ERR E_IO | manifest fixtures
+manifest-dev-null@posix | 1 | ERR E_IO | manifest /dev/null
 
 # ---- manifest: parser faults, detected during the parse (section 12)
 parse-duplicate-key-top-level | 1 | ERR E_DUPKEY | manifest fixtures/manifest/parse-duplicate-key-top-level.json
@@ -211,6 +226,7 @@ manifest-path-reserved-char | 1 | ERR E_PATH reserved-char | manifest fixtures/m
 manifest-path-trailing-dot | 1 | ERR E_PATH trailing-dot-space | manifest fixtures/manifest/manifest-path-trailing-dot.json
 manifest-path-device-name | 1 | ERR E_PATH device-name | manifest fixtures/manifest/manifest-path-device-name.json
 manifest-path-device-superscript | 1 | ERR E_PATH device-name | manifest fixtures/manifest/manifest-path-device-superscript.json
+manifest-path-device-space | 1 | ERR E_PATH device-name | manifest fixtures/manifest/manifest-path-device-space.json
 manifest-collision-ascii-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/manifest-collision-ascii-case.json
 manifest-collision-identical | 1 | ERR E_COLLISION | manifest fixtures/manifest/manifest-collision-identical.json
 manifest-no-collision-other-root | 0 | OK | manifest fixtures/manifest/manifest-no-collision-other-root.json
@@ -297,6 +313,82 @@ schema-bak-names-itself | 1 | ERR E_SCHEMA bak | manifest fixtures/manifest/sche
 schema-dangling-redaction-ref | 1 | ~^ERR E_SCHEMA (redactions.)?ref$ | manifest fixtures/manifest/schema-dangling-redaction-ref.json
 schema-dangling-secret-ref-entry | 1 | ~^ERR E_SCHEMA (secret_refs.)?entry$ | manifest fixtures/manifest/schema-dangling-secret-ref-entry.json
 
+# ---- manifest: stored entries are bound to the allowlist (contract r2 item 1). A stored entry needs
+# an exact (root, role, path) row, where <f> and <d> are one component that passes PathRules.
+# Anything else is E_SCHEMA role. Omitted entries are not bound.
+allowlist-ok-app-user | 0 | OK | manifest fixtures/manifest/allowlist-ok-app-user.json
+allowlist-ok-collection | 0 | OK | manifest fixtures/manifest/allowlist-ok-collection.json
+allowlist-ok-collection-bak | 0 | OK | manifest fixtures/manifest/allowlist-ok-collection-bak.json
+allowlist-ok-profile-basic | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-basic.json
+allowlist-ok-profile-service | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-service.json
+allowlist-ok-profile-service-bak | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-service-bak.json
+allowlist-ok-profile-encoder-stream | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-encoder-stream.json
+allowlist-ok-profile-encoder-stream-bak | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-encoder-stream-bak.json
+allowlist-ok-profile-encoder-record | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-encoder-record.json
+allowlist-ok-profile-encoder-record-bak | 0 | OK | manifest fixtures/manifest/allowlist-ok-profile-encoder-record-bak.json
+allowlist-ok-app-modules | 0 | OK | manifest fixtures/manifest/allowlist-ok-app-modules.json
+allowlist-ok-module-obs-websocket | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-obs-websocket.json
+allowlist-ok-module-decklink-output | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-decklink-output.json
+allowlist-ok-module-decklink-preview | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-decklink-preview.json
+allowlist-ok-module-aja-output | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-aja-output.json
+allowlist-ok-module-aja-preview | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-aja-preview.json
+allowlist-ok-module-aja-misc | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-aja-misc.json
+allowlist-ok-all-rows | 0 | OK | manifest fixtures/manifest/allowlist-ok-all-rows.json
+allowlist-ok-names-with-spaces-and-dots | 0 | OK | manifest fixtures/manifest/allowlist-ok-names-with-spaces-and-dots.json
+allowlist-ok-non-ascii-profile-folder | 0 | OK unchecked-paths | manifest fixtures/manifest/allowlist-ok-non-ascii-profile-folder.json
+allowlist-wrong-role | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role.json
+allowlist-wrong-role-unknown | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role-unknown.json
+allowlist-wrong-role-main-for-bak | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role-main-for-bak.json
+allowlist-wrong-role-bak-for-main | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role-bak-for-main.json
+allowlist-wrong-path | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-path.json
+allowlist-wrong-path-in-module-folder | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-path-in-module-folder.json
+allowlist-path-for-another-root | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-path-for-another-root.json
+allowlist-path-for-another-root-profile | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-path-for-another-root-profile.json
+allowlist-module-under-user-root | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-module-under-user-root.json
+allowlist-collection-name-with-slash | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-collection-name-with-slash.json
+allowlist-profile-folder-with-slash | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-profile-folder-with-slash.json
+allowlist-collection-name-empty | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-collection-name-empty.json
+allowlist-collection-name-trailing-dot | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-collection-name-trailing-dot.json
+allowlist-collection-name-trailing-space | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-collection-name-trailing-space.json
+allowlist-case-file | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-case-file.json
+allowlist-case-folder | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-case-folder.json
+allowlist-case-extension | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-case-extension.json
+allowlist-machine-id | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-machine-id.json
+allowlist-store-workspaces | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-store-workspaces.json
+allowlist-global-ini | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-global-ini.json
+allowlist-decklink-bak | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-decklink-bak.json
+allowlist-aja-file-in-decklink-folder | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-aja-file-in-decklink-folder.json
+allowlist-encoder-files-swapped | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-encoder-files-swapped.json
+allowlist-modules-outside-folder | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-modules-outside-folder.json
+allowlist-unlisted-module | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-unlisted-module.json
+allowlist-omitted-entries-not-bound | 0 | OK | manifest fixtures/manifest/allowlist-omitted-entries-not-bound.json
+
+# ---- manifest: consistent entry fields (contract r2 item 2)
+schema-opaque-without-unreviewed | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-opaque-without-unreviewed.json
+schema-unreviewed-not-object | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-not-object.json
+schema-unreviewed-missing-rules | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-missing-rules.json
+schema-unreviewed-rules-empty | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-rules-empty.json
+schema-unreviewed-rules-number | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-rules-number.json
+schema-unreviewed-missing-count | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-missing-count.json
+schema-unreviewed-count-zero | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-count-zero.json
+schema-unreviewed-count-negative | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-count-negative.json
+schema-unreviewed-count-fraction | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-count-fraction.json
+schema-unreviewed-count-string | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-count-string.json
+schema-unreviewed-count-one | 0 | OK | manifest fixtures/manifest/schema-unreviewed-count-one.json
+schema-unreviewed-on-exact | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-on-exact.json
+schema-unreviewed-on-redacted | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-unreviewed-on-redacted.json
+schema-parse-invalid-on-opaque | 0 | OK | manifest fixtures/manifest/schema-parse-invalid-on-opaque.json
+schema-parse-not-invalid | 1 | ERR E_SCHEMA parse | manifest fixtures/manifest/schema-parse-not-invalid.json
+schema-parse-not-string | 1 | ERR E_SCHEMA parse | manifest fixtures/manifest/schema-parse-not-string.json
+schema-parse-on-exact | 1 | ERR E_SCHEMA parse | manifest fixtures/manifest/schema-parse-on-exact.json
+schema-parse-on-redacted | 1 | ERR E_SCHEMA parse | manifest fixtures/manifest/schema-parse-on-redacted.json
+schema-omitted-with-fidelity | 1 | ERR E_SCHEMA fidelity | manifest fixtures/manifest/schema-omitted-with-fidelity.json
+schema-omitted-with-redactions | 1 | ERR E_SCHEMA redactions | manifest fixtures/manifest/schema-omitted-with-redactions.json
+schema-omitted-with-unreviewed | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/schema-omitted-with-unreviewed.json
+schema-omitted-with-parse | 1 | ERR E_SCHEMA parse | manifest fixtures/manifest/schema-omitted-with-parse.json
+schema-omitted-forbidden-fields-fidelity-first | 1 | ERR E_SCHEMA fidelity | manifest fixtures/manifest/schema-omitted-forbidden-fields-fidelity-first.json
+schema-omitted-forbidden-fields-redactions-first | 1 | ERR E_SCHEMA redactions | manifest fixtures/manifest/schema-omitted-forbidden-fields-redactions-first.json
+
 # ---- manifest --export: export-mode schema faults
 export-schema-opaque-unreviewed | 1 | ERR E_SCHEMA fidelity | manifest fixtures/manifest/export-schema-opaque-unreviewed.json --export
 export-schema-redaction-ref | 1 | ~^ERR E_SCHEMA (redactions.)?ref$ | manifest fixtures/manifest/export-schema-redaction-ref.json --export
@@ -309,6 +401,15 @@ export-schema-missing-origin | 1 | ERR E_SCHEMA origin | manifest fixtures/manif
 export-schema-missing-exported-utc | 1 | ERR E_SCHEMA exported_utc | manifest fixtures/manifest/export-schema-missing-exported-utc.json --export
 export-schema-origin-revision-id-63-hex | 1 | ~^ERR E_SCHEMA (origin.)?revision_id$ | manifest fixtures/manifest/export-schema-origin-revision-id-63-hex.json --export
 export-schema-origin-missing-workspace-id | 1 | ~^ERR E_SCHEMA (origin.)?workspace_id$ | manifest fixtures/manifest/export-schema-origin-missing-workspace-id.json --export
+export-schema-target-machine-id | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-machine-id.json --export
+export-schema-target-arch | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-arch.json --export
+export-schema-target-unknown-field | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-unknown-field.json --export
+export-schema-target-audio-explicit | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-audio-explicit.json --export
+export-schema-app-key-restore-never | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/export-schema-app-key-restore-never.json --export
+export-schema-target-without-audio | 0 | OK | manifest fixtures/manifest/export-schema-target-without-audio.json --export
+export-schema-stored-machine-id | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/export-schema-stored-machine-id.json --export
+export-schema-unreviewed-on-exact | 1 | ERR E_SCHEMA unreviewed | manifest fixtures/manifest/export-schema-unreviewed-on-exact.json --export
+export-schema-parse-on-exact | 1 | ERR E_SCHEMA parse | manifest fixtures/manifest/export-schema-parse-on-exact.json --export
 
 # ---- manifest: compatibility (section 5) and flag order
 compat-unknown-incompat | 1 | ERR E_INCOMPAT x_merge | manifest fixtures/manifest/compat-unknown-incompat.json
@@ -337,6 +438,10 @@ revision-name-extension | 1 | ERR E_NAME | revision fixtures/rev/extension/00000
 revision-wrong-hash | 1 | ERR E_REVID | revision fixtures/rev/wrong-hash/0000000003-a4fe0d4230c22c9446c170166feec748ec938e9546e8545a2a3ac190fa13f8b8.json
 revision-seq-mismatch | 1 | ERR E_SEQ | revision fixtures/rev/seq-mismatch/0000000003-47af549f89f5b1340b5ddcd6b5cb69a117b577c22a439475438b5d3836b41449.json
 revision-missing-file | 1 | ERR E_IO | revision fixtures/rev/missing/0000000003-974beab28a55fbd22b4918fba9a31e1e33248d9a9cb30b079da71f137ac72552.json
+revision-4mib | 0 | OK | revision ${WORK}/rev-4194304/0000000001-1f3a084845ee020b475189f57eff0dddb61be58856ca728e8dcc4250e969a03b.json
+revision-4mib-plus-one | 1 | ERR E_LIMIT manifest | revision ${WORK}/rev-4194305/0000000001-611dbb4c3483765adc22312022c809a126ce3443527c304aa0a010ae2a582d40.json
+revision-directory | 1 | ERR E_IO | revision ${WORK}/rev-dir/0000000003-974beab28a55fbd22b4918fba9a31e1e33248d9a9cb30b079da71f137ac72552.json
+revision-dev-zero@posix | 1 | ERR E_IO | revision ${WORK}/rev-dev/0000000003-974beab28a55fbd22b4918fba9a31e1e33248d9a9cb30b079da71f137ac72552.json
 
 # ---- child PARENT DRAFT: extension carry-over (section 5). Output compared as JSON.
 child-unknown-top-level-kept | 0 | @expected/child-unknown-top-level-kept.json | child fixtures/child/parent-unknown-top-level-kept.json fixtures/child/draft.json
@@ -352,27 +457,123 @@ child-parent-unknown-major | 1 | ERR E_MAJOR | child fixtures/child/parent-paren
 child-parent-unknown-incompat | 1 | ERR E_INCOMPAT x_merge | child fixtures/child/parent-parent-unknown-incompat.json fixtures/child/draft.json
 child-parent-schema-error | 1 | ERR E_SCHEMA format | child fixtures/child/parent-parent-schema-error.json fixtures/child/draft.json
 child-draft-schema-error | 1 | ERR E_SCHEMA id | child fixtures/child/parent-base.json fixtures/child/draft-draft-schema-error.json
+child-parent-directory | 1 | ERR E_IO | child fixtures fixtures/child/draft.json
+child-values-input-parent-valid | 0 | OK | manifest ${WORK}/child-values-parent.json
+child-values-input-draft-valid | 0 | OK | manifest ${WORK}/child-values-draft.json
+child-size-input-parent-valid | 0 | OK | manifest ${WORK}/child-size-parent.json
+child-size-input-draft-valid | 0 | OK | manifest ${WORK}/child-size-draft.json
+child-carried-values-over-limit | 1 | ERR E_LIMIT values | child ${WORK}/child-values-parent.json ${WORK}/child-values-draft.json
+child-carried-size-over-limit | 1 | ERR E_LIMIT manifest | child ${WORK}/child-size-parent.json ${WORK}/child-size-draft.json
 
 # ---- export MANIFEST DECISIONS --now T: projection (section 4). Success output compared as JSON.
-# "?" also accepts the ERR line on stderr with empty stdout (contract: "nothing on stdout").
+# On ERR, stdout is exactly the ERR line (contract r2 item 11).
 export-spec-example | 0 | @expected/export-example.json | export fixtures/local-example.json fixtures/export/decisions-example.json --now 2026-11-16T19:10:42Z
 export-local-base | 0 | @fixtures/manifest/export-base.json | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2027-01-02T03:04:05Z
-export-undecided-first-in-entry-order | 1 | ?ERR E_UNDECIDED e2 | export fixtures/local-example.json fixtures/export/decisions-empty.json --now 2026-11-16T19:10:42Z
-export-undecided-second | 1 | ?ERR E_UNDECIDED e3 | export fixtures/local-example.json fixtures/export/decisions-e2-only.json --now 2026-11-16T19:10:42Z
-export-decision-for-non-opaque-entry | 1 | ?ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-extra-e1.json --now 2026-11-16T19:10:42Z
-export-decision-for-unknown-id | 1 | ?ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-extra-unknown-id.json --now 2026-11-16T19:10:42Z
-export-decision-opaque-fidelity | 1 | ?~^ERR E_SCHEMA .+$ | export fixtures/local-example.json fixtures/export/decisions-opaque-fidelity.json --now 2026-11-16T19:10:42Z
-export-decision-include-without-fidelity | 1 | ?~^ERR E_SCHEMA .+$ | export fixtures/local-example.json fixtures/export/decisions-include-without-fidelity.json --now 2026-11-16T19:10:42Z
-export-decision-unknown-verb | 1 | ?~^ERR E_SCHEMA .+$ | export fixtures/local-example.json fixtures/export/decisions-unknown-decision.json --now 2026-11-16T19:10:42Z
+export-undecided-first-in-entry-order | 1 | ERR E_UNDECIDED e2 | export fixtures/local-example.json fixtures/export/decisions-empty.json --now 2026-11-16T19:10:42Z
+export-undecided-second | 1 | ERR E_UNDECIDED e3 | export fixtures/local-example.json fixtures/export/decisions-e2-only.json --now 2026-11-16T19:10:42Z
+export-decision-for-non-opaque-entry | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-extra-e1.json --now 2026-11-16T19:10:42Z
+export-decision-for-unknown-id | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-extra-unknown-id.json --now 2026-11-16T19:10:42Z
+export-decision-opaque-fidelity | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-opaque-fidelity.json --now 2026-11-16T19:10:42Z
+export-decision-include-without-fidelity | 0 | @expected/export-example.json | export fixtures/local-example.json fixtures/export/decisions-include-without-fidelity.json --now 2026-11-16T19:10:42Z
+export-decision-unknown-verb | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-unknown-decision.json --now 2026-11-16T19:10:42Z
 export-parse-invalid-omitted-unparseable | 0 | @expected/export-parse-invalid.json | export fixtures/export/parse-invalid.json fixtures/export/decisions-parse-invalid.json --now 2026-11-16T19:10:42Z
-export-parse-invalid-include-refused | 1 | ?ERR E_SCHEMA decisions | export fixtures/export/parse-invalid.json fixtures/export/decisions-parse-invalid-include.json --now 2026-11-16T19:10:42Z
+export-parse-invalid-include-refused | 1 | ERR E_SCHEMA decisions | export fixtures/export/parse-invalid.json fixtures/export/decisions-parse-invalid-include.json --now 2026-11-16T19:10:42Z
 export-unknown-top-level-dropped-and-listed | 0 | @expected/export-unknown-top-level.json | export fixtures/export/unknown-top-level.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
 export-unknown-entry-fields-dropped-and-listed | 0 | @expected/export-unknown-entry.json | export fixtures/export/unknown-entry.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
 export-output-validates-parse-invalid | 0 | OK | manifest expected/export-parse-invalid.json --export
 export-output-validates-unknown-top-level | 0 | OK | manifest expected/export-unknown-top-level.json --export
 export-output-validates-unknown-entry | 0 | OK | manifest expected/export-unknown-entry.json --export
 child-output-validates | 0 | OK | manifest expected/child-all-rules.json
-export-refuses-unknown-ro-compat | 1 | ?ERR E_RO_COMPAT x_feature | export fixtures/manifest/compat-unknown-ro-compat.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
-export-refuses-unknown-incompat | 1 | ?ERR E_INCOMPAT x_merge | export fixtures/manifest/compat-unknown-incompat.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
-export-refuses-unknown-major | 1 | ?ERR E_MAJOR | export fixtures/manifest/compat-future-major-valid.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
-export-refuses-invalid-manifest | 1 | ?ERR E_SCHEMA format | export fixtures/manifest/schema-missing-format.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-refuses-unknown-ro-compat | 1 | ERR E_RO_COMPAT x_feature | export fixtures/manifest/compat-unknown-ro-compat.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-refuses-unknown-incompat | 1 | ERR E_INCOMPAT x_merge | export fixtures/manifest/compat-unknown-incompat.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-refuses-unknown-major | 1 | ERR E_MAJOR | export fixtures/manifest/compat-future-major-valid.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-refuses-invalid-manifest | 1 | ERR E_SCHEMA format | export fixtures/manifest/schema-missing-format.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-manifest-directory | 1 | ERR E_IO | export fixtures fixtures/export/decisions-example.json --now 2026-11-16T19:10:42Z
+export-refuses-opaque-without-unreviewed | 1 | ERR E_SCHEMA unreviewed | export fixtures/manifest/schema-opaque-without-unreviewed.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-refuses-omitted-with-fidelity | 1 | ERR E_SCHEMA fidelity | export fixtures/manifest/schema-omitted-with-fidelity.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+
+# ---- export: the DECISIONS file (contract r2 item 4): the manifest reader and parser, an object of
+# {"decision": "include"|"omit"}, include may add "fidelity", each id an opaque-unreviewed entry.
+# Inputs under ${WORK} are generated by run-cases.cmake.
+export-decisions-duplicate-key | 1 | ERR E_DUPKEY | export fixtures/local-example.json fixtures/export/decisions-duplicate-key.json --now 2026-11-16T19:10:42Z
+export-decisions-duplicate-key-in-decision | 1 | ERR E_DUPKEY | export fixtures/local-example.json fixtures/export/decisions-duplicate-key-in-decision.json --now 2026-11-16T19:10:42Z
+export-decisions-bom | 1 | ERR E_BOM | export fixtures/local-example.json ${WORK}/decisions-bom.json --now 2026-11-16T19:10:42Z
+export-decisions-utf8 | 1 | ERR E_UTF8 | export fixtures/local-example.json ${WORK}/decisions-utf8.json --now 2026-11-16T19:10:42Z
+export-decisions-nul-escape | 1 | ERR E_NUL | export fixtures/local-example.json fixtures/export/decisions-nul-escape.json --now 2026-11-16T19:10:42Z
+export-decisions-nul-raw | 1 | ERR E_NUL | export fixtures/local-example.json ${WORK}/decisions-nul.json --now 2026-11-16T19:10:42Z
+export-decisions-nonfinite | 1 | ERR E_NONFINITE | export fixtures/local-example.json fixtures/export/decisions-nonfinite.json --now 2026-11-16T19:10:42Z
+export-decisions-syntax-error | 1 | ERR E_JSON | export fixtures/local-example.json fixtures/export/decisions-syntax-error.json --now 2026-11-16T19:10:42Z
+export-decisions-empty-file | 1 | ERR E_JSON | export fixtures/local-example.json ${WORK}/empty.bin --now 2026-11-16T19:10:42Z
+export-decisions-depth-65 | 1 | ERR E_LIMIT depth | export fixtures/local-example.json fixtures/export/decisions-depth-65.json --now 2026-11-16T19:10:42Z
+export-decisions-key-64kib | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json ${WORK}/decisions-key-65536.json --now 2026-11-16T19:10:42Z
+export-decisions-key-64kib-plus-one | 1 | ERR E_LIMIT string | export fixtures/local-example.json ${WORK}/decisions-key-65537.json --now 2026-11-16T19:10:42Z
+export-decisions-4mib | 0 | @expected/export-example.json | export fixtures/local-example.json ${WORK}/decisions-4194304.json --now 2026-11-16T19:10:42Z
+export-decisions-4mib-plus-one | 1 | ERR E_LIMIT manifest | export fixtures/local-example.json ${WORK}/decisions-4194305.json --now 2026-11-16T19:10:42Z
+export-decisions-missing-file | 1 | ERR E_IO | export fixtures/local-example.json fixtures/export/does-not-exist.json --now 2026-11-16T19:10:42Z
+export-decisions-directory | 1 | ERR E_IO | export fixtures/local-example.json fixtures --now 2026-11-16T19:10:42Z
+export-decisions-dev-null@posix | 1 | ERR E_IO | export fixtures/local-example.json /dev/null --now 2026-11-16T19:10:42Z
+export-decisions-dev-zero@posix | 1 | ERR E_IO | export fixtures/local-example.json /dev/zero --now 2026-11-16T19:10:42Z
+export-decisions-array | 1 | ~^ERR E_(JSON|SCHEMA decisions)$ | export fixtures/local-example.json fixtures/export/decisions-array.json --now 2026-11-16T19:10:42Z
+export-decision-not-object | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-value-not-object.json --now 2026-11-16T19:10:42Z
+export-decision-missing-verb | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-missing-decision.json --now 2026-11-16T19:10:42Z
+export-decision-omit-with-fidelity | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-omit-with-fidelity.json --now 2026-11-16T19:10:42Z
+export-decision-extra-member | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-extra-member.json --now 2026-11-16T19:10:42Z
+export-decision-for-omitted-entry | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-for-omitted-entry.json --now 2026-11-16T19:10:42Z
+
+# ---- export: the include fidelity is derived (contract r2 item 5): redacted with a non-empty
+# redactions array, else exact. A decision that gives another fidelity is E_SCHEMA decisions.
+export-derived-redacted | 0 | @expected/export-redacted-opaque.json | export fixtures/export/redacted-opaque.json fixtures/export/decisions-derived.json --now 2026-11-16T19:10:42Z
+export-derived-redacted-given-redacted | 0 | @expected/export-redacted-opaque.json | export fixtures/export/redacted-opaque.json fixtures/export/decisions-include-redacted.json --now 2026-11-16T19:10:42Z
+export-derived-redacted-given-exact | 1 | ERR E_SCHEMA decisions | export fixtures/export/redacted-opaque.json fixtures/export/decisions-include-exact.json --now 2026-11-16T19:10:42Z
+export-derived-exact-given-redacted | 1 | ERR E_SCHEMA decisions | export fixtures/local-example.json fixtures/export/decisions-exact-given-redacted.json --now 2026-11-16T19:10:42Z
+export-derived-exact-empty-redactions | 0 | @expected/export-empty-redactions.json | export fixtures/export/empty-redactions.json fixtures/export/decisions-derived.json --now 2026-11-16T19:10:42Z
+export-output-validates-redacted-opaque | 0 | OK | manifest expected/export-redacted-opaque.json --export
+export-output-validates-empty-redactions | 0 | OK | manifest expected/export-empty-redactions.json --export
+
+# ---- export: rebuilt objects (contract r2 item 6). Unknown members of creator, active, compat,
+# app_keys items and target are dropped and listed by dotted name, sorted together with the
+# unknown top-level fields, in the top-level item after the input dropped_ext items.
+export-rebuild-creator | 0 | @expected/export-rebuild-creator.json | export fixtures/export/rebuild-creator.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-rebuild-active | 0 | @expected/export-rebuild-active.json | export fixtures/export/rebuild-active.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-rebuild-compat | 0 | @expected/export-rebuild-compat.json | export fixtures/export/rebuild-compat.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-rebuild-app-keys | 0 | @expected/export-rebuild-app-keys.json | export fixtures/export/rebuild-app-keys.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-rebuild-target | 0 | @expected/export-rebuild-target.json | export fixtures/export/rebuild-target.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-rebuild-all-after-existing-dropped-ext | 0 | @expected/export-rebuild-all-after-existing-dropped-ext.json | export fixtures/export/rebuild-all-after-existing-dropped-ext.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-rebuild-entry-after-existing-dropped-ext | 0 | @expected/export-rebuild-entry-after-existing-dropped-ext.json | export fixtures/export/rebuild-entry-after-existing-dropped-ext.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-target-without-audio | 0 | @expected/export-target-without-audio.json | export fixtures/export/target-without-audio.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+export-output-validates-rebuild-creator | 0 | OK | manifest expected/export-rebuild-creator.json --export
+export-output-validates-rebuild-active | 0 | OK | manifest expected/export-rebuild-active.json --export
+export-output-validates-rebuild-compat | 0 | OK | manifest expected/export-rebuild-compat.json --export
+export-output-validates-rebuild-app-keys | 0 | OK | manifest expected/export-rebuild-app-keys.json --export
+export-output-validates-rebuild-target | 0 | OK | manifest expected/export-rebuild-target.json --export
+export-output-validates-rebuild-all-after-existing-dropped-ext | 0 | OK | manifest expected/export-rebuild-all-after-existing-dropped-ext.json --export
+export-output-validates-rebuild-entry-after-existing-dropped-ext | 0 | OK | manifest expected/export-rebuild-entry-after-existing-dropped-ext.json --export
+export-output-validates-target-without-audio | 0 | OK | manifest expected/export-target-without-audio.json --export
+
+# ---- export --now (contract r2 item 3): exactly YYYY-MM-DDTHH:MM:SSZ with a real date and time,
+# else E_SCHEMA now.
+export-now-ok-leap-day | 0 | @expected/export-base-now-leap-day.json | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2028-02-29T00:00:00Z
+export-now-ok-leap-century-last-second | 0 | @expected/export-base-now-leap-century-last-second.json | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2000-02-29T23:59:59Z
+export-now-ok-new-year | 0 | @expected/export-base-now-new-year.json | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2027-01-01T00:00:00Z
+export-now-month-13 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-13-01T00:00:00Z
+export-now-month-00 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-00-10T00:00:00Z
+export-now-day-00 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-00T00:00:00Z
+export-now-day-32 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-01-32T00:00:00Z
+export-now-april-31 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-04-31T00:00:00Z
+export-now-february-29-common-year | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-02-29T00:00:00Z
+export-now-february-29-1900 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 1900-02-29T00:00:00Z
+export-now-hour-24 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T24:00:00Z
+export-now-minute-60 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T23:60:00Z
+export-now-second-61 | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T23:59:61Z
+export-now-missing-z | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42
+export-now-offset-zero | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42+00:00
+export-now-offset-negative | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T14:10:42-05:00
+export-now-lowercase-z | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42z
+export-now-lowercase-t | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16t19:10:42Z
+export-now-space-separator | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16%2019:10:42Z
+export-now-fraction | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42.5Z
+export-now-one-digit-month | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-1-16T19:10:42Z
+export-now-trailing-space | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z%20
+export-now-date-only | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16
+export-now-empty | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now ""
+export-now-not-utf8@posix | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z%FF

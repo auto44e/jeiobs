@@ -18,7 +18,7 @@
     {"id": "p1", "status": "stored", "root": "user", "path": "user.ini", "role": "app.user", "fidelity": "exact", "size": 100, "hash": "171a7213f10a9033053e86dc1c6e19e0a4190346408fe6dd8645a3c8e1c4afc4", "x_meta": {"k": 1}, "x_list": [1]},
     {"id": "p2", "status": "stored", "root": "profiles", "path": "basic/profiles/Main/basic.ini", "role": "profile.basic", "profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "fidelity": "exact", "size": 200, "hash": "3fae5f0c4af3864a7b56a258accf99ac7057b946009d4fcad41630b7335428e6"},
     {"id": "p3", "status": "stored", "root": "scenes", "path": "basic/scenes/Main.json", "role": "collection", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 300, "hash": "c123a5b51b932c8dee7a2e95c35b6aeebde5a9835f1235120446ec6448091280"},
-    {"id": "p4", "status": "stored", "root": "plugin_manager", "path": "modules.json", "role": "app.modules", "fidelity": "exact", "size": 50, "hash": "d06ddbc25b238d4379baa5dab4ce1144f199ecdf03f03e15a74403976237cff7"}
+    {"id": "p4", "status": "stored", "root": "plugin_manager", "path": "plugin_manager/modules.json", "role": "app.modules", "fidelity": "exact", "size": 50, "hash": "d06ddbc25b238d4379baa5dab4ce1144f199ecdf03f03e15a74403976237cff7"}
   ],
   "secret_refs": [],
   "dropped_ext": []

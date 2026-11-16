@@ -7,7 +7,7 @@
   "seq": 3,
   "parent": "f70b87700e2b306a737ac4ec3cbb4565da15bd06cb23e3ac795e86d59cd69b95",
   "created_utc": "2026-11-16T18:04:05Z",
-  "label": "with an unparseable collection",
+  "label": "with an unparseable encoder file",
   "creator": {"app": "jeiobs", "version": "0.0.0-dev", "commit": "b76d7cdb1", "obs_base": "33.0.1"},
   "active": {"profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f"},
   "target": {"os": "linux", "arch": "x86_64", "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60", "app_dir": "obs-studio", "roots": {"config": "default", "user": "default", "scenes": "default", "profiles": "default", "plugin_manager": "default"}, "audio": {"sample_rate": 48000, "channels": "Stereo", "explicit": false}, "devices": []},
@@ -21,7 +21,7 @@
     {"id": "e3", "status": "stored", "root": "scenes", "path": "basic/scenes/Main.json", "role": "collection", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 2}, "bak": "e4", "load_rule": "bak-fallback", "size": 48211, "hash": "9ac7151508ec72e6b5b7116e59823986993175e6459cd1133bd5ff0c546bd553"},
     {"id": "e4", "status": "stored", "root": "scenes", "path": "basic/scenes/Main.json.bak", "role": "collection.bak", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 2}, "size": 48190, "hash": "d0bbcb5db1325adf6c6d8ffe1c20924d17b3ed2e4d3f60579560ced4c00e163d"},
     {"id": "e5", "status": "omitted", "root": "config", "path": "plugin_config/obs-websocket/persistent_data.json", "size": 913, "reason": "unknown"},
-    {"id": "e6", "status": "stored", "root": "scenes", "path": "basic/scenes/Broken.json", "role": "collection", "collection": "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "parse": "invalid", "size": 77, "hash": "c2af1941f848fd6a9157a2a804f33cdb937ea7ee1eb51e0417a0464eb5959387"}
+    {"id": "e6", "status": "stored", "root": "profiles", "path": "basic/profiles/Main/streamEncoder.json", "role": "profile.encoder.stream", "profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "parse": "invalid", "size": 77, "hash": "82c0011aba416fd77b262f403a03359f7bd3f7ad8a2e41fd62a34b0d3b16f7b8"}
   ],
   "secret_refs": [
     {"id": "s1", "entry": "e2", "pointer": "/Twitch/Token", "kind": "oauth_token", "bind": {"auth_type": "Twitch"}, "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60"}

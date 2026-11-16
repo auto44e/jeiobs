@@ -5,7 +5,7 @@
   "compat": {"incompat": [], "ro_compat": []},
   "workspace_id": "0d6f3c1e-8b2a-4c47-9e15-6a0b7d93f2c4",
   "seq": 2,
-  "parent": "ca53eba8703c3577fa989fc470d1d9743baf6559828242ced83c7525444e54f9",
+  "parent": "ef1e990ea5d72be657edc862c698de114b9658a00763cca1076fae5679968460",
   "created_utc": "2026-11-16T19:00:00Z",
   "label": "draft",
   "creator": {"app": "jeiobs", "version": "0.0.0-dev", "commit": "b76d7cdb1", "obs_base": "33.0.1"},
