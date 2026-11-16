@@ -81,8 +81,8 @@ end it.
 | Build | Result |
 | --- | --- |
 | this branch | **16 PASS, 0 FAIL**, about 50 s, no process left. Hang probe skipped in 2.1 s with a 2 s timeout; frozen probe killed by the coordinator at 7.0 s; OBS quits mid-scan in 1.4–2.8 s with 0 leaks while the scanner runs; the noisy grandchild is alive while the scan finishes in about 30 ms. |
-| this branch, clean Ubuntu 24.04 container (`tools/jeiobs/cleanroom`, under `xvfb-run`) | **15 PASS, 0 FAIL** at `73b9c2190` (before the frozen-probe check existed) |
-| round-2 code (`e5d433625`) | the frozen-probe check FAILS (still running at 20 s), the other 15 PASS |
+| this branch, clean Ubuntu 24.04 container (`tools/jeiobs/cleanroom`, under `xvfb-run`) | **15 PASS, 0 FAIL** at `6ad152a95` (before the frozen-probe check existed) |
+| round-2 code (`5948e0474`) | the frozen-probe check FAILS (still running at 20 s), the other 15 PASS |
 | unfixed (main) | the 6 original checks PASS, **all new checks FAIL** (crash: exit 139 and no list; hang: still running at 20 s; OBS blocked at exit until the 30 s timeout). |
 
 The script exits 2 (no verdict) if a needed tool is missing, if `pgrep`/`pkill`

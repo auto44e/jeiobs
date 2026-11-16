@@ -108,7 +108,7 @@ Observed on Ubuntu 24.04, GCC 13.3, CMake 3.28.3, Ninja 1.11.1, x86_64, at main
 
 **Clean-room check (2026-11-15):** `tools/jeiobs/cleanroom/` builds a fresh
 Ubuntu 24.04 image and follows these steps on a GitHub clone. On main
-`f9d84f22e` it found the three problems fixed above (no `libssl-dev`, configure
+`d03fb6538` it found the three problems fixed above (no `libssl-dev`, configure
 without the VST3 SDK path, no display for the smoke run). With them fixed:
 deps 324 s, configure PASS, build 672 steps in 390 s, and a 25 s smoke run
 under `xvfb-run` with the fork notice logged and `obs-vst3` loaded.

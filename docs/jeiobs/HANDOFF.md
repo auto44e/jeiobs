@@ -1,6 +1,6 @@
 # Current roadmap direction — 2026-11-15
 
-Inspected main `2dbad5000837e1f18f1dc92a3efc2538f2cb6355`. Owner expanded implementation scope:
+Inspected main `dd2078b1ec8a0776b3148f661c94509da25df941`. Owner expanded implementation scope:
 full S1-S6 saving/offline delivery on Windows/macOS/Linux, OBS-compatible native saves,
 graceful audio recovery, PDC preserving A/V sync, sidechains, optional listen bus,
 full adopted plugin host-spec coverage, mixed-media timing and optional recording

@@ -5,7 +5,7 @@ English dialog text, startup log notice) are done on `jeiobs/identity-ui`. What
 remains either sends data to the OBS Project, sends users to OBS Project
 support, or is an identifier that M0 must change together with config paths.
 
-Line numbers are from main `8c382452d`.
+Line numbers are from main `a88ba0bbd`.
 
 ## Sends user data to obsproject.com (decide first)
 
