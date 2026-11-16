@@ -1,0 +1,29 @@
+{
+  "Name": "infoone",
+  "Version": "1.0.0",
+  "Factory Info": {
+    "Vendor": "JeiOBS vst3-check fixture",
+    "URL": "",
+    "E-Mail": "",
+    "Flags": {
+      "Unicode": true,
+      "Classes Discardable": false,
+      "Component Non Discardable": false
+    }
+  },
+  "Classes": [
+    {
+      "CID": "6A65696F627376737433636865636B32",
+      "Category": "Audio Module Class",
+      "Name": "infoone effect (moduleinfo only)",
+      "Vendor": "JeiOBS vst3-check fixture",
+      "Version": "1.0.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx"
+      ],
+      "Class Flags": 1,
+      "Cardinality": 2147483647
+    }
+  ]
+}

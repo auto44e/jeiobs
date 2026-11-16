@@ -1,49 +1,111 @@
-# Task 003: VST3 scanner robustness (proposed)
+# Task 003: VST3 scanner robustness
 
-Status: **Proposed**, not started. It needs owner approval before any code
-changes, because it changes inherited upstream host code from task 001.
+Status: **Done on Linux** (branch `jeiobs/vst3-scanner-robustness`). Owner
+approved changing inherited upstream code for this on 2026-11-15. Windows and
+macOS are written for but **not compiled or run**.
 
 ## Problem
 
 The runtime check in [task 001](001-vst3.md#runtime-evidence-2026-11-15-branch-jeiobsvst3-runtime-check)
 (`tools/jeiobs/vst3-check/run.sh`) found these inherited behaviors on Linux:
 
-1. **One crashing plugin hides all plugins.** `obs-vst3-scanner` loads every
-   bundle in one process. If one bundle segfaults, the scanner exits 139 before
-   writing the list. OBS survives ("Pipe closed before result"), but no VST3
-   plugin can be selected.
-2. **No scan timeout.** `getScanResult` in `plugins/obs-vst3/obs-vst3.cpp`
-   blocks on `os_process_pipe_read` with no time limit. A bundle that hangs on
-   load keeps the scanner alive indefinitely.
-3. **A hung scan blocks OBS exit.** `freeVst3List()` joins `vst3ScanThread`
-   from `obs_module_unload`. With a hung scanner, OBS does not exit; it exited
-   about 1 s after I killed the scanner by hand.
+1. **One crashing plugin hides all plugins.** `obs-vst3-scanner` loaded every
+   bundle in one process. If one bundle segfaulted, the scanner exited 139 before
+   writing the list. OBS survived ("Pipe closed before result"), but no VST3
+   plugin could be selected.
+2. **No scan timeout.** A bundle that hangs on load kept the scanner alive
+   indefinitely.
+3. **A hung scan blocked OBS exit.** `freeVst3List()` joined the scan thread
+   from `obs_module_unload`, which waited for the hung scanner.
 
-Related findings (separate from this task):
+## Design
 
-4. `again-sample-accurate` silence is caused by the SDK sample (processor gain
-   defaults to 0), not the host. The host does skip the controller sync
-   (`getState` → `setComponentState`) after creating a plugin; fixing that is a
-   small separate change and will not make AGain audible.
-5. ADelay's 68–100 ms of extra delay is not attributed; see task 001.
-6. `VST3Plugin::init` assigns `sampleRate = sampleRate;` (the parameter to
-   itself). Harmless today because the member is not read.
+Agreed from two independent design reviews (Codex and Claude, read-only), then
+adjusted after three rounds of adversarial code review.
 
-## Possible approach (to agree first)
+- **The scanner is a coordinator that never loads plugin code.** Bundles with a
+  valid, non-discardable `moduleinfo.json` are read without loading code (also
+  when it lists no audio class). Every other bundle is loaded in a child,
+  `obs-vst3-scanner --probe <bundle> <result file> <nonce> <timeout ms>
+  <coordinator pid>`, one at a time. All code-load sites in `VST3Scanner` go
+  through one probe hook, so the coordinator cannot load code by accident.
+- **Probe child.** It starts a watchdog thread and waits until it runs (on
+  Windows a new thread needs the loader lock, so this must happen before
+  `LoadLibrary`). The watchdog hard-exits (`_exit` / `TerminateProcess`, code
+  86) at the timeout or when the coordinator is gone (`getppid()` change on
+  POSIX, the coordinator's process handle on Windows). Before loading the plugin,
+  the child points its stdout/stderr at `/dev/null` (POSIX) or `NUL` (Windows,
+  closing the original pipe handles), so plugin output and helper processes
+  cannot reach or hold the coordinator's pipe. The result is a JSON file written atomically
+  with the nonce; the child then hard-exits without running plugin unload code.
+- **Coordinator.** Drains each probe's stdout and stderr concurrently, then
+  waits for the probe to exit with a bound of timeout + `max(5 s, timeout/4)`
+  from spawn, and kills it if it is still there (the watchdog may be unable to
+  run, e.g. a stopped process). It accepts a result
+  only with exit status 0, a readable file, the right nonce and non-empty class
+  IDs. Anything else skips only that bundle, logged once:
+  `[VST3 Scanner] Skipped <path>: <reason>` (`probe failed`, `probe timed out`,
+  `probe timed out (killed)`, `probe produced no result`, ...). The host repeats
+  the scanner's `[VST3 Scanner]` lines in the OBS log. `VST3_SCAN_DONE` is printed only if the cache was
+  saved. Stale probe files older than an hour are removed at start.
+- **Timeout.** 30 s per probe by default (slow but valid plugins on a cold
+  start); `OBS_VST3_PROBE_TIMEOUT_MS` overrides it (clamped to 0.5–120 s). There
+  is no overall deadline: a scan with many hanging plugins takes longer, but OBS
+  is usable meanwhile (filters fall back to their saved plugin path) and exit is
+  bounded by the kill below.
+- **Host.** Two new libobs exports: `os_process_pipe_kill()` (POSIX `SIGKILL`,
+  Windows `TerminateProcess`) and `os_process_pipe_wait(pp, timeout_ms)`
+  (POSIX `waitid(…WNOWAIT)` polling, Windows `WaitForSingleObject`). Neither
+  reaps; `os_process_pipe_destroy` still does, so a kill can never hit a reused
+  PID. On
+  unload, `cancelVst3Scan()` sets a flag and kills the coordinator under a mutex,
+  then joins. Probes notice the coordinator is gone and exit.
+- **Discovery.** Sorted and deterministic; permission errors and missing
+  folders do not abort the scan. On Windows, bundle binaries are taken only from
+  the build's architecture folder (`x86_64-win`; `arm64-win`; ARM64EC:
+  `arm64ec-win`, `arm64x-win`, `x86_64-win`); single-file `.vst3` DLLs are kept.
+- Also fixed: a discardable bundle that failed was loaded twice; a cache with
+  zero usable plugins triggered a full re-probe.
 
-- Scan each bundle in its own scanner process, or have the scanner write
-  partial results so one bad bundle cannot hide the others. Report the bad
-  bundle by path in the log.
-- Add a per-bundle or per-scan timeout and kill the scanner when it expires.
-- On unload, terminate a still-running scanner before joining the thread.
-- For items 4 and 5, first find the cause (host parameter initialization, block
-  size, latency reporting) before changing anything.
+## Evidence (Linux, Ubuntu 24.04, `ENABLE_VST3=ON`, warnings as errors)
 
-## Acceptance
+`run.sh` now has 16 checks. Fixtures: the SDK samples (ADelay, AGain Sample
+Accurate, Advanced Tutorial: class IDs pinned), `invalid` (random bytes),
+`crash` (SIGSEGV on load), `hang` (never returns), `noisy` (writes fake markers
+and junk, forks a grandchild that holds every inherited fd for 30 s, then
+crashes), `exit0` (clean exit on load, no result), two moduleinfo-only
+bundles on top of crashing code (zero audio classes; one made-up class), and a
+hang probe frozen with SIGSTOP inside the plugin so that only the coordinator can
+end it.
 
-- `run.sh` turns the crash and hang `INFO` lines into checks: with a crashing or
-  hanging bundle present, the 3 good classes are still listed, the scan finishes
-  within the timeout, and OBS exits cleanly.
-- The existing 7 checks still pass; `ENABLE_VST3=OFF` still builds.
-- Keep the change separate from the upstream cherry-picks and offer it upstream
-  if it holds up.
+| Build | Result |
+| --- | --- |
+| this branch | **16 PASS, 0 FAIL**, about 50 s, no process left. Hang probe skipped in 2.1 s with a 2 s timeout; frozen probe killed by the coordinator at 7.0 s; OBS quits mid-scan in 1.4–2.8 s with 0 leaks while the scanner runs; the noisy grandchild is alive while the scan finishes in about 30 ms. |
+| this branch, clean Ubuntu 24.04 container (`tools/jeiobs/cleanroom`, under `xvfb-run`) | **15 PASS, 0 FAIL** at `73b9c2190` (before the frozen-probe check existed) |
+| round-2 code (`e5d433625`) | the frozen-probe check FAILS (still running at 20 s), the other 15 PASS |
+| unfixed (main) | the 6 original checks PASS, **all new checks FAIL** (crash: exit 139 and no list; hang: still running at 20 s; OBS blocked at exit until the 30 s timeout). |
+
+The script exits 2 (no verdict) if a needed tool is missing, if `pgrep`/`pkill`
+do not work, or if `/usr/lib/vst3` or `/usr/local/lib/vst3` contain plugins,
+which would make the class checks unreliable.
+
+## Not done / follow-ups
+
+- **Windows and macOS were not compiled or run.** Risks: handle inheritance
+  and process spawning through libobs pipes, `TerminateProcess` and loader-lock
+  behavior, the architecture-folder filter, macOS bundle loading per probe
+  (Gatekeeper prompts now happen per probed bundle).
+- Remember failed bundles between launches (a skip list keyed by path, mtime and
+  size) so a hanging plugin does not cost a timeout on every start.
+- Pre-existing upstream races, unchanged: `vst3Update` can read `list` while a
+  rescan deletes it, and a rescan holds a strong source reference.
+
+## Related findings (separate)
+
+- `again-sample-accurate` silence is caused by the SDK sample (processor gain
+  defaults to 0), not the host. The host does skip the controller sync
+  (`getState` → `setComponentState`) after creating a plugin; fixing that is a
+  small separate change and will not make AGain audible.
+- ADelay's 68–100 ms of extra delay is not attributed; see task 001.
+- `VST3Plugin::init` assigns `sampleRate = sampleRate;` (the parameter to
+  itself). Harmless today because the member is not read.

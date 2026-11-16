@@ -20,6 +20,8 @@
 #include <errno.h>
 #include <spawn.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <time.h>
 
 #include "bmem.h"
 #include "pipe.h"
@@ -138,6 +140,65 @@ os_process_pipe_t *os_process_pipe_create2(const os_process_args_t *args, const 
 {
 	char **argv = os_process_args_get_argv(args);
 	return os_process_pipe_create_internal(argv[0], argv, type);
+}
+
+bool os_process_pipe_kill(os_process_pipe_t *pp)
+{
+	return pp && kill(pp->pid, SIGKILL) == 0;
+}
+
+bool os_process_pipe_wait(os_process_pipe_t *pp, uint32_t timeout_ms)
+{
+	if (!pp) {
+		return false;
+	}
+
+	struct timespec deadline;
+	if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) {
+		return false;
+	}
+	deadline.tv_sec += timeout_ms / 1000;
+	deadline.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+	if (deadline.tv_nsec >= 1000000000L) {
+		deadline.tv_sec++;
+		deadline.tv_nsec -= 1000000000L;
+	}
+
+	/* Poll quickly at first: most children exit within a few ms. */
+	long poll_ns = 1000000L;
+	for (;;) {
+		siginfo_t info = {0};
+		if (waitid(P_PID, (id_t)pp->pid, &info, WEXITED | WNOHANG | WNOWAIT) == 0) {
+			/* Require an exit code: some macOS versions have reported
+			 * stopped children here. */
+			if (info.si_pid != 0 &&
+			    (info.si_code == CLD_EXITED || info.si_code == CLD_KILLED || info.si_code == CLD_DUMPED)) {
+				return true;
+			}
+		} else if (errno != EINTR) {
+			return false;
+		}
+
+		struct timespec now;
+		if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+			return false;
+		}
+		if (now.tv_sec > deadline.tv_sec ||
+		    (now.tv_sec == deadline.tv_sec && now.tv_nsec >= deadline.tv_nsec)) {
+			return false;
+		}
+
+		struct timespec sleep_time = {.tv_sec = 0, .tv_nsec = poll_ns};
+		poll_ns = poll_ns * 2 < 10000000L ? poll_ns * 2 : 10000000L;
+		const time_t remaining_sec = deadline.tv_sec - now.tv_sec;
+		const long remaining_nsec = deadline.tv_nsec - now.tv_nsec;
+		if (remaining_sec == 0 && remaining_nsec < sleep_time.tv_nsec) {
+			sleep_time.tv_nsec = remaining_nsec;
+		}
+
+		while (nanosleep(&sleep_time, &sleep_time) != 0 && errno == EINTR) {
+		}
+	}
 }
 
 int os_process_pipe_destroy(os_process_pipe_t *pp)

@@ -52,11 +52,20 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
   `obs-vst3.so` loads; SDK 3.8.0 is MIT and fetched, not vendored. Runtime plugin
   tests are still open; see [task 001](tasks/001-vst3.md#progress-2026-11-15-branch-jeiobsvst3-upstream).
 - Task 001 runtime check (2026-11-15, `jeiobs/vst3-runtime-check`):
-  `tools/jeiobs/vst3-check/run.sh` passes 7/7 with two SDK sample effects. ADelay
+  `tools/jeiobs/vst3-check/run.sh` passes 6/6 with two SDK sample effects. ADelay
   delays real audio by 1.078 s (expected 1.000). Inherited gaps: one crashing
   plugin hides all plugins, a hanging one has no timeout and blocks OBS exit, and
   AGain outputs silence. See [task 001](tasks/001-vst3.md#runtime-evidence-2026-11-15-branch-jeiobsvst3-runtime-check)
   and the proposed [task 003](tasks/003-vst3-scanner-robustness.md).
+- Task 003 scanner robustness (2026-11-16, `jeiobs/vst3-scanner-robustness`):
+  the scanner probes each code-loading bundle in its own child process with a
+  watchdog, so a crashing or hanging plugin is skipped (and logged) instead of
+  hiding all plugins; OBS kills a running scan on exit. New libobs exports
+  `os_process_pipe_kill` and `os_process_pipe_wait`. `run.sh` grows to 16
+  checks: 16/16 on the fix, and the new ones fail on the old code. Built in
+  worker mode (Codex implementation, Claude tests, each cross-reviewed three
+  times by the other lineage). Linux only;
+  Windows/macOS not compiled. See [task 003](tasks/003-vst3-scanner-robustness.md).
 
 ## Evidence
 

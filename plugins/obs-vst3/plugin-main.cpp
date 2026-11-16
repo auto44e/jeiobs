@@ -22,6 +22,7 @@
 extern bool loadHost();
 extern void unloadHost();
 extern bool retrieveVst3List(obs_source_t *src);
+extern void cancelVst3Scan();
 extern void freeVst3List();
 extern void register_vst3_source();
 
@@ -55,6 +56,7 @@ bool obs_module_load(void)
 
 void obs_module_unload()
 {
+	cancelVst3Scan();
 	freeVst3List();
 	unloadHost();
 }
