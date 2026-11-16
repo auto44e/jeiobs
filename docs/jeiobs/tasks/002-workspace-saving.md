@@ -23,3 +23,21 @@ fields, missing assets/devices/plugins, concurrent edits and restart-safe rollba
 Integrate legacy OBS-compatible-save tests separately from snapshot serialization.
 No live OBS writes or required owner hardware for synthetic development.
 Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
+
+## Progress
+
+- **S1-PR1** (2026-11-16): [WORKSPACE_FORMAT](../WORKSPACE_FORMAT.md) (format v1 spec),
+  [s1-persistence-audit](../s1-persistence-audit.md), and `shared/jeiobs-workspace/` (C++17, no
+  Qt, no libobs runtime): limits, path rules, BLAKE2b-256, bounded manifest parser, local and
+  export schema validation, compatibility flags, child carry-over, export projection, and the
+  `jw-check` CLI. Codex worker wrote the library and Claude worker the 328 black-box cases from
+  the spec without reading the library; the lead fixed four contract mismatches those cases found.
+  After review run 01: contract addendum r2 (allowlist-bound stored entries, consistent entry
+  fields, bounded decisions and revision reads, `CON .txt`, derived fidelity, rebuilt export
+  objects), fixed by the Codex worker with cases by the Claude worker (509 in total), and
+  `jw-check` takes UTF-8 arguments on Windows.
+  Linux (Ubuntu 24.04, GCC, CMake 3.28, `-Wall -Wextra -Werror`): `jw-unit` and `jw-cases`
+  (509/509) pass. Windows and macOS not compiled: the 3-OS CI workflow is a separate,
+  owner-merged PR. Correspondence: [debates/002-workspace-format](../debates/002-workspace-format/).
+- Next: S1-PR2 (JSON scanner with byte positions, INI reader, redactor), then PR3 and PR4 (PR4
+  waits on owner decision 1 in WORKSPACE_FORMAT section 14).

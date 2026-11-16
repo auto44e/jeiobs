@@ -1,0 +1,5 @@
+FINDING codex-1 | Major | open | “opaque-unreviewed” is accepted without “unreviewed” (Manifest.cpp:504-545), but export include dereferences it unconditionally (Manifest.cpp:1056-1060), causing termination.
+FINDING codex-2 | Major | open | DECISIONS uses unrestricted `bytes.resize` and `Json::parse` (jw-check.cpp:56-74,212-223), bypassing parser limits and enabling memory exhaustion.
+FINDING codex-3 | Major | open | `CON .txt` passes because the stem retains its space (PathRules.cpp:96-103,193-207), although the spec warns Windows may treat it as a device (WORKSPACE_FORMAT.md:624-625).
+FINDING codex-4 | Minor | open | `PrintError` writes E_UNDECIDED to stdout (jw-check.cpp:32-38), contrary to the contract’s “nothing on stdout” requirement (04-pr1-contract.md:45-46).
+VERDICT: request changes

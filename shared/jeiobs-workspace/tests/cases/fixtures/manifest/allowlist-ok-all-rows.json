@@ -1,0 +1,39 @@
+{
+  "format": "jeiobs-workspace",
+  "major": 1,
+  "minor": 0,
+  "compat": {"incompat": [], "ro_compat": []},
+  "workspace_id": "0d6f3c1e-8b2a-4c47-9e15-6a0b7d93f2c4",
+  "seq": 3,
+  "parent": "f70b87700e2b306a737ac4ec3cbb4565da15bd06cb23e3ac795e86d59cd69b95",
+  "created_utc": "2026-11-16T18:04:05Z",
+  "label": "base",
+  "creator": {"app": "jeiobs", "version": "0.0.0-dev", "commit": "b76d7cdb1", "obs_base": "33.0.1"},
+  "active": {"profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f"},
+  "target": {"os": "linux", "arch": "x86_64", "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60", "app_dir": "obs-studio", "roots": {"config": "default", "user": "default", "scenes": "default", "profiles": "default", "plugin_manager": "default"}, "audio": {"sample_rate": 48000, "channels": "Stereo", "explicit": false}, "devices": []},
+  "app_keys": [
+    {"root": "config", "file": "global.ini", "section": "Video", "key": "Renderer", "value": "OpenGL", "restore": "same-os"},
+    {"root": "config", "file": "global.ini", "section": "General", "key": "Pre31Migrated", "value": "true", "restore": "never"}
+  ],
+  "entries": [
+    {"id": "a1", "status": "stored", "root": "user", "path": "user.ini", "role": "app.user", "fidelity": "exact", "size": 100, "hash": "859c87a7a3eed5992d356f19be9078c6487068f8fb2fa0f14b3389750f032ebd"},
+    {"id": "a2", "status": "stored", "root": "scenes", "path": "basic/scenes/Second.json", "role": "collection", "collection": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 100, "hash": "d19cc9cb8d698fe41d586b6feb541236a4671692a7c639acc9f79ca9539dd123"},
+    {"id": "a3", "status": "stored", "root": "scenes", "path": "basic/scenes/Second.json.bak", "role": "collection.bak", "collection": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 100, "hash": "04baa6d7d491b30b2a1a37d7e66d508f1920d8aa3f7deb9bc12012805b9d5d2d"},
+    {"id": "a4", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/basic.ini", "role": "profile.basic", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "0f82ef554467d779f1054a577352fb2a3308c12b4871d581d1a8f29a41369f61"},
+    {"id": "a5", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/service.json", "role": "profile.service", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "07fd3b554763ce528def0641747c11fcf89fdaf7565f68505bc03cc9b905157e"},
+    {"id": "a6", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/service.json.bak", "role": "profile.service.bak", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "8b9e259ee335e922696212ef97542dad23b8ceb89cad850d20b62566b39f2e56"},
+    {"id": "a7", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/streamEncoder.json", "role": "profile.encoder.stream", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "fcc8edeadce0d899fa8d6407d7273528b7707c97bc27ac74b2417e07fbc4ef82"},
+    {"id": "a8", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/streamEncoder.json.bak", "role": "profile.encoder.stream.bak", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "17e082d79d8fea0020c039df91e2bed80aa5599ca91e36c859d142b4e0bcd94d"},
+    {"id": "a9", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/recordEncoder.json", "role": "profile.encoder.record", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "d53c3d255a569f33e6bf415db1cf2897bbe8f678ff29098060dc53ca0f45b2ca"},
+    {"id": "a10", "status": "stored", "root": "profiles", "path": "basic/profiles/Alt/recordEncoder.json.bak", "role": "profile.encoder.record.bak", "profile": "2f4e6a8c-1b3d-4e5f-9a7b-8c9d0e1f2a3b", "fidelity": "exact", "size": 100, "hash": "da0ba981bcc25ad773f8a3ec44c84f4b077db887b15b5efc2f140a0826b6ffb2"},
+    {"id": "a11", "status": "stored", "root": "plugin_manager", "path": "plugin_manager/modules.json", "role": "app.modules", "fidelity": "exact", "size": 100, "hash": "71253aaba917652e4cdae2f1a72a36cca9c378731cafb1c0b5af8be0c0d38fec"},
+    {"id": "a12", "status": "stored", "root": "config", "path": "plugin_config/obs-websocket/config.json", "role": "module.obs-websocket", "fidelity": "exact", "size": 100, "hash": "7d9b111909f9b03ffe885931e0aa998c75f520888ac8862e97448b647ea5abb4"},
+    {"id": "a13", "status": "stored", "root": "config", "path": "plugin_config/decklink-output-ui/decklinkOutputProps.json", "role": "module.decklink-output-ui", "fidelity": "exact", "size": 100, "hash": "7b20c51f1f2598324f02e3004c5ab55b391fa863b0d5fab36f807b7372f8afbe"},
+    {"id": "a14", "status": "stored", "root": "config", "path": "plugin_config/decklink-output-ui/decklinkPreviewOutputProps.json", "role": "module.decklink-output-ui", "fidelity": "exact", "size": 100, "hash": "2177cb211950d6768026990928a9eef7b692aa71c342691f25fdd3c3b65c26a7"},
+    {"id": "a15", "status": "stored", "root": "config", "path": "plugin_config/aja-output-ui/ajaOutputProps.json", "role": "module.aja-output-ui", "fidelity": "exact", "size": 100, "hash": "746146ce7d692797737990423f0790f4ba64bb6434c8cbe9809f930a0bfe7d93"},
+    {"id": "a16", "status": "stored", "root": "config", "path": "plugin_config/aja-output-ui/ajaPreviewOutputProps.json", "role": "module.aja-output-ui", "fidelity": "exact", "size": 100, "hash": "6e6cf5d751acfc53c810bc226fea4c891c872613cf9aed320d3d3916e2da2ed2"},
+    {"id": "a17", "status": "stored", "root": "config", "path": "plugin_config/aja-output-ui/ajaMiscProps.json", "role": "module.aja-output-ui", "fidelity": "exact", "size": 100, "hash": "d82f06542f84cad85241714c70d9840ab86655f61726bf53fa56e25945c0e49c"}
+  ],
+  "secret_refs": [],
+  "dropped_ext": []
+}

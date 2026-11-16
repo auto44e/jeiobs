@@ -1,0 +1,30 @@
+{
+  "x_s": "\ud800",
+  "format": "jeiobs-workspace",
+  "major": 1,
+  "minor": 0,
+  "compat": {"incompat": [], "ro_compat": []},
+  "workspace_id": "0d6f3c1e-8b2a-4c47-9e15-6a0b7d93f2c4",
+  "seq": 3,
+  "parent": "f70b87700e2b306a737ac4ec3cbb4565da15bd06cb23e3ac795e86d59cd69b95",
+  "created_utc": "2026-11-16T18:04:05Z",
+  "label": "base",
+  "creator": {"app": "jeiobs", "version": "0.0.0-dev", "commit": "b76d7cdb1", "obs_base": "33.0.1"},
+  "active": {"profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f"},
+  "target": {"os": "linux", "arch": "x86_64", "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60", "app_dir": "obs-studio", "roots": {"config": "default", "user": "default", "scenes": "default", "profiles": "default", "plugin_manager": "default"}, "audio": {"sample_rate": 48000, "channels": "Stereo", "explicit": false}, "devices": []},
+  "app_keys": [
+    {"root": "config", "file": "global.ini", "section": "Video", "key": "Renderer", "value": "OpenGL", "restore": "same-os"},
+    {"root": "config", "file": "global.ini", "section": "General", "key": "Pre31Migrated", "value": "true", "restore": "never"}
+  ],
+  "entries": [
+    {"id": "e1", "status": "stored", "root": "user", "path": "user.ini", "role": "app.user", "fidelity": "exact", "size": 3120, "hash": "d26eba417efd662e5e7c83d4d21656656838f3b8b4f6d16c4fb47afb9ee21c1b"},
+    {"id": "e2", "status": "stored", "root": "profiles", "path": "basic/profiles/Main/basic.ini", "role": "profile.basic", "profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "fidelity": "redacted", "redactions": [{"pointer": "/Twitch/Token", "kind": "oauth_token", "ref": "s1"}], "size": 2210, "hash": "79d9da617aa8fdd2371dc856636c4ffccd9a19faefea9aa7493f6ae3e8bdd7b0"},
+    {"id": "e3", "status": "stored", "root": "scenes", "path": "basic/scenes/Main.json", "role": "collection", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 2}, "bak": "e4", "load_rule": "bak-fallback", "size": 48211, "hash": "9ac7151508ec72e6b5b7116e59823986993175e6459cd1133bd5ff0c546bd553"},
+    {"id": "e4", "status": "stored", "root": "scenes", "path": "basic/scenes/Main.json.bak", "role": "collection.bak", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 2}, "size": 48190, "hash": "d0bbcb5db1325adf6c6d8ffe1c20924d17b3ed2e4d3f60579560ced4c00e163d"},
+    {"id": "e5", "status": "omitted", "root": "config", "path": "plugin_config/obs-websocket/persistent_data.json", "size": 913, "reason": "unknown"}
+  ],
+  "secret_refs": [
+    {"id": "s1", "entry": "e2", "pointer": "/Twitch/Token", "kind": "oauth_token", "bind": {"auth_type": "Twitch"}, "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60"}
+  ],
+  "dropped_ext": []
+}
