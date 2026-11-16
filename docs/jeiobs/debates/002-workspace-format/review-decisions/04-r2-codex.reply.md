@@ -1,0 +1,2 @@
+FINDING codex-1 | Major | open | The record lacks the required Flex for all three decisions and gives no rationale for choosing generated tables over utf8proc; “This item had no recommendation written” (DECISIONS.md:47-54,68-69; WORKSPACE_FORMAT.md:600-610,633-641)
+VERDICT: request changes
