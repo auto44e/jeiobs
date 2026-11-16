@@ -40,4 +40,4 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   (509/509) pass. Windows and macOS not compiled: the 3-OS CI workflow is a separate,
   owner-merged PR. Correspondence: [debates/002-workspace-format](../debates/002-workspace-format/).
 - Next: S1-PR2 (JSON scanner with byte positions, INI reader, redactor), then PR3 and PR4 (PR4
-  waits on owner decision 1 in WORKSPACE_FORMAT section 14).
+  adds `config_lock`, which the owner approved: WORKSPACE_FORMAT section 14).
