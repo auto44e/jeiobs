@@ -813,6 +813,13 @@ bool isPermissionDenied(const std::error_code &error)
 
 bool isProbeResultFileName(const std::string &name)
 {
+	// The lock-less fallback in vst3CacheSave() writes "<list name>.tmp-<pid>".
+	const std::string listTemporaryPrefix = std::filesystem::u8path(vst3ConfigPath).filename().u8string() + ".tmp-";
+	if (name.size() > listTemporaryPrefix.size() &&
+	    name.compare(0, listTemporaryPrefix.size(), listTemporaryPrefix) == 0) {
+		return true;
+	}
+
 	if (name.compare(0, 6, "probe-") != 0) {
 		return false;
 	}
@@ -1402,7 +1409,7 @@ static bool vst3CacheSave()
 		saved = obs_data_save_json_safe(root, vst3ConfigPath.c_str(), "tmp", "bak");
 	} else {
 		const char *json = obs_data_get_json(root);
-		const std::string temporaryPath = cacheDirectory() + "tmp-" + std::to_string(currentProcessId());
+		const std::string temporaryPath = vst3ConfigPath + ".tmp-" + std::to_string(currentProcessId());
 		if (json && os_quick_write_utf8_file(temporaryPath.c_str(), json, std::strlen(json), false) &&
 		    os_rename(temporaryPath.c_str(), vst3ConfigPath.c_str()) == 0) {
 			saved = true;
