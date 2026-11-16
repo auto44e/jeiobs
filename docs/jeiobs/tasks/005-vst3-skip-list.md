@@ -65,7 +65,7 @@ therefore treated less stickily, never more.
 | Observation | Entry |
 | --- | --- |
 | valid result with matching nonce (zero audio classes included), checked before any marker | removed |
-| `timeout` marker, a deadline kill by the coordinator after `setup` (its own monotonic deadline passed), or `setup` + exit 91 | timeout strike |
+| `timeout` marker, a deadline kill by the coordinator after `setup` (its own monotonic deadline passed, allowing 100 ms for the libobs wait clock), or `setup` + exit 91 | timeout strike |
 | `load-failed`; or `setup` and the process died or exited without a result | remembered failure |
 | `save-failed`, `setup` + exit 90, a wait error, nonce mismatch, unparsable result, no marker, unknown marker, `setup` never written, scanner-side reject, cancel, lock failure | unchanged |
 
@@ -162,7 +162,8 @@ scan, also when 0; a crash after Rescan raises `failures` to 2; a torn
 under the lock, so a blocked scanner changes nothing.
 
 Checks 12–17 add these readings: the `kind` of a remembered failure is any
-non-empty string other than `timeout`; an ignored entry or file leaves exactly
+non-empty string other than `timeout` (the scanner writes `failure`, and its
+loader accepts only `failure` and `timeout`, ignoring other entries); an ignored entry or file leaves exactly
 one entry for the path after the extra probe; the shim of #17 finds the marker
 as `A.status` for an argument A of the probe's command line (the result path).
 
@@ -185,6 +186,12 @@ changing the exit status.
   Windows x64 and macOS arm64 and x86_64; obs-vst3 is not built on Windows arm64).
   The platform code uses `CreateFileW`/`LockFileEx` (Windows) and
   `CFBundleCopyExecutableURL` with CoreFoundation linkage (macOS).
+- The 100 ms slack in the deadline decision (claude-5 follow-up) covers the
+  libobs wait ending up to one clock tick early on Windows and clock slew on
+  macOS. Trade-off (codex-6): a genuine wait error within 100 ms of the deadline,
+  after a successful kill, is counted as a timeout strike. A first strike only
+  retries on the next launch, so the cost is at most one extra 7-day backoff
+  after a second such error. No check covers the slack.
 - Not covered by a check: the 30-day `missing_since` pruning, the lock-less
   fallback (ENOLCK), and the host side (Rescan passing `--retry-failed`, the
   warning text). From review run 01, also without a check: a wait error that is

@@ -17,3 +17,12 @@ codex-3 | Minor | accepted-fix | codex | review-02/04-r2-codex.reply.md (FINDING
 codex-4 | Minor | accepted-fix | codex | review-02/04-r2-codex.reply.md (FINDING codex-4) | —
 claude-5 | Minor | open | claude | review-02/03-r2-claude.reply.md (FINDING claude-5) | follow-up (Minor, less sticky direction): use the same clock as the libobs pipe wait for the deadline decision
 codex-5 | Minor | open | codex | review-02/04-r2-codex.reply.md (FINDING codex-5) | follow-up (Minor): say in the task doc that the loader accepts only kind failure or timeout
+
+## PR #22 (follow-ups), reviews `followup-review-01` (`7adc69a8b`) and `followup-review-02` (`26b40c2c4`)
+
+Both peers approved both runs; codex-1 to codex-5 and claude-1 to claude-5 accepted.
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-6 | Minor | accepted-fix | claude | followup-review-02/03-r2-claude.reply.md (FINDING claude-6) | —
+codex-6 | Minor | withdrawn | codex | followup-review-02/04-r2-codex.reply.md (FINDING codex-6) | —

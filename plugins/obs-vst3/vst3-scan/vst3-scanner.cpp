@@ -1321,7 +1321,11 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 
 	bool waitError = false;
 	if (!os_process_pipe_wait(pipe, remainingMs)) {
-		const bool deadlinePassed = std::chrono::steady_clock::now() >= deadline;
+		// The libobs wait runs on its own clock (WaitForSingleObject's tick on Windows,
+		// CLOCK_MONOTONIC on POSIX), which can end a timed-out wait slightly before steady_clock
+		// reaches the deadline. Allow for that so a deadline kill is still a timeout strike.
+		constexpr auto kWaitClockSlack = std::chrono::milliseconds(100);
+		const bool deadlinePassed = std::chrono::steady_clock::now() + kWaitClockSlack >= deadline;
 		const bool killed = os_process_pipe_kill(pipe);
 		coordinatorKilled = coordinatorKilled || (deadlinePassed && killed);
 		const bool cleanupWaitSucceeded = os_process_pipe_wait(pipe, 5000);
