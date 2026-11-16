@@ -73,7 +73,10 @@ nplug() { python3 -c "import json,sys;print(len(json.load(open(sys.argv[1]))['pl
 obs() { # HOME PROBE TIMEOUT [ENV...]
   local h="$1" p="$2" t="$3"; shift 3
   mkdir -p "$h/.config/obs-studio/plugins/$p/bin/64bit" && cp "$WORK/$p.so" "$h/.config/obs-studio/plugins/$p/bin/64bit/"
+  # No audio server: the default profile's Desktop Audio capture would otherwise
+  # mix whatever this machine is playing into the measured output.
   (cd "$BIN" && env "$@" HOME="$h" XDG_CONFIG_HOME="$h/.config" QT_QPA_PLATFORM=offscreen \
+    PULSE_SERVER=unix:/nonexistent/jeiobs-vst3check PIPEWIRE_REMOTE=/nonexistent/jeiobs-vst3check \
     timeout "$t" ./obs --disable-updater --disable-missing-files-check >"$h/obs.log" 2>&1); echo $?; }
 GOOD=("$SAMPLES/adelay.vst3" "$SAMPLES/again-sample-accurate.vst3")
 ADELAY=0CDBB66985D548A9BFD8371909D24BB3
