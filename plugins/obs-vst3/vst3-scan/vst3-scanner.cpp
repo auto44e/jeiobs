@@ -30,6 +30,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <future>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -40,6 +41,8 @@
 #include <vector>
 
 #ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
 #include <process.h>
 #include <windows.h>
 #else
@@ -117,7 +120,7 @@ std::string cacheDirectory()
 	const auto separator = vst3ConfigPath.find_last_of('/');
 #endif
 	if (separator == std::string::npos) {
-		return "./";
+		return {};
 	}
 
 	return vst3ConfigPath.substr(0, separator + 1);
@@ -152,7 +155,12 @@ void removeStaleProbeResults()
 {
 	namespace fs = std::filesystem;
 
-	const fs::path directory = fs::u8path(cacheDirectory());
+	const std::string directoryName = cacheDirectory();
+	if (directoryName.empty()) {
+		return;
+	}
+
+	const fs::path directory = fs::u8path(directoryName);
 	std::error_code error;
 	fs::directory_iterator entries(directory, fs::directory_options::skip_permission_denied, error);
 	const fs::directory_iterator end;
@@ -217,12 +225,44 @@ void drainProbeOutput(os_process_pipe_t *pipe, bool errorOutput)
 bool prepareProbeOutput()
 {
 #ifdef _WIN32
-	const HANDLE stdoutHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-	const HANDLE stderrHandle = GetStdHandle(STD_ERROR_HANDLE);
-	const bool stdoutReady = stdoutHandle == nullptr || stdoutHandle == INVALID_HANDLE_VALUE ||
-				 !!SetHandleInformation(stdoutHandle, HANDLE_FLAG_INHERIT, 0);
-	const bool stderrReady = stderrHandle == nullptr || stderrHandle == INVALID_HANDLE_VALUE ||
-				 !!SetHandleInformation(stderrHandle, HANDLE_FLAG_INHERIT, 0);
+	auto redirectStream = [](DWORD standardHandle, int fileDescriptor) {
+		const HANDLE originalHandle = GetStdHandle(standardHandle);
+		const HANDLE nullHandle = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+						      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+		if (nullHandle == nullptr || nullHandle == INVALID_HANDLE_VALUE) {
+			return false;
+		}
+
+		const int nullFileDescriptor = _open_osfhandle(reinterpret_cast<intptr_t>(nullHandle), _O_WRONLY | _O_BINARY);
+		if (nullFileDescriptor == -1) {
+			CloseHandle(nullHandle);
+			return false;
+		}
+
+		if (_dup2(nullFileDescriptor, fileDescriptor) != 0) {
+			_close(nullFileDescriptor);
+			return false;
+		}
+		_close(nullFileDescriptor);
+
+		const intptr_t redirectedValue = _get_osfhandle(fileDescriptor);
+		if (redirectedValue == -1) {
+			return false;
+		}
+
+		const HANDLE redirectedHandle = reinterpret_cast<HANDLE>(redirectedValue);
+		if (!SetStdHandle(standardHandle, redirectedHandle)) {
+			return false;
+		}
+
+		if (originalHandle != nullptr && originalHandle != INVALID_HANDLE_VALUE && originalHandle != redirectedHandle) {
+			CloseHandle(originalHandle);
+		}
+		return true;
+	};
+
+	const bool stdoutReady = redirectStream(STD_OUTPUT_HANDLE, STDOUT_FILENO);
+	const bool stderrReady = redirectStream(STD_ERROR_HANDLE, STDERR_FILENO);
 	return stdoutReady && stderrReady;
 #else
 	const int nullFile = open("/dev/null", O_RDWR | O_CLOEXEC);
@@ -278,43 +318,34 @@ bool parseProcessId(const char *value, unsigned long long &processId)
 
 bool startProbeWatchdog(int timeoutMs, unsigned long long parentProcessId)
 {
-	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-	std::mutex startMutex;
-	std::condition_variable startCondition;
-	bool startFinished = false;
-	bool startSucceeded = false;
-
-	std::thread watchdog([deadline, parentProcessId, &startMutex, &startCondition, &startFinished, &startSucceeded] {
+	std::promise<bool> startPromise;
+	std::future<bool> startResult = startPromise.get_future();
+	std::thread watchdog([timeoutMs, parentProcessId, startPromise = std::move(startPromise)]() mutable {
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 #ifdef _WIN32
 		if (parentProcessId > std::numeric_limits<DWORD>::max()) {
-			std::lock_guard<std::mutex> lock(startMutex);
-			startFinished = true;
-			startCondition.notify_one();
+			startPromise.set_value(false);
 			return;
 		}
 
 		HANDLE parentHandle = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(parentProcessId));
-		if (!parentHandle || WaitForSingleObject(parentHandle, 0) == WAIT_OBJECT_0) {
-			std::lock_guard<std::mutex> lock(startMutex);
-			startFinished = true;
-			startCondition.notify_one();
+		if (!parentHandle) {
+			startPromise.set_value(false);
+			return;
+		}
+		if (WaitForSingleObject(parentHandle, 0) == WAIT_OBJECT_0) {
+			CloseHandle(parentHandle);
+			startPromise.set_value(false);
 			return;
 		}
 #else
 		if (static_cast<unsigned long long>(getppid()) != parentProcessId) {
-			std::lock_guard<std::mutex> lock(startMutex);
-			startFinished = true;
-			startCondition.notify_one();
+			startPromise.set_value(false);
 			return;
 		}
 #endif
 
-		{
-			std::lock_guard<std::mutex> lock(startMutex);
-			startFinished = true;
-			startSucceeded = true;
-		}
-		startCondition.notify_one();
+		startPromise.set_value(true);
 
 		for (;;) {
 			if (std::chrono::steady_clock::now() >= deadline) {
@@ -335,12 +366,7 @@ bool startProbeWatchdog(int timeoutMs, unsigned long long parentProcessId)
 		}
 	});
 
-	{
-		std::unique_lock<std::mutex> lock(startMutex);
-		startCondition.wait(lock, [&startFinished] { return startFinished; });
-	}
-
-	if (!startSucceeded) {
+	if (!startResult.get()) {
 		watchdog.join();
 		return false;
 	}
@@ -462,6 +488,9 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 		return reject("could not start probe");
 	}
 
+	const auto spawnTime = std::chrono::steady_clock::now();
+	const auto margin = std::chrono::milliseconds(std::max(5000, timeoutMs / 4));
+	const auto deadline = spawnTime + std::chrono::milliseconds(timeoutMs) + margin;
 	struct ProbeTimeoutState {
 		std::condition_variable condition;
 		std::mutex mutex;
@@ -470,29 +499,67 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 	};
 
 	ProbeTimeoutState timeoutState;
-	std::thread timeoutThread([pipe, timeoutMs, &timeoutState] {
-		std::unique_lock<std::mutex> lock(timeoutState.mutex);
-		if (timeoutState.condition.wait_for(lock, std::chrono::milliseconds(timeoutMs + 2000),
-						    [&timeoutState] { return timeoutState.finished; })) {
-			return;
+	std::thread timeoutThread;
+	std::thread errorReader;
+	auto finishThreads = [&] {
+		{
+			std::lock_guard<std::mutex> lock(timeoutState.mutex);
+			timeoutState.finished = true;
 		}
+		timeoutState.condition.notify_one();
 
-		timeoutState.killed = os_process_pipe_kill(pipe);
-	});
+		if (timeoutThread.joinable()) {
+			timeoutThread.join();
+		}
+		if (errorReader.joinable()) {
+			errorReader.join();
+		}
+	};
+	auto destroyAfterThreadFailure = [&] {
+		os_process_pipe_kill(pipe);
+		finishThreads();
+		os_process_pipe_destroy(pipe);
+	};
 
-	std::thread errorReader([pipe] { drainProbeOutput(pipe, true); });
+	try {
+		timeoutThread = std::thread([pipe, deadline, &timeoutState] {
+			std::unique_lock<std::mutex> lock(timeoutState.mutex);
+			if (timeoutState.condition.wait_until(lock, deadline, [&timeoutState] { return timeoutState.finished; })) {
+				return;
+			}
+
+			timeoutState.killed = os_process_pipe_kill(pipe);
+		});
+		errorReader = std::thread([pipe] { drainProbeOutput(pipe, true); });
+	} catch (...) {
+		destroyAfterThreadFailure();
+		return reject("could not start probe threads");
+	}
+
 	drainProbeOutput(pipe, false);
 	errorReader.join();
+	finishThreads();
 
+	bool coordinatorKilled = false;
 	{
 		std::lock_guard<std::mutex> lock(timeoutState.mutex);
-		timeoutState.finished = true;
+		coordinatorKilled = timeoutState.killed;
 	}
-	timeoutState.condition.notify_one();
-	timeoutThread.join();
+
+	const auto now = std::chrono::steady_clock::now();
+	uint32_t remainingMs = 0;
+	if (now < deadline) {
+		remainingMs = static_cast<uint32_t>(
+			std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
+	}
+
+	if (!os_process_pipe_wait(pipe, remainingMs)) {
+		coordinatorKilled = os_process_pipe_kill(pipe) || coordinatorKilled;
+		os_process_pipe_wait(pipe, 5000);
+	}
 
 	const int status = os_process_pipe_destroy(pipe);
-	if (timeoutState.killed) {
+	if (coordinatorKilled) {
 		return reject("probe timed out (killed)");
 	}
 	if (status != EXIT_SUCCESS) {

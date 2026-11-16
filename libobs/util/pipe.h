@@ -32,6 +32,8 @@ EXPORT os_process_pipe_t *os_process_pipe_create(const char *cmd_line, const cha
 EXPORT os_process_pipe_t *os_process_pipe_create2(const os_process_args_t *args, const char *type);
 /* Requests hard process termination without reaping; destroy reaps the process. */
 EXPORT bool os_process_pipe_kill(os_process_pipe_t *pp);
+/* Waits up to timeout_ms for process exit without reaping; destroy still reaps the process. */
+EXPORT bool os_process_pipe_wait(os_process_pipe_t *pp, uint32_t timeout_ms);
 EXPORT int os_process_pipe_destroy(os_process_pipe_t *pp);
 
 EXPORT size_t os_process_pipe_read(os_process_pipe_t *pp, uint8_t *data, size_t len);
