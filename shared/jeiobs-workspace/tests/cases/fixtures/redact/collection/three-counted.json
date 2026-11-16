@@ -1,0 +1,43 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 6, "custom_size": false, "items": [{"name": "Overlay", "visible": true, "id": 1}]}
+        },
+        {
+            "id": "image_source",
+            "name": "Logo",
+            "settings": {"file": "/home/user/logo.png"}
+        },
+        {
+            "id": "color_source_v3",
+            "name": "Color",
+            "settings": {"color": 4278190335}
+        },
+        {
+            "id": "group",
+            "name": "Group",
+            "settings": {"id_counter": 0, "custom_size": true, "cx": 100, "cy": 100, "items": []}
+        },
+        {
+            "id": "wasapi_input_capture",
+            "name": "Mic",
+            "settings": {"device_id": "default"}
+        }
+    ]
+}

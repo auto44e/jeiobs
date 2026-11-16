@@ -1,0 +1,28 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 6, "custom_size": false, "items": [{"name": "Overlay", "visible": true, "id": 1}]}
+        },
+        {
+            "id": "browser_source",
+            "name": "Chat",
+            "settings": {"url": "https://SECRETvalue-br-1@chat.example.com/overlay?access_token=SECRETvalue-br-2&channel=PLAINvalue-br-1#PLAINvalue-br-2", "css": "/* token=PLAINvalue-br-3 */", "x_url": "https://PLAINvalue-br-4@h.example.com/", "width": 400}
+        }
+    ]
+}

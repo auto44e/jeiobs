@@ -1,0 +1,13 @@
+{
+    "type": "rtmp_common",
+    "key": "PLAINvalue-svc-6",
+    "settings": {
+        "service": "Twitch",
+        "Key": "PLAINvalue-svc-7",
+        "KEY": "PLAINvalue-svc-8",
+        "other": {"key": "PLAINvalue-svc-9", "password": "PLAINvalue-svc-10", "server": "rtmp://PLAINvalue-svc-11@h.example.com/"},
+        "keys": ["PLAINvalue-svc-12"],
+        "stream_key": "PLAINvalue-svc-13"
+    },
+    "password": "PLAINvalue-svc-14"
+}

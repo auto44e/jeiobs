@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "redacted", "redactions": [{"pointer": "/auth_required", "kind": "forced", "start": 22, "end": 27, "was": false}, {"pointer": "/server_password", "kind": "ws_password", "start": 53, "end": 69}]}

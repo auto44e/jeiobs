@@ -1,0 +1,21 @@
+﻿;jeiobs synthetic profile
+[General]
+Name=Untitled
+[Twitch]
+Name=PLAINvalue-ev-1
+Token=
+#Token=PLAINvalue-ev-2
+RefreshToken=
+Token=
+[YouTube]
+Token=
+RefreshToken=
+[Restream]
+Token=
+RefreshToken=
+[AdvOut]
+FFURL=rtmp://@ingest.example.com/live?token=&x=PLAINvalue-ev-3
+[Twitch]
+RefreshToken=
+[Auth]
+Type=Twitch

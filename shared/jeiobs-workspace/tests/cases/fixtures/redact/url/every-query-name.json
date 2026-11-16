@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "srt://relay.example.com:9000?key=SECRETvalue-q-1&token=SECRETvalue-q-2&access_token=SECRETvalue-q-3&auth=SECRETvalue-q-4&password=SECRETvalue-q-5&passphrase=SECRETvalue-q-6&secret=SECRETvalue-q-7&streamid=SECRETvalue-q-8&latency=PLAINvalue-q-1",
+        "bwtest": false
+    }
+}

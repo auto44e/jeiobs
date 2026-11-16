@@ -1,0 +1,7 @@
+{
+    "type": "RTMP_COMMON",
+    "settings": {
+        "service": "Twitch",
+        "bwtest": false
+    }
+}

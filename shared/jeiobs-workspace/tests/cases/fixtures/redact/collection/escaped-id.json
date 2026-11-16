@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "browser\u005fsource",
+            "name": "Escaped",
+            "settings": {"url": "https://SECRETvalue-eid-1@h.example.com/"}
+        }
+    ]
+}

@@ -1,0 +1,29 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 6, "custom_size": false, "items": [{"name": "Overlay", "visible": true, "id": 1}]}
+        },
+        {
+            "id": "image_source",
+            "name": "Logo",
+            "settings": {"file": "/a.png"}
+        },
+        {"name": "No id", "settings": {}}
+    ]
+}

@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_common",
+    "settings": {
+        "service": "Twitch",
+        "server": "rtmp://SECRETvalue-row-5@ingest.example.com/live"
+    }
+}

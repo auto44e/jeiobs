@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "vlc_source",
+            "name": "VLC",
+            "settings": {"playlist": [{"value": "rtsp://SECRETvalue-vlc-1:SECRETvalue-vlc-2@cam.example.com/stream?auth=SECRETvalue-vlc-3&channel=PLAINvalue-vlc-1", "hidden": false, "selected": false}, {"value": "/home/user/PLAINvalue-vlc-2 token=PLAINvalue-vlc-3.mkv", "hidden": false, "selected": false}, {"value": "http://media.example.com/v.mp4?secret=SECRETvalue-vlc-4#t=PLAINvalue-vlc-5", "hidden": true, "selected": false}, {"name": "http://PLAINvalue-vlc-4@x.example.com/"}], "loop": false, "shuffle": false}
+        }
+    ]
+}

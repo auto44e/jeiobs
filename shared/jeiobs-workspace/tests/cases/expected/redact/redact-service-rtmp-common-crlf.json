@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "redacted", "redactions": [{"pointer": "/settings/key", "kind": "stream_key", "start": 165, "end": 182}]}

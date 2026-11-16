@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_common",
+    "settings": {
+        "service": "Twitch",
+        "ke\u0079": "SECRETvalue-svc-15"
+    }
+}

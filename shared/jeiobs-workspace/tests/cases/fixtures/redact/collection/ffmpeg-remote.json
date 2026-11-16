@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "Remote",
+            "settings": {"is_local_file": false, "input": "srt://SECRETvalue-fr-1:SECRETvalue-fr-2@relay.example.com:9000?streamid=SECRETvalue-fr-3&latency=PLAINvalue-fr-1"}
+        }
+    ]
+}

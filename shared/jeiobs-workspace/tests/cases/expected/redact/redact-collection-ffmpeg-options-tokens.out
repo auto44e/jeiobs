@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "Options",
+            "settings": {"is_local_file": true, "local_file": "/home/user/a.mp4", "ffmpeg_options": "rtsp_transport=tcp http_proxy=http://@proxy.example.com:3128 key=PLAINvalue-fo-1 srt_url=srt://relay.example.com:9000?streamid=&latency=PLAINvalue-fo-2 token=PLAINvalue-fo-3 note=PLAINvalue-fo-4@PLAINvalue-fo-5 url=https://cdn.example.com/x?Token=#PLAINvalue-fo-6 proxy2=http://PLAINvalue-fo-7.example.com:8080 last=PLAINvalue-fo-8@x"}
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "redactions": [{"pointer": "/sources/1/settings/url", "kind": "url_credential", "start": 661, "end": 677}, {"pointer": "/sources/1/settings/url", "kind": "url_credential", "start": 716, "end": 732}]}

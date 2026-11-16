@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "redactions": [{"pointer": "/settings/server", "kind": "url_credential", "start": 101, "end": 119}]}

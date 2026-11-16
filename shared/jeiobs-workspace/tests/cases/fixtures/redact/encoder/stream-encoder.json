@@ -1,0 +1,13 @@
+{
+    "rate_control": "CBR",
+    "bitrate": 6000,
+    "keyint_sec": 2,
+    "preset": "veryfast",
+    "profile": "high",
+    "tune": "",
+    "x264opts": "PLAINvalue-enc-1",
+    "key": "PLAINvalue-enc-2",
+    "password": "PLAINvalue-enc-3",
+    "server": "rtmp://PLAINvalue-enc-4:PLAINvalue-enc-5@ingest.example.com/live?key=PLAINvalue-enc-6",
+    "settings": {"key": "PLAINvalue-enc-7", "bearer_token": "PLAINvalue-enc-8"}
+}

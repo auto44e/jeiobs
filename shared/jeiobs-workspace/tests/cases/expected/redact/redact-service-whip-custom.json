@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "redactions": [{"pointer": "/settings/bearer_token", "kind": "bearer_token", "start": 127, "end": 144}]}

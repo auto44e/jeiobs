@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://ingest.example.com/a?next=rtmp://SECRETvalue-two-1:SECRETvalue-two-2@relay.example.com/b&token=SECRETvalue-two-3",
+        "bwtest": false
+    }
+}

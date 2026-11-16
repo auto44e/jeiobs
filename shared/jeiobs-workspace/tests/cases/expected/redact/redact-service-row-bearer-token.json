@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "redacted", "redactions": [{"pointer": "/settings/bearer_token", "kind": "bearer_token", "start": 101, "end": 118}]}

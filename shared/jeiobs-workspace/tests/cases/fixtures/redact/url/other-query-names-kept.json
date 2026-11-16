@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://ingest.example.com/live?apikey=PLAINvalue-n-1&stream_key=PLAINvalue-n-2&keys=PLAINvalue-n-3&tokens=PLAINvalue-n-4&key_=PLAINvalue-n-5&xkey=PLAINvalue-n-6&%6Bey=PLAINvalue-n-7&key%3D=PLAINvalue-n-8&k=PLAINvalue-n-9",
+        "bwtest": false
+    }
+}
