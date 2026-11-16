@@ -12,11 +12,18 @@
 #include "jeiobs/workspace/Hash.hpp"
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
+#include "jeiobs/workspace/Redactor.hpp"
 
+#include "jeiobs/workspace/Limits.hpp"
+
+#include <filesystem>
+#include <fstream>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -25,6 +32,10 @@ using Jeiobs::Workspace::ErrorCode;
 using Jeiobs::Workspace::Json;
 using Jeiobs::Workspace::Manifest;
 using Jeiobs::Workspace::ManifestMode;
+using Jeiobs::Workspace::RedactOptions;
+using Jeiobs::Workspace::RedactOutcome;
+using Jeiobs::Workspace::RedactResult;
+namespace Limits = Jeiobs::Workspace::Limits;
 
 void PrintError(const Error &error)
 {
@@ -191,7 +202,17 @@ int CheckChild(const std::string &parent_path, const std::string &draft_path)
 
 int CheckExport(const std::string &manifest_path, const std::string &decisions_path, const std::string &now)
 {
-	const auto manifest = Jeiobs::Workspace::LoadManifest(manifest_path, ManifestMode::Local);
+	const auto manifest_bytes = Jeiobs::Workspace::ReadFile(manifest_path);
+	if (!manifest_bytes.ok()) {
+		PrintError(manifest_bytes.error);
+		return 1;
+	}
+	const auto manifest_hash = Jeiobs::Workspace::HashBytes(manifest_bytes.bytes);
+	if (!manifest_hash.ok()) {
+		PrintError(manifest_hash.error);
+		return 1;
+	}
+	const auto manifest = Jeiobs::Workspace::ParseManifest(manifest_bytes.bytes, ManifestMode::Local);
 	if (!manifest.ok()) {
 		PrintError(manifest.error);
 		return 1;
@@ -206,12 +227,8 @@ int CheckExport(const std::string &manifest_path, const std::string &decisions_p
 		PrintError(decisions.error);
 		return 1;
 	}
-	const auto hash = Jeiobs::Workspace::HashFile(manifest_path);
-	if (!hash.ok()) {
-		PrintError(hash.error);
-		return 1;
-	}
-	const auto result = Jeiobs::Workspace::ProjectForExport(*manifest.value, hash.value, *decisions.value, now);
+	const auto result =
+		Jeiobs::Workspace::ProjectForExport(*manifest.value, manifest_hash.value, *decisions.value, now);
 	if (!result.ok()) {
 		PrintError(result.error);
 		return 1;
@@ -221,10 +238,124 @@ int CheckExport(const std::string &manifest_path, const std::string &decisions_p
 	return 0;
 }
 
+Jeiobs::Workspace::BytesResult ReadBlob(const std::string &path)
+{
+	try {
+		const std::filesystem::path filesystem_path = std::filesystem::u8path(path);
+		std::error_code status_error;
+		const std::filesystem::file_status status = std::filesystem::status(filesystem_path, status_error);
+		if (status_error || !std::filesystem::is_regular_file(status)) {
+			return {{}, {ErrorCode::Io, {}}};
+		}
+		std::error_code size_error;
+		const std::uintmax_t file_size = std::filesystem::file_size(filesystem_path, size_error);
+		if (size_error) {
+			return {{}, {ErrorCode::Io, {}}};
+		}
+		if (file_size > Limits::kDocumentBytes ||
+		    file_size > static_cast<std::uintmax_t>(std::numeric_limits<std::size_t>::max())) {
+			return {{}, {ErrorCode::Limit, "blob"}};
+		}
+		std::ifstream input;
+		Jeiobs::Workspace::Detail::OpenUtf8(input, path);
+		if (!input.is_open()) {
+			return {{}, {ErrorCode::Io, {}}};
+		}
+		std::string bytes(static_cast<std::size_t>(file_size), '\0');
+		if (!bytes.empty()) {
+			input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+			if (input.gcount() != static_cast<std::streamsize>(bytes.size())) {
+				return {{}, {ErrorCode::Io, {}}};
+			}
+		}
+		return {std::move(bytes), {}};
+	} catch (...) {
+		return {{}, {ErrorCode::Io, {}}};
+	}
+}
+
+bool WriteUtf8(const std::string &path, std::string_view bytes)
+{
+	try {
+		std::ofstream output;
+		Jeiobs::Workspace::Detail::OpenUtf8(output, path);
+		if (!output.is_open()) {
+			return false;
+		}
+		output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+		return output.good();
+	} catch (...) {
+		return false;
+	}
+}
+
+Json RedactReportJson(const Jeiobs::Workspace::RedactReport &report)
+{
+	Json value = Json::object();
+	value["outcome"] = report.outcome == RedactOutcome::Stored ? "stored" : "omitted";
+	if (report.outcome == RedactOutcome::Omitted) {
+		value["reason"] = report.reason;
+		return value;
+	}
+	value["fidelity"] = report.fidelity;
+	if (report.parse_invalid) {
+		value["parse"] = "invalid";
+	}
+	Json redactions = Json::array();
+	for (const auto &redaction : report.redactions) {
+		Json item = {
+			{"pointer", redaction.pointer},
+			{"kind", redaction.kind},
+			{"start", redaction.start},
+			{"end", redaction.end},
+		};
+		if (redaction.has_was) {
+			item["was"] = redaction.was;
+		}
+		redactions.push_back(std::move(item));
+	}
+	value["redactions"] = std::move(redactions);
+	if (report.unreviewed_count != 0U) {
+		value["unreviewed"] = {{"rules", "u1"}, {"count", report.unreviewed_count}};
+	}
+	return value;
+}
+
+int CheckRedact(const std::string &role, const std::string &input_path, const std::string &output_path,
+		const std::string &report_path, const RedactOptions &options)
+{
+	if (!Jeiobs::Workspace::IsRedactRole(role)) {
+		PrintError({ErrorCode::Schema, "role"});
+		return 1;
+	}
+	const auto input = ReadBlob(input_path);
+	if (!input.ok()) {
+		PrintError(input.error);
+		return 1;
+	}
+	const RedactResult result = Jeiobs::Workspace::Redact(role, input.bytes, options);
+	if (!result.ok()) {
+		PrintError(result.error);
+		return 1;
+	}
+	const std::string report_bytes = RedactReportJson(result.report).dump();
+	if (!WriteUtf8(report_path, report_bytes)) {
+		PrintError({ErrorCode::Io, {}});
+		return 1;
+	}
+	if (result.report.outcome == RedactOutcome::Stored && !WriteUtf8(output_path, result.bytes)) {
+		PrintError({ErrorCode::Io, {}});
+		return 1;
+	}
+	std::cout << "OK\n";
+	return 0;
+}
+
 void PrintUsage()
 {
 	std::cerr << "usage: jw-check hash FILE | path PATH | manifest FILE [--export] | "
-		     "revision FILE | child PARENT DRAFT | export MANIFEST DECISIONS --now RFC3339\n";
+		     "revision FILE | child PARENT DRAFT | export MANIFEST DECISIONS --now RFC3339 | "
+		     "redact ROLE INFILE OUTFILE REPORT [--ws-placeholder STR]\n";
 }
 
 } // namespace
@@ -254,6 +385,18 @@ int Run(int argc, char **argv)
 		}
 		if (command == "export" && argc == 6 && std::string(argv[4]) == "--now") {
 			return CheckExport(argv[2], argv[3], argv[5]);
+		}
+		if (command == "redact" && (argc == 6 || argc == 8)) {
+			RedactOptions options;
+			if (argc == 8) {
+				if (std::string(argv[6]) != "--ws-placeholder") {
+					PrintUsage();
+					return 2;
+				}
+				options.ws_placeholder = argv[7];
+				options.has_ws_placeholder = true;
+			}
+			return CheckRedact(argv[2], argv[3], argv[4], argv[5], options);
 		}
 		PrintUsage();
 		return 2;

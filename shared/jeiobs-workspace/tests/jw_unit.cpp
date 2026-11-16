@@ -11,8 +11,11 @@
 #include "jw_test.hpp"
 
 #include "jeiobs/workspace/Hash.hpp"
+#include "jeiobs/workspace/IniScan.hpp"
+#include "jeiobs/workspace/JsonScan.hpp"
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
+#include "jeiobs/workspace/Redactor.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -208,8 +211,26 @@ void TestExportObjectRebuild()
 	document["creator"] = {{"app", "jeiobs"}, {"x", 1}};
 	document["active"] = {{"profile", "profile"}, {"x", 2}};
 	document["compat"]["x"] = 3;
-	document["target"] = {{"os", "linux"}, {"audio", {{"sample_rate", 48000}, {"x", 4}}}, {"x", 5}};
-	document["app_keys"] = {{{"root", "config"}, {"x", 6}}, {{"restore", "never"}}};
+	document["target"] = {
+		{"os", "linux"},
+		{"audio", {{"sample_rate", 48000}, {"channels", "Stereo"}, {"x", 4}}},
+		{"x", 5},
+	};
+	document["app_keys"] = {
+		{{"root", "config"},
+		 {"file", "global.ini"},
+		 {"section", "Video"},
+		 {"key", "Renderer"},
+		 {"value", "OpenGL"},
+		 {"restore", "same-os"},
+		 {"x", 6}},
+		{{"root", "config"},
+		 {"file", "global.ini"},
+		 {"section", "General"},
+		 {"key", "LastVersion"},
+		 {"value", "1"},
+		 {"restore", "never"}},
+	};
 	document["future"] = true;
 	document["dropped_ext"] = {{{"entry", nullptr}, {"fields", {"old"}}}};
 	const auto parsed = Jeiobs::Workspace::ParseManifest(document.dump(), ManifestMode::Local);
@@ -300,6 +321,104 @@ void TestFileHash()
 	JW_CHECK(directory_read.error.code == Jeiobs::Workspace::ErrorCode::Io);
 }
 
+void TestScanners()
+{
+	const auto json = Jeiobs::Workspace::JsonScan::Scan(
+		R"json({"a/b~c":"value","settings":{"key":"secret"},"items":[{"name":"one"}],"dup":1,"dup":2})json");
+	JW_CHECK(!json.ok());
+	JW_CHECK(json.duplicate_key);
+	JW_CHECK(json.strings.size() == 3U);
+	JW_CHECK(json.strings[0].pointer == "/a~1b~0c");
+	JW_CHECK(json.strings[1].pointer == "/settings/key");
+	JW_CHECK(json.strings[2].pointer == "/items/0/name");
+	JW_CHECK(json.members[0].key == "a/b~c");
+	JW_CHECK(json.members[0].key_start < json.members[0].key_end);
+
+	const auto deep = Jeiobs::Workspace::JsonScan::Scan(
+		"[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]");
+	JW_CHECK(deep.ok());
+
+	const auto ini = Jeiobs::Workspace::IniScan::Scan(
+		"\xef\xbb\xbf[Twitch]\r\nToken=one=two\r\nToken=three\n# comment\n[Other]\nkey=value\n");
+	JW_CHECK(ini.ok());
+	JW_CHECK(ini.has_bom);
+	JW_CHECK(ini.sections.size() == 2U);
+	JW_CHECK(ini.keys.size() == 3U);
+	JW_CHECK(ini.keys[0].pointer == "/Twitch/Token");
+	JW_CHECK(ini.keys[0].value_start < ini.keys[0].value_end);
+	JW_CHECK(ini.keys[0].value_end - ini.keys[0].value_start == 7U);
+
+	const auto ini_pointer = Jeiobs::Workspace::IniScan::Scan("[a/b~c]\nkey=value\n");
+	JW_CHECK(ini_pointer.ok());
+	JW_CHECK(ini_pointer.keys[0].pointer == "/a~1b~0c/key");
+}
+
+void TestRedactor()
+{
+	const std::string service =
+		R"json({"type":"rtmp_common","settings":{"key":"STREAM","bearer_token":"BEARER","username":"USER","password":"PASS","server":"rtmp://u:p@example/live?token=QUERY&x=y"}})json";
+	const auto service_result = Jeiobs::Workspace::Redact("profile.service", service);
+	JW_CHECK(service_result.ok());
+	JW_CHECK(service_result.report.outcome == Jeiobs::Workspace::RedactOutcome::Stored);
+	JW_CHECK(service_result.report.fidelity == "redacted");
+	JW_CHECK(service_result.report.redactions.size() == 6U);
+	JW_CHECK(service_result.bytes.find("STREAM") == std::string::npos);
+	JW_CHECK(service_result.bytes.find("u:p@") == std::string::npos);
+	JW_CHECK(service_result.bytes.find("QUERY") == std::string::npos);
+
+	Jeiobs::Workspace::RedactOptions websocket_options;
+	websocket_options.ws_placeholder = "0123456789ABCDEFGHIJKLMNOPQRSTUV";
+	websocket_options.has_ws_placeholder = true;
+	const auto websocket = Jeiobs::Workspace::Redact("module.obs-websocket",
+							 R"json({"server_password":"old","auth_required":false})json",
+							 websocket_options);
+	JW_CHECK(websocket.ok());
+	JW_CHECK(websocket.report.redactions.size() == 2U);
+	JW_CHECK(websocket.bytes.find("\"auth_required\":true") != std::string::npos);
+	JW_CHECK(websocket.bytes.find(websocket_options.ws_placeholder) != std::string::npos);
+	JW_CHECK(websocket.report.redactions[1].has_was);
+	JW_CHECK(!websocket.report.redactions[1].was);
+
+	const auto basic = Jeiobs::Workspace::Redact(
+		"profile.basic",
+		"[Twitch]\nToken=oauth\n[AdvOut]\nFFURL=rtmp://user:pass@host/live?key=secret\n[Third]\nX=y\n");
+	JW_CHECK(basic.ok());
+	JW_CHECK(basic.report.fidelity == "opaque-unreviewed");
+	JW_CHECK(basic.report.unreviewed_count == 2U);
+	JW_CHECK(basic.bytes.find("oauth") == std::string::npos);
+	JW_CHECK(basic.bytes.find("user:pass@") == std::string::npos);
+
+	const auto collection = Jeiobs::Workspace::Redact(
+		"collection",
+		R"json({"sources":[{"id":"browser_source","settings":{"url":"https://u:p@host/?token=q"}},{"id":"scene"}]})json");
+	JW_CHECK(collection.ok());
+	JW_CHECK(collection.report.fidelity == "opaque-unreviewed");
+	JW_CHECK(collection.report.unreviewed_count == 1U);
+	JW_CHECK(collection.bytes.find("u:p@") == std::string::npos);
+	JW_CHECK(collection.bytes.find("token=") != std::string::npos);
+
+	const auto invalid_service =
+		Jeiobs::Workspace::Redact("profile.service", R"json({"type":"rtmp_common","type":"rtmp_common"})json");
+	JW_CHECK(invalid_service.ok());
+	JW_CHECK(invalid_service.report.outcome == Jeiobs::Workspace::RedactOutcome::Omitted);
+	JW_CHECK(invalid_service.report.reason == "unparseable");
+	JW_CHECK(invalid_service.bytes.empty());
+
+	const auto invalid_encoder = Jeiobs::Workspace::Redact("profile.encoder.stream", "{");
+	JW_CHECK(invalid_encoder.ok());
+	JW_CHECK(invalid_encoder.report.outcome == Jeiobs::Workspace::RedactOutcome::Stored);
+	JW_CHECK(invalid_encoder.report.parse_invalid);
+	JW_CHECK(invalid_encoder.bytes == "{");
+
+	Jeiobs::Workspace::RedactOptions invalid_options;
+	invalid_options.ws_placeholder = "short";
+	invalid_options.has_ws_placeholder = true;
+	const auto invalid_placeholder = Jeiobs::Workspace::Redact(
+		"module.obs-websocket", R"json({"server_password":"old"})json", invalid_options);
+	JW_CHECK(invalid_placeholder.error.code == Jeiobs::Workspace::ErrorCode::Schema);
+	JW_CHECK(invalid_placeholder.error.detail == "ws-placeholder");
+}
+
 } // namespace
 
 int main()
@@ -312,5 +431,7 @@ int main()
 	TestExportObjectRebuild();
 	TestCarryOverAndExport();
 	TestFileHash();
+	TestScanners();
+	TestRedactor();
 	return JwTest::failures == 0 ? 0 : 1;
 }

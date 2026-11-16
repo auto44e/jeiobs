@@ -414,6 +414,86 @@ bool IsObjectWithString(const Json &object, const char *field)
 	return object.contains(field) && object.at(field).is_string();
 }
 
+Error ValidateKnownStringFields(const Json &object, std::string_view detail,
+				const std::initializer_list<const char *> &known_fields)
+{
+	if (!object.is_object()) {
+		return Schema(std::string(detail));
+	}
+	for (const char *field : known_fields) {
+		if (object.contains(field) && !object.at(field).is_string()) {
+			return Schema(std::string(detail));
+		}
+	}
+	return {};
+}
+
+Error ValidateAppKeys(const Json &document)
+{
+	for (const Json &app_key : document.at("app_keys")) {
+		if (!app_key.is_object()) {
+			return Schema("app_keys");
+		}
+		for (const char *field : {"root", "file", "section", "key", "value", "restore"}) {
+			if (!IsObjectWithString(app_key, field)) {
+				return Schema("app_keys");
+			}
+		}
+		const std::string &restore = app_key.at("restore").get_ref<const std::string &>();
+		if (restore != "same-os" && restore != "never") {
+			return Schema("app_keys");
+		}
+	}
+	return {};
+}
+
+Error ValidateDroppedExtensions(const Json &document)
+{
+	for (const Json &extension : document.at("dropped_ext")) {
+		if (!extension.is_object() || !extension.contains("entry") || !extension.contains("fields")) {
+			return Schema("dropped_ext");
+		}
+		if (!extension.at("entry").is_null() && !extension.at("entry").is_string()) {
+			return Schema("dropped_ext");
+		}
+		if (!extension.at("fields").is_array()) {
+			return Schema("dropped_ext");
+		}
+		for (const Json &field : extension.at("fields")) {
+			if (!field.is_string()) {
+				return Schema("dropped_ext");
+			}
+		}
+	}
+	return {};
+}
+
+Error ValidateTargetAudio(const Json &document, ManifestMode mode)
+{
+	const Json &target = document.at("target");
+	if (!target.contains("audio")) {
+		return {};
+	}
+	const Json &audio = target.at("audio");
+	if (!audio.is_object() || !audio.contains("sample_rate") || !IsPositiveInteger(audio.at("sample_rate")) ||
+	    !audio.contains("channels") || !audio.at("channels").is_string() ||
+	    audio.at("channels").get_ref<const std::string &>().empty()) {
+		return Schema("target.audio");
+	}
+	if (audio.contains("explicit")) {
+		if (mode == ManifestMode::Export || !audio.at("explicit").is_boolean()) {
+			return Schema(mode == ManifestMode::Export ? "target" : "target.audio");
+		}
+	}
+	if (audio.contains("src")) {
+		if (mode == ManifestMode::Export || !audio.at("src").is_object() ||
+		    !IsObjectWithString(audio.at("src"), "entry")) {
+			return Schema(mode == ManifestMode::Export ? "target" : "target.audio");
+		}
+	}
+	return {};
+}
+
 Error ValidateCompat(const Json &document, bool &ro_compat)
 {
 	if (!document.contains("compat")) {
@@ -784,6 +864,14 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 		if (!document.at(field).is_object()) {
 			return {std::nullopt, Schema(field)};
 		}
+		const Error string_error =
+			std::string_view(field) == "creator"
+				? ValidateKnownStringFields(document.at(field), field,
+							    {"app", "version", "commit", "obs_base"})
+				: ValidateKnownStringFields(document.at(field), field, {"profile", "collection"});
+		if (!string_error.ok()) {
+			return {std::nullopt, string_error};
+		}
 	}
 	if (!document.at("target").is_object()) {
 		return {std::nullopt, Schema("target")};
@@ -796,6 +884,18 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 	}
 	if (!document.at("dropped_ext").is_array()) {
 		return {std::nullopt, Schema("dropped_ext")};
+	}
+	const Error audio_error = ValidateTargetAudio(document, mode);
+	if (!audio_error.ok()) {
+		return {std::nullopt, audio_error};
+	}
+	const Error app_keys_error = ValidateAppKeys(document);
+	if (!app_keys_error.ok()) {
+		return {std::nullopt, app_keys_error};
+	}
+	const Error dropped_ext_error = ValidateDroppedExtensions(document);
+	if (!dropped_ext_error.ok()) {
+		return {std::nullopt, dropped_ext_error};
 	}
 	const Error export_object_error = ValidateExportObjects(document, mode);
 	if (!export_object_error.ok()) {
@@ -980,6 +1080,18 @@ void AppendDropped(Json &dropped, const Json &entry, std::vector<std::string> fi
 	}
 	record["fields"] = std::move(fields);
 	dropped.push_back(std::move(record));
+}
+
+Json CopyDroppedExtensions(const Json &extensions)
+{
+	Json copied = Json::array();
+	for (const Json &extension : extensions) {
+		Json item = Json::object();
+		item["entry"] = extension.at("entry");
+		item["fields"] = extension.at("fields");
+		copied.push_back(std::move(item));
+	}
+	return copied;
 }
 
 std::string EntryKey(const Json &entry)
@@ -1289,7 +1401,7 @@ JsonResult ProjectForExport(const Manifest &manifest, std::string_view bytesHash
 		}
 		result["app_keys"] = std::move(app_keys);
 
-		Json dropped_ext = manifest.document.at("dropped_ext");
+		Json dropped_ext = CopyDroppedExtensions(manifest.document.at("dropped_ext"));
 		AppendDropped(dropped_ext, nullptr, ExportUnknownFields(manifest.document));
 
 		Json projected_entries = Json::array();
