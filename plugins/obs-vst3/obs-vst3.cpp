@@ -339,7 +339,7 @@ static void getScanResult(obs_source_t *src)
 
 	vst3ScanDone.store(true, std::memory_order_release);
 	if (src) {
-		if (!cancelled) {
+		if (!vst3ScanCancelled.load(std::memory_order_acquire)) {
 			obs_source_update_properties(src);
 		}
 		obs_source_release(src);
