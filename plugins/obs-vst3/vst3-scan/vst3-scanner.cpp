@@ -131,8 +131,7 @@ std::string cacheDirectory();
 
 int64_t currentTimeSeconds()
 {
-	return std::chrono::duration_cast<std::chrono::seconds>(
-		       std::chrono::system_clock::now().time_since_epoch())
+	return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
 		.count();
 }
 
@@ -467,9 +466,7 @@ void rememberProbeFailure(const std::string &bundlePath, const BinaryFingerprint
 	entry.failures++;
 	entry.lastFailed = now;
 	entry.missingSince = 0;
-	entry.retryAfter = std::strcmp(kind, "timeout") == 0 && entry.failures >= 2
-				   ? now + kTimeoutBackoffSeconds
-				   : 0;
+	entry.retryAfter = std::strcmp(kind, "timeout") == 0 && entry.failures >= 2 ? now + kTimeoutBackoffSeconds : 0;
 	skipList.entries[bundlePath] = std::move(entry);
 	saveSkipList();
 }
@@ -526,9 +523,8 @@ bool resolveVst3Binary(const std::string &bundlePath, std::string &binaryPath)
 	binaryPath = bundle.u8string();
 	return true;
 #elif defined(__APPLE__)
-	CFURLRef bundleUrl = CFURLCreateFromFileSystemRepresentation(kCFAllocatorDefault,
-								      reinterpret_cast<const UInt8 *>(bundlePath.c_str()),
-								      bundlePath.size(), true);
+	CFURLRef bundleUrl = CFURLCreateFromFileSystemRepresentation(
+		kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(bundlePath.c_str()), bundlePath.size(), true);
 	if (!bundleUrl) {
 		return false;
 	}
@@ -553,7 +549,8 @@ bool resolveVst3Binary(const std::string &bundlePath, std::string &binaryPath)
 
 	const CFIndex length = CFStringGetMaximumSizeOfFileSystemRepresentation(executablePath);
 	std::vector<char> pathBuffer(static_cast<size_t>(length) + 1);
-	const bool converted = CFStringGetFileSystemRepresentation(executablePath, pathBuffer.data(), pathBuffer.size());
+	const bool converted =
+		CFStringGetFileSystemRepresentation(executablePath, pathBuffer.data(), pathBuffer.size());
 	CFRelease(executablePath);
 	if (!converted) {
 		return false;
@@ -674,8 +671,8 @@ public:
 			return;
 		}
 
-		handle_ = CreateFileW(widePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-				      OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		handle_ = CreateFileW(widePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+				      nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 		bfree(widePath);
 		if (handle_ == INVALID_HANDLE_VALUE) {
 			handle_ = nullptr;
@@ -726,10 +723,7 @@ public:
 #endif
 	}
 
-	bool locked() const
-	{
-		return locked_;
-	}
+	bool locked() const { return locked_; }
 
 private:
 	bool locked_ = false;
@@ -1322,7 +1316,8 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 							}
 
 							classInfo.path = bundlePath;
-							classInfo.pluginName = std::filesystem::u8path(bundlePath).stem().u8string();
+							classInfo.pluginName =
+								std::filesystem::u8path(bundlePath).stem().u8string();
 							parsedClasses.push_back(std::move(classInfo));
 						}
 						obs_data_array_release(jsonPluginList);
@@ -1361,7 +1356,7 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 
 	if (probeStatus.marker == ProbeMarker::Timeout) {
 		return rememberFailure("timeout", "timeout",
-				      coordinatorKilled ? "probe timed out (killed)" : "probe timed out");
+				       coordinatorKilled ? "probe timed out (killed)" : "probe timed out");
 	}
 	if (coordinatorKilled && probeStatus.marker == ProbeMarker::Setup) {
 		return rememberFailure("timeout", "timeout", "probe timed out (killed)");
