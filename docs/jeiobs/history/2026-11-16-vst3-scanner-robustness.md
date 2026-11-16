@@ -18,5 +18,12 @@ How it was built (worker mode, AI-assisted; not human review):
    instead of exact classes, unproven fixtures, loose timeouts, fail-open
    process checks).
 4. Round 2: both workers fixed the adjudicated findings. The lead fixed a
-   missing-folder warning the test worker found. Round-2 diffs were reviewed
-   again by the other lineage.
+   missing-folder warning the test worker found, and tightened two tests after
+   Codex's second review.
+5. Claude's second review showed the coordinator's own kill never worked on
+   POSIX (drains end at once after the probe's stdio redirect, then `waitpid`
+   was unbounded; shown with a SIGSTOP-frozen probe) and a use-after-scope in
+   the watchdog handshake (shown with ThreadSanitizer on a copy of the pattern).
+6. Round 3: Codex added `os_process_pipe_wait` and fixed those; Claude added the
+   frozen-probe check and proved it fails on the round-2 code. Round-3 diffs
+   were reviewed again by the other lineage.
