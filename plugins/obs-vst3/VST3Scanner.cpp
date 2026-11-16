@@ -107,9 +107,16 @@ bool isVST3Entry(const fs::directory_entry &entry, std::error_code &error)
 #endif
 }
 
+bool isMissingPath(const std::error_code &error)
+{
+	return error == std::errc::no_such_file_or_directory ||
+	       error.default_error_condition() == std::errc::no_such_file_or_directory;
+}
+
 void logDirectoryIterationError(const fs::path &root, const std::error_code &error)
 {
-	if (error && !isPermissionDenied(error)) {
+	/* Search folders are optional: a missing one is normal, not an error. */
+	if (error && !isPermissionDenied(error) && !isMissingPath(error)) {
 		blog(LOG_WARNING, "[VST3 Scanner] Directory iteration stopped at %s: %s", root.u8string().c_str(),
 		     error.message().c_str());
 	}
