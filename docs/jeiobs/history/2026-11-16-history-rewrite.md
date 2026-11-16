@@ -36,6 +36,13 @@ help-links rebase).
 5. Docs that cite SHAs of rewritten commits were updated. Debate transcripts were
    left verbatim; use the table below to translate.
 
+## Follow-up error
+
+After the force push, the quick-checks workflow failed on `main` and on the PR
+branch (runs 43805282753 and 43805282657): its whitespace step ran
+`git diff --check <before>` and the "before" commit no longer existed
+("fatal: bad object"). Fixed in PR #18: the step falls back to checking HEAD.
+
 ## Not fixed by the rewrite
 
 GitHub keeps `refs/pull/<n>/head` for every PR. Those refs still point at the old

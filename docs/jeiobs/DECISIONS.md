@@ -97,31 +97,48 @@ The lead may merge its own PR only when all of these hold:
    just a report. Local and remote CI are reported separately, at the exact head
    SHA being merged.
 3. **A peer debate reviewed the exact head SHA.** Every self-merge gets a review
-   by both lineages with at least two cross-talk rounds, run with
-   `tools/jeiobs/peer-review/review.sh`. It keeps every prompt and reply, gives
-   each peer its own previous reply and the other's latest one, runs both peers
-   read-only, and fails closed: a timed-out, failed or empty turn means there
-   was no review.
+   run by both lineages with `tools/jeiobs/peer-review/review.sh`, at least two
+   rounds:
+   - The peers read a detached checkout of the reviewed commit, not the lead's
+     working tree.
+   - Round 1 is blind: each peer reviews independently. From round 2 the peers
+     see each other's replies; the lineage that did not write the change speaks
+     first.
+   - Both are confined: Claude has only the Read, Glob and Grep tools and no MCP
+     servers; Codex runs with `--sandbox read-only` and no MCP servers.
+   - Every prompt, reply and stderr log is kept. The run fails closed if a turn
+     times out, errors, is empty, or lacks a VERDICT line or a FINDING line for
+     every ledger row the peer owns. A failed run is not a review.
+   - Design consults (for example `~/.kiro/bin/peer-debate.sh` debates before
+     code is written) are not gate reviews. Their transcripts are still
+     committed with the decision they informed.
    - Code by one lineage is reviewed adversarially by the other first.
    - Real-time audio, persistence formats, plugin execution, process control and
      libobs API changes repeat review rounds until a round finds no blocker or
      major issue.
    - If the head changes after the review, both lineages review the new head.
+     One exception: a commit that only adds the review run's own files under
+     the PR's `debates/<pr>/` folder (checked with
+     `git diff --name-only <reviewed SHA> <head>`) needs no further review. The
+     merge then pins that head, and the run's `00-meta.md` names the reviewed
+     SHA.
      After a history rewrite, record old→new SHAs and show that the trees are
      identical (`git diff --quiet old new`); only real changes need review.
    - The merge uses `gh pr merge --merge --match-head-commit <reviewed SHA>`.
 4. **No open blocker or major finding.** The lead keeps a findings ledger in
-   the PR's debate folder: ID, severity, status, finder, and the finding's text
-   verbatim. Severity uses one scale (Blocker, Major, Minor), and only the finder
-   may lower it.
+   the PR's debate folder, one row per finding: ID, severity, status, finder,
+   and the source, meaning the file and FINDING line in a committed transcript
+   where the finder's own words are. Severity uses one scale (Blocker, Major,
+   Minor) and is the finder's latest; only the finder may lower it.
    - A finding is closed when it is fixed and the finder accepts the fix in a
      later round, or when the lead rejects it with a reason and the finder
      withdraws it in a later round.
    - Each closure must be an explicit `FINDING <ID> … accepted-fix|withdrawn`
      line from the finder. Not mentioning a finding does not close it.
-   - If the finder keeps a blocker or major finding open after two cross-talk
-     rounds, the debate is inconclusive. It goes to the owner as options, a
-     recommendation and the trade-off, and the PR waits.
+   - The debate is inconclusive when the finder still holds a blocker or major
+     finding open at the end of two consecutive review runs and the lead has no
+     further change to offer. It goes to the owner as options, a recommendation
+     and the trade-off, and the PR waits.
 5. **Recorded.**
    - The PR lists the transcripts, who wrote what and who reviewed it.
    - It is labelled AI-assisted, never as human review.
