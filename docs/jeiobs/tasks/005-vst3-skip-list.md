@@ -1,13 +1,15 @@
 # Task 005: remember failed VST3 bundles (task 003 D6)
 
 Status: **Done on Linux**. Follow-up to
-[task 003](003-vst3-scanner-robustness.md#decisions) decision D6. Windows and
-macOS are written for but **not compiled or run**.
+[task 003](003-vst3-scanner-robustness.md#decisions) decision D6. Windows x64
+and macOS (arm64, x86_64) **compile** in the full CI build but were **not run**.
 
 Authorship: Codex (worker, implementation `obs-vst3: remember failed bundles`),
 Claude (worker, `tools/jeiobs/vst3-check/skip-list.sh` and `skiplist.py`,
 written from this spec without the implementation), lead (integration fix for
-the lock-less temp file, clang-format on the changed lines, this record).
+the lock-less temp file, clang-format on the changed lines, this record). After
+review run 01: Codex fixed its findings and Claude added checks 12–17 for them,
+again without reading the implementation.
 Review: see the PR's review run under `debates/005-vst3-skip-list/`.
 Peer work is AI-assisted, not human review.
 
@@ -32,11 +34,13 @@ information never escalates to a stickier outcome.
 - `{"version":1,"bundles":[{path, binary, size, mtime_ticks, crc32, obs_version,
   kind, reason, failures, first_failed, last_failed, retry_after, missing_since}]}`.
   Unknown versions or malformed entries are ignored (the worst case is one extra
-  probe).
+  probe). Numeric fields must be JSON integers: an entry with a double, a string
+  or a missing number is ignored, and a non-integer `version` ignores the file.
 
 ### Fingerprint
 - The binary the SDK would load: Windows, the enumerated `.vst3` file; Linux,
-  `Contents/<arch>-linux/<stem>.so`; macOS, the bundle executable from
+  `Contents/<uname().machine>-linux/<stem>.so`, as the SDK's `module_linux.cpp`
+  builds it; macOS, the bundle executable from
   `CFBundleCopyExecutableURL` (no code load).
 - `size`, `mtime_ticks` (opaque) and CRC32 over the bytes (libobs `calc_crc32`,
   64 KiB chunks), captured stat → hash → stat. If the two stats differ, nothing is
@@ -50,15 +54,20 @@ The probe child writes `<result>.status` (with the nonce) through its own temp
 file: `setup` immediately before `Module::create`; `load-failed` when
 `Module::create` fails; `save-failed` when the result cannot be saved. The
 watchdog writes `timeout` (separate temp file) only on its deadline branch, and
-only after `setup` was written; never on parent death. Exit codes are
-diagnostics only.
+only after `setup` was written; never on parent death. Writing `setup` and
+telling the watchdog it was written happen under one mutex. Exit codes are
+diagnostics only, with two exceptions that can only make an outcome less
+sticky: exit 90 (no result and the `save-failed` marker could not be written)
+leaves the entry unchanged, and exit 91 (the watchdog could not write
+`timeout`) counts as a timeout strike. A plugin that exits 90 or 91 itself is
+therefore treated less stickily, never more.
 
 | Observation | Entry |
 | --- | --- |
-| valid result with matching nonce (zero audio classes included) | removed |
-| `timeout` marker, or a deadline kill by the coordinator after `setup` | timeout strike |
+| valid result with matching nonce (zero audio classes included), checked before any marker | removed |
+| `timeout` marker, a deadline kill by the coordinator after `setup` (its own monotonic deadline passed), or `setup` + exit 91 | timeout strike |
 | `load-failed`; or `setup` and the process died or exited without a result | remembered failure |
-| `save-failed`, nonce mismatch, unparsable result, no marker, unknown marker, `setup` never written, scanner-side reject, cancel, lock failure | unchanged |
+| `save-failed`, `setup` + exit 90, a wait error, nonce mismatch, unparsable result, no marker, unknown marker, `setup` never written, scanner-side reject, cancel, lock failure | unchanged |
 
 ### Policy
 - Remembered failures are skipped while the fingerprint matches. No time-based
@@ -161,7 +170,7 @@ as `A.status` for an argument A of the probe's command line (the result path).
 
 | Build | Result |
 | --- | --- |
-| this branch | **32 PASS, 0 FAIL** (`tools/jeiobs/vst3-check/run.sh`): the 16 task-003 checks and 16 skip-list checks. |
+| this branch | **40 PASS, 0 FAIL** (`tools/jeiobs/vst3-check/run.sh`): the 16 task-003 checks and 24 skip-list checks. |
 | implementation before the lead's fix | 31 PASS; #8 "stale temp files" FAILED: the lock-less fallback wrote `<dir>/tmp-<pid>` and never removed a stale one. Fixed: `<list>.tmp-<pid>`, removed after 1 h. |
 | unfixed (main, with the new checks) | the 16 task-003 checks PASS, **all 16 skip-list checks FAIL** (no `vst3skip.json` is written). |
 | `6fb0cd502` (before the review run 01 fixes), with checks 12–17 | 35 PASS, **5 FAIL**: #15 exit 90 (remembered as a failure; a Rescan raises `failures`), #15 exit 91 (a failure, not a timeout strike), #16 entries (`size` `N.0` accepted), #16 versions (1.5 accepted), #17 (the valid result rejected: "probe produced no valid status"). #12–#14 PASS. |
@@ -171,9 +180,11 @@ changing the exit status.
 
 ## Not done / follow-ups
 
-- **Windows and macOS were not compiled or run.** The platform code uses
-  `CreateFileW`/`LockFileEx` (Windows) and `CFBundleCopyExecutableURL` with
-  CoreFoundation linkage (macOS).
+- **Windows and macOS were not run.** They compile in the full CI build
+  (`jeiobs-build.yaml` run 43829533572 at `6fb0cd502`: `vst3-scanner.cpp` built on
+  Windows x64 and macOS arm64 and x86_64; obs-vst3 is not built on Windows arm64).
+  The platform code uses `CreateFileW`/`LockFileEx` (Windows) and
+  `CFBundleCopyExecutableURL` with CoreFoundation linkage (macOS).
 - Not covered by a check: the 30-day `missing_since` pruning, the lock-less
   fallback (ENOLCK), and the host side (Rescan passing `--retry-failed`, the
   warning text). From review run 01, also without a check: a wait error that is
