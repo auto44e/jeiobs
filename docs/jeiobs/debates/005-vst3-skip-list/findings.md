@@ -25,4 +25,4 @@ Both peers approved both runs; codex-1 to codex-5 and claude-1 to claude-5 accep
 ID | severity | status | finder | source | lead's note
 --- | --- | --- | --- | --- | ---
 claude-6 | Minor | accepted-fix | claude | followup-review-02/03-r2-claude.reply.md (FINDING claude-6) | —
-codex-6 | Minor | see followup-review-02 | codex | followup-review-02/04-r2-codex.reply.md (FINDING codex-6) | a wait error within 100 ms of the deadline after a successful kill counts as a strike; cost at most one extra backoff; written in task 005 Not done
+codex-6 | Minor | withdrawn | codex | followup-review-02/04-r2-codex.reply.md (FINDING codex-6) | —
