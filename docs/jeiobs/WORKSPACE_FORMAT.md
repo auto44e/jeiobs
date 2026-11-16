@@ -236,7 +236,9 @@ atomically.
   revision. It must not write a child of the revision or export it.
 - Unknown `major`: no writes of any kind (child, export, restore). The reader shows the revision
   read-only if it still validates under the v1 rules, and refuses it otherwise.
-- A minor only adds optional fields or features. Readers accept every minor of their major.
+- A minor only adds optional fields or features. Readers accept every minor of their major. A new
+  row in the section 7 allowlist (a new restorable file) is not optional for a reader that
+  would restore the revision: it needs an `incompat` or `ro_compat` feature name.
 - A writer creating a child copies the parent's unknown top-level fields as JSON values. It copies
   an entry's unknown fields only if the child entry has the same `root`, `path` and `hash` as the
   parent entry; otherwise it drops them and lists them in `dropped_ext`.
@@ -283,8 +285,8 @@ Section 8 lists every secret key.
 | File | Root | Role | Captured | Secret keys | Fidelity |
 | --- | --- | --- | --- | --- | --- |
 | `global.ini` | config | — | reviewed keys only, as `app_keys` (below) | legacy `[OBSWebSocket] ServerPassword` | — |
-| `user.ini` | user | `app.user` | whole file | — | `exact`; `opaque-unreviewed` with unknown sections or a non-empty `[BasicWindow] ExtraBrowserDocks` |
-| `basic/scenes/<f>.json`, `<f>.json.bak` | scenes | `collection`, `collection.bak` | whole file | browser-source URL credentials | `opaque-unreviewed` until every field is reviewed |
+| `user.ini` | user | `app.user` | whole file | dock URLs in `ExtraBrowserDocks` (flagged, not redacted) | `exact`; `opaque-unreviewed` with unknown sections or a non-empty `[BasicWindow] ExtraBrowserDocks` |
+| `basic/scenes/<f>.json`, `<f>.json.bak` | scenes | `collection`, `collection.bak` | whole file | browser-source, media-source and VLC playlist URL credentials | `opaque-unreviewed` until every field is reviewed |
 | `basic/profiles/<d>/basic.ini` | profiles | `profile.basic` | whole file | OAuth `Token`, `RefreshToken`; `[AdvOut] FFURL` credentials | `exact` or `redacted`; `opaque-unreviewed` with unknown sections or a set `FFURL` |
 | `basic/profiles/<d>/service.json`, `.bak` | profiles | `profile.service`, `profile.service.bak` | whole file | `key`, `bearer_token`, `username`, `password`; `server` credentials | `exact` or `redacted`; `opaque-unreviewed` for `rtmp_custom` and `whip_custom` (typed URL) and third-party types |
 | `basic/profiles/<d>/streamEncoder.json`, `recordEncoder.json`, `.bak` | profiles | `profile.encoder.stream`, `profile.encoder.record`, `.bak` | whole file | — | `exact` |
@@ -343,7 +345,7 @@ plaintext websocket password, and nothing restores it as a file.
 | `service.json`, `.bak` | `/settings/username`, `/settings/password` (`rtmp-custom.c:28-29`) | `rtmp_auth` | `""` |
 | `basic.ini` | `Token`, `RefreshToken` in `[Twitch]`, `[Restream]`, `[YouTube]` (`OAuth.cpp:52-53`, `YoutubeAuth.cpp:84-85`; sections: `TwitchAuth.cpp:31`, `RestreamAuth.cpp:29`, `YoutubeAuth.cpp:23`) | `oauth_token` | `""` |
 | `obs-websocket/config.json` | `/server_password` (`Config.cpp:43`) | `ws_password` | 32 random characters (below) |
-| `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` when `is_local_file` is false (`obs-ffmpeg-source.c:182,396-422`) and `/settings/ffmpeg_options` (`:211`); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
+| `user.ini` `[BasicWindow] ExtraBrowserDocks` (dock URLs, `OBSBasic_Browser.cpp:73-90`: not redacted, a non-empty value makes the entry `opaque-unreviewed`); `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` when `is_local_file` is false (`obs-ffmpeg-source.c:182,396-422`) and `/settings/ffmpeg_options` (`:211`); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
 | `global.ini` | `[OBSWebSocket] ServerPassword` (`Config.cpp:29,35`) | `ws_password` | never read; `global.ini` is not captured |
 | `plugin_config/obs-browser/` | the CEF profile | session | never captured |
 
@@ -359,8 +361,9 @@ plaintext websocket password, and nothing restores it as a file.
     random input to redaction.
   - An explicit `"auth_required": false` becomes `true`, recorded as a `forced` redaction with
     `was: false`. An absent key already means `true` (`Config.h:42`).
-  - S2 restore never writes `""` or the stored placeholder. It re-attaches the live password or
-    generates a new one, and keeps authentication on.
+  - Restore (S2) and import (S3) never write `""` or the stored placeholder. They re-attach the
+    live password or generate a new one, and keep authentication on. An exported placeholder is a
+    known value in a public file; it is therefore never used as a live password.
   - Rejected: blanking the password (debate R1).
 - Identity values are not secrets and stay: `[Twitch] Name` and `UUID` (`TwitchAuth.cpp:164-165`),
   `[YouTube] ChannelName` (`YoutubeAuth.cpp:299`). The export review lists them, with local paths.
@@ -544,7 +547,8 @@ Omitted entries are never written.
 - no `\` or `:` anywhere (drive letters, UNC paths, NTFS streams);
 - no control characters (U+0000–U+001F, U+007F) and none of `< > " | ? *`;
 - no component that ends in a dot or a space;
-- no component whose part before the first dot is a Windows device name, in any case: `CON`,
+- no component whose part before the first dot, with trailing spaces removed, is a Windows device
+  name, in any case (so `CON .txt` and `nul  .json` are rejected): `CON`,
   `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, their superscript-digit forms, `CONIN$`,
   `CONOUT$`;
 - no two paths in one manifest equal under Unicode canonical caseless matching,
@@ -645,11 +649,8 @@ The options and costs as they were put to the owner:
 
 - Only the PR1 slice is built (`shared/jeiobs-workspace/`), and only on Linux. Sections 2, 6
   (capture), 7–11 and the ZIP rules are design only.
-- Windows and macOS stay uncompiled for this library until the CI PR merges. On Windows,
-  `jw-check` reads `argv` in the ANSI code page, so the non-ASCII `path` cases will fail until it
-  uses `wmain` or a UTF-8 code-page manifest (the same rules pass through manifests).
-- Possible gap in the device-name rule: Windows also trims trailing spaces before comparing, so
-  `CON .txt` may name the device although the part before the first dot is `CON ` (not tested).
+- The library builds and passes its tests on Windows and Linux in CI (Ubuntu and Windows runners;
+  `jw-check` uses `wmain` and UTF-8 paths on Windows). The macOS runner has not run yet.
 - Power-loss durability cannot be shown in CI.
 - Until PR3 reviews the first-party source list, every collection is `opaque-unreviewed`.
 - Two cases are not detected: tokens inside URL paths, and plugins that write OBS files directly

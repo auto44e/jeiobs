@@ -39,5 +39,14 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   Linux (Ubuntu 24.04, GCC, CMake 3.28, `-Wall -Wextra -Werror`): `jw-unit` and `jw-cases`
   (509/509) pass. Windows and macOS not compiled: the 3-OS CI workflow is a separate,
   owner-merged PR. Correspondence: [debates/002-workspace-format](../debates/002-workspace-format/).
-- Next: S1-PR2 (JSON scanner with byte positions, INI reader, redactor), then PR3 and PR4 (PR4
-  adds `config_lock`, which the owner approved: WORKSPACE_FORMAT section 14).
+- **S1-PR2**: bounded JSON scanner (byte offsets, duplicate keys), INI reader (BOM, CRLF,
+  duplicates), and the redactor with per-kind placeholders (`jw-check redact`), plus the review-02
+  Minors (stricter manifest validation). Codex wrote the library; Claude wrote the black-box cases
+  from the contract without reading it. They disagreed on three points the cases exposed (URL
+  userinfo range, trailing comma, FFURL count); the contract decided each. Linux (GCC): `jw-unit`,
+  `jw-fuzz-smoke` and `jw-cases` (882 case lines) pass, also under ASan and UBSan. Windows and
+  macOS CI run these through `jeiobs-workspace.yaml`.
+- Next: PR3 (CapturePlanner, identity, review rules for the first-party source list) and PR4
+  (`config_lock`, approved: WORKSPACE_FORMAT section 14). Also owed: an owner-merged PR that pins
+  the Unicode Character Database and adds the generated collision tables (decision 3), and a
+  purge for local history in or before S2 (decision 2).
