@@ -8,6 +8,7 @@
  * Free Software Foundation; either version 2 of the License, or (at your
  * option) any later version.
  */
+#include "Utf8Path.hpp"
 #include "jeiobs/workspace/Manifest.hpp"
 
 #include "jeiobs/workspace/Limits.hpp"
@@ -832,7 +833,8 @@ ManifestResult ParseManifest(std::string_view bytes, ManifestMode mode)
 
 ManifestResult LoadManifest(const std::string &path, ManifestMode mode)
 {
-	std::ifstream input(path, std::ios::in | std::ios::binary);
+	std::ifstream input;
+	Jeiobs::Workspace::Detail::OpenUtf8(input, path);
 	if (!input.is_open()) {
 		return {std::nullopt, MakeError(ErrorCode::Io)};
 	}

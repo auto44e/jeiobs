@@ -8,6 +8,7 @@
  * Free Software Foundation; either version 2 of the License, or (at your
  * option) any later version.
  */
+#include "Utf8Path.hpp"
 #include "jeiobs/workspace/Hash.hpp"
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
@@ -55,7 +56,8 @@ void PrintManifestOk(const Manifest &manifest)
 
 bool ReadFile(const std::string &path, std::string &bytes)
 {
-	std::ifstream input(path, std::ios::in | std::ios::binary);
+	std::ifstream input;
+	Jeiobs::Workspace::Detail::OpenUtf8(input, path);
 	if (!input.is_open()) {
 		return false;
 	}
@@ -243,7 +245,7 @@ void PrintUsage()
 
 } // namespace
 
-int main(int argc, char **argv)
+int Run(int argc, char **argv)
 {
 	if (argc < 3) {
 		PrintUsage();
@@ -271,3 +273,38 @@ int main(int argc, char **argv)
 	PrintUsage();
 	return 2;
 }
+
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#include <vector>
+
+// Windows passes the command line in UTF-16; convert it so that every path and argument reaches the
+// library as UTF-8, as on the other platforms.
+int wmain(int argc, wchar_t **wargv)
+{
+	std::vector<std::string> args;
+	for (int i = 0; i < argc; ++i) {
+		const int bytes = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, nullptr, 0, nullptr, nullptr);
+		std::string arg(bytes > 0 ? static_cast<std::size_t>(bytes) : 1U, '\0');
+		if (bytes > 0) {
+			WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, arg.data(), bytes, nullptr, nullptr);
+		}
+		arg.resize(std::char_traits<char>::length(arg.c_str()));
+		args.push_back(std::move(arg));
+	}
+	std::vector<char *> argv;
+	for (std::string &arg : args) {
+		argv.push_back(arg.data());
+	}
+	argv.push_back(nullptr);
+	return Run(argc, argv.data());
+}
+#else
+int main(int argc, char **argv)
+{
+	return Run(argc, argv);
+}
+#endif
