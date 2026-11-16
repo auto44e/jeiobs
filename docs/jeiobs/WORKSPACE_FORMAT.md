@@ -2,8 +2,8 @@
 
 Status: **proposed**, 2026-11-16, S1-PR1. Code read at main `270f9d6c9` (OBS 33.0.1 base). This
 fixes the v1 manifest, local store, export projection, capture allowlist, secret registry, import
-limits and capture-coherence contract. PR1 implements only the inert parts (section 13); nothing
-here has been built or run against a live OBS. Facts come from the
+limits and capture-coherence contract. PR1 implements only the inert parts (section 13), in
+`shared/jeiobs-workspace/`, tested on Linux; nothing here runs against a live OBS. Facts come from the
 [persistence audit](s1-persistence-audit.md), re-read in the code; where they differ, the citation
 here wins. Integrity hashes detect corruption; they are not signatures and prove nothing about trust.
 
@@ -616,8 +616,13 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 
 ## 15. Not done
 
-- Nothing in this document has been built or run.
-- Windows and macOS stay uncompiled for this library until the CI PR merges.
+- Only the PR1 slice is built (`shared/jeiobs-workspace/`), and only on Linux. Sections 2, 6
+  (capture), 7–11 and the ZIP rules are design only.
+- Windows and macOS stay uncompiled for this library until the CI PR merges. On Windows,
+  `jw-check` reads `argv` in the ANSI code page, so the non-ASCII `path` cases will fail until it
+  uses `wmain` or a UTF-8 code-page manifest (the same rules pass through manifests).
+- Possible gap in the device-name rule: Windows also trims trailing spaces before comparing, so
+  `CON .txt` may name the device although the part before the first dot is `CON ` (not tested).
 - Power-loss durability cannot be shown in CI.
 - Until PR3 reviews the first-party source list, every collection is `opaque-unreviewed`.
 - Two cases are not detected: tokens inside URL paths, and plugins that write OBS files directly
