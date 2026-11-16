@@ -236,14 +236,22 @@ repository.
 
 ## Confinement history
 
-Until at least 2026-11-16 the Codex "read-only" and "workspace-write"
-sandboxes did not work on the maintainer's Ubuntu 24.04 host (and still do not,
-until the owner enables bubblewrap): AppArmor blocks the unprivileged
-user namespaces that bubblewrap needs, and Codex's commands ran unsandboxed
-after an automatic escalation. That covers the task 003 workers and reviews and
-the early #18 reviews. No damage was found (the working tree was checked after
-those runs), but records that called those runs sandboxed were wrong. Enabling
-bubblewrap needs an AppArmor change on the host (owner action).
+Until 2026-11-16 (about 14:00 UTC) the Codex "read-only" and "workspace-write"
+sandboxes did not work on the maintainer's Ubuntu 24.04 host: AppArmor blocked the
+unprivileged user namespaces that bubblewrap needs, and Codex's commands ran
+unsandboxed after an automatic escalation. That covers the task 003 workers and
+reviews, the #18/#19 reviews (runs 05 to 14) and the review and worker runs of
+#20, #21 and #22 up to that time. No damage was found (the working tree was
+checked after those runs), but records that called those runs sandboxed were
+wrong, and their `00-meta.md` says "unsandboxed".
+
+The owner then added an AppArmor profile for `/usr/bin/bwrap` that allows user
+namespaces (`/etc/apparmor.d/bwrap`, `userns`). Check on the host: `bwrap --ro-bind / /
+true` succeeds, and a `--sandbox read-only` Codex session can read a file but fails
+to create one ("Read-only file system"). Runs started after that report
+"sandbox available" in `00-meta.md`; the runner probes bubblewrap at the start of
+each run, so a host without the profile is still labelled unsandboxed and relies
+on the tripwires described above.
 
 ## Review record for this PR
 
