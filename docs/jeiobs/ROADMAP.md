@@ -21,6 +21,7 @@ proceeds. Snapshot saving is a full deliverable, not an investigation-only propo
 | M3 Plugin formats | P1 conformance inventory, P2 VST3, P3 CLAP, P4 AU, P5 validation | Full adopted host-spec coverage with feature-level evidence |
 | M4 Routing/timing/monitoring | R1 graph/sidechains, R2 PDC, R3 listen bus, R4 media clocks | Aligned outputs and configurable independent monitoring |
 | M5 Recording/I/O/release | T1-T3 timecode, native I/O, packaging qualification | Recoverable recordings with optional verified timecode and tested platform support |
+| M6 Control surfaces and protocols | K1 control graph, K2 MIDI 1.0/2.0, K3 Mackie Control/HUI, K4 OSC, K5 other open standards, K6 conformance | Any supported controller, protocol or app can drive and receive feedback from any mapped target, routed freely and saved with the workspace |
 
 ## M0 — coexistence and native platforms
 
@@ -209,6 +210,71 @@ Native I/O: evaluate ASIO licensing, Core Audio and ALSA/JACK/PipeWire while ret
 upstream capture. Expand sanitizers, dependency manifests, reproducible packaging
 and platform smoke tests. Review upstream monthly and promptly for security fixes;
 no release support claim without execution evidence.
+
+## M6 — control surfaces and open control protocols
+
+Owner direction, 2026-11-16 (verbatim): "make sure there's full MIDI1/2.0 flexibly
+routable along with mackie hui, osc, and whatever open control standards out there
+commonly used". [Task 006](tasks/006-control-protocols.md) owns the track.
+
+K1 adds one control graph, separate from the audio graph of R1 but using the same
+stable node/port IDs. Inputs are MIDI endpoints/groups/channels, OSC addresses,
+surface controls and other protocol sources; targets are any mapped action or value:
+scenes, sources, filters and their properties, mixer and listen-bus controls,
+plugin parameters (M3), transport (stream/record/replay), hotkeys and outputs.
+Routing is many-to-many: split by group/channel/note/controller range, merge, thru,
+filter and transform (scale, curve, invert, relative/absolute encoders, 14-bit and
+32-bit values, toggle/momentary, pickup/soft takeover, banks, layers and modifiers),
+with MIDI learn and feedback (LEDs, motor faders, meters, displays/scribble strips).
+MIDI is also routable into plugin event inputs and out to hardware, virtual and
+network ports. Control I/O never runs on the audio thread: bounded lock-free queues,
+explicit drop/coalesce policy for floods, and parameter changes applied at safe
+boundaries (sample-accurate where the plugin format supports it). Mappings save
+with the workspace (M1) without secrets; devices are matched by stable identity
+(UMP endpoint product instance ID, USB serial, port name as a last resort) and a
+missing device keeps its mappings with a visible unresolved state.
+
+K2 implements MIDI 1.0 and MIDI 2.0 with UMP as the internal format and spec-defined
+MIDI 1.0 ⇄ UMP translation. MIDI 2.0 covers the MIDI 2.0 protocol (high-resolution
+velocity/controllers, per-note controllers and pitch, attributes), UMP Endpoint
+discovery and protocol negotiation, Function Blocks/Group Terminal Blocks, JR
+timestamps, SysEx7/SysEx8/data messages and MIDI-CI Profile Configuration and
+Property Exchange where a target uses them; MPE on MIDI 1.0. Native backends:
+Windows MIDI Services (with the WinMM path where it is absent), CoreMIDI UMP APIs,
+ALSA UMP/sequencer (with older-kernel fallback) plus JACK/PipeWire MIDI; virtual
+ports on every OS. Network: RTP-MIDI (RFC 6295) and Network MIDI 2.0 (UDP). MIDI
+clock, MTC, MMC and MIDI Show Control connect to M5 timecode as optional sources/
+outputs. Inspect current spec revisions, OS API availability and licenses first.
+
+K3 implements Mackie Control Universal (14-bit pitch-bend faders with touch, V-Pots,
+LCD SysEx, meters, transport, bank/channel, extenders) and HUI (zone/port scheme,
+faders, displays), including common emulation modes of third-party surfaces. HUI
+and MCU are vendor protocols documented publicly only in part; implement from
+public descriptions and observed traffic, without vendor code or trademarks
+implying endorsement, and record which behaviour is verified on which hardware.
+
+K4 implements OSC 1.0 and 1.1: UDP, TCP with SLIP framing, bundles and time tags,
+address pattern matching, all standard type tags, and OSCQuery discovery. A
+documented, versioned OSC namespace mirrors the control graph targets. K5 covers
+other commonly used open standards, each behind its own capability: Ableton Link
+(tempo/phase), sACN (E1.31) and Art-Net for lighting cues, AES70/OCA for
+device control, generic HID/game controllers, and obs-websocket integrated as one
+more source/target. Proprietary protocols (for example Avid EUCON, vendor apps)
+are out of scope unless the vendor publishes an open spec; reachable through OSC/
+MIDI/websocket bridges instead.
+
+Every network listener (OSC, OSCQuery, RTP-MIDI, Network MIDI 2.0, Link, sACN/
+Art-Net, AES70) is off by default, binds loopback until the user chooses an
+interface, shows what is exposed, and supports a peer allowlist and rate limits;
+OSC and MIDI carry no authentication, so remote control is an explicit opt-in.
+Parsers for every protocol are bounded and fuzzed.
+
+K6 qualifies all of it: per-protocol capability matrix (implemented/tested/pending/
+not applicable), loopback and virtual-device tests on Windows/macOS/Linux, MIDI 2.0
+conformance tooling where available, translation round-trips, hot-plug, flood and
+jitter/latency measurements, malformed-input fuzzing and real-surface checks
+recorded per device. New dependencies (MIDI, OSC, Link libraries) need license
+review and an owner-merged dependency PR.
 
 ## Autonomous cross-platform delivery
 
