@@ -164,10 +164,15 @@ bool os_process_pipe_wait(os_process_pipe_t *pp, uint32_t timeout_ms)
 		deadline.tv_nsec -= 1000000000L;
 	}
 
+	/* Poll quickly at first: most children exit within a few ms. */
+	long poll_ns = 1000000L;
 	for (;;) {
 		siginfo_t info = {0};
 		if (waitid(P_PID, (id_t)pp->pid, &info, WEXITED | WNOHANG | WNOWAIT) == 0) {
-			if (info.si_pid != 0) {
+			/* Require an exit code: some macOS versions have reported
+			 * stopped children here. */
+			if (info.si_pid != 0 &&
+			    (info.si_code == CLD_EXITED || info.si_code == CLD_KILLED || info.si_code == CLD_DUMPED)) {
 				return true;
 			}
 		} else if (errno != EINTR) {
@@ -183,7 +188,10 @@ bool os_process_pipe_wait(os_process_pipe_t *pp, uint32_t timeout_ms)
 			return false;
 		}
 
-		struct timespec sleep_time = {.tv_sec = 0, .tv_nsec = 10000000L};
+		struct timespec sleep_time = {.tv_sec = 0, .tv_nsec = poll_ns};
+		if (poll_ns < 10000000L) {
+			poll_ns *= 2;
+		}
 		const time_t remaining_sec = deadline.tv_sec - now.tv_sec;
 		const long remaining_nsec = deadline.tv_nsec - now.tv_nsec;
 		if (remaining_sec == 0 && remaining_nsec < sleep_time.tv_nsec) {

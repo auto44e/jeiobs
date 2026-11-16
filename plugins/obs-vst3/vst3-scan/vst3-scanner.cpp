@@ -227,6 +227,9 @@ bool prepareProbeOutput()
 #ifdef _WIN32
 	auto redirectStream = [](DWORD standardHandle, int fileDescriptor) {
 		const HANDLE originalHandle = GetStdHandle(standardHandle);
+		/* _dup2 below closes the handle the CRT descriptor wraps, which is
+		 * usually originalHandle; remember it so it is not closed twice. */
+		const intptr_t descriptorHandle = _get_osfhandle(fileDescriptor);
 		const HANDLE nullHandle = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
 						      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 		if (nullHandle == nullptr || nullHandle == INVALID_HANDLE_VALUE) {
@@ -255,14 +258,16 @@ bool prepareProbeOutput()
 			return false;
 		}
 
-		if (originalHandle != nullptr && originalHandle != INVALID_HANDLE_VALUE && originalHandle != redirectedHandle) {
+		if (originalHandle != nullptr && originalHandle != INVALID_HANDLE_VALUE && originalHandle != redirectedHandle &&
+		    reinterpret_cast<intptr_t>(originalHandle) != descriptorHandle) {
 			CloseHandle(originalHandle);
 		}
 		return true;
 	};
 
-	const bool stdoutReady = redirectStream(STD_OUTPUT_HANDLE, STDOUT_FILENO);
-	const bool stderrReady = redirectStream(STD_ERROR_HANDLE, STDERR_FILENO);
+	/* MSVC has no STDOUT_FILENO/STDERR_FILENO. */
+	const bool stdoutReady = redirectStream(STD_OUTPUT_HANDLE, _fileno(stdout));
+	const bool stderrReady = redirectStream(STD_ERROR_HANDLE, _fileno(stderr));
 	return stdoutReady && stderrReady;
 #else
 	const int nullFile = open("/dev/null", O_RDWR | O_CLOEXEC);

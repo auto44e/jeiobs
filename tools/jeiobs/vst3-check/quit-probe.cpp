@@ -44,7 +44,7 @@ bool obs_module_load(void) {
     // soon as a scanner child is running (at least 0.5 s in), or after 10 s, so
     // a slow start cannot make the quit happen before the scan begins.
     const bool waitScanner = getenv("QUITPROBE_WAIT_SCANNER") != nullptr;
-    auto *poll = new QTimer;
+    auto *poll = new QTimer(qApp);
     auto *elapsedMs = new int(0);
     QObject::connect(poll, &QTimer::timeout, [poll, elapsedMs, waitScanner] {
       *elapsedMs += 100;

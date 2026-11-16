@@ -181,7 +181,11 @@ freeze() {
       kids "$s"
       for p in "${KIDS[@]}"; do
         isprobe "$p" "$1" && grep -qF -- "$so" "/proc/$p/maps" 2>/dev/null || continue
-        kill -STOP "$p" 2>/dev/null
+        # Only count a stop this check caused: not already stopped, and kill worked.
+        st=$(pstate "$p")
+        if [ "$st" = T ] || ! kill -STOP "$p" 2>/dev/null; then
+          FROZE_NOTE="$1 probe $p already stopped or could not be stopped (state $st)"; return
+        fi
         for ((i = 0; i < 20; i++)); do st=$(pstate "$p"); [ "$st" = T ] && break; sleep 0.05; done
         if [ "$st" = T ] && isprobe "$p" "$1"; then
           FROZE=$p FROZE_NOTE="$1 probe stopped in $1.so at $(( $(ms) - T0 )) ms"
