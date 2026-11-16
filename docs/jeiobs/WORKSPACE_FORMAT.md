@@ -263,11 +263,13 @@ atomically.
   `kind: "dir"` entry.
 - A file the jeiobs parser rejects is stored only if its role has no registry secrets, as
   `opaque-unreviewed` with `parse: "invalid"`. Otherwise it is omitted with
-  `reason: "unparseable"`, because its secrets cannot be located.
+  `reason: "unparseable"`, because its secrets cannot be located; its `size` is rounded up to a
+  multiple of 65,536 so that it does not reveal a secret's length.
 - **Export fails closed** while any `opaque-unreviewed` entry has no decision. S3 stages the ZIP
   in a private (0700) directory on the destination volume. It re-runs the current registry and
   review rules on every staged blob, and searches every staged byte for the live value of each
-  registry secret on this machine. The ZIP is renamed into place only when every check passes; any
+  registry secret on this machine that is at least 8 bytes long (shorter values, such as a short
+  RTMP username, would match ordinary text; they are covered by the structural redaction alone). The ZIP is renamed into place only when every check passes; any
   failure deletes the staging directory.
 - Copying `blobs/` is not an export path. jeiobs never syncs, uploads or offers to copy the store.
 - Rejected: capturing unknown files as unreviewed (debate R1). The store would hold plugin tokens
@@ -341,7 +343,7 @@ plaintext websocket password, and nothing restores it as a file.
 | `service.json`, `.bak` | `/settings/username`, `/settings/password` (`rtmp-custom.c:28-29`) | `rtmp_auth` | `""` |
 | `basic.ini` | `Token`, `RefreshToken` in `[Twitch]`, `[Restream]`, `[YouTube]` (`OAuth.cpp:52-53`, `YoutubeAuth.cpp:84-85`; sections: `TwitchAuth.cpp:31`, `RestreamAuth.cpp:29`, `YoutubeAuth.cpp:23`) | `oauth_token` | `""` |
 | `obs-websocket/config.json` | `/server_password` (`Config.cpp:43`) | `ws_password` | 32 random characters (below) |
-| `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url` | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
+| `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` when `is_local_file` is false (`obs-ffmpeg-source.c:182,396-422`) and `/settings/ffmpeg_options` (`:211`); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
 | `global.ini` | `[OBSWebSocket] ServerPassword` (`Config.cpp:29,35`) | `ws_password` | never read; `global.ini` is not captured |
 | `plugin_config/obs-browser/` | the CEF profile | session | never captured |
 
@@ -385,8 +387,9 @@ with `unreviewed: {rules: "u1", count}`. The rules cover:
   there through `obs_frontend_get_user_config()` and `obs_frontend_get_profile_config()`
   (`obs-frontend-api.h:210-213`). `[BasicWindow] ExtraBrowserDocks` holds dock URLs
   (`OBSBasic_Browser.cpp:73-90`);
-- URLs the user typed (custom `server`, `FFURL`, browser `url`), even after the URL rule, because a
-  token inside a URL path cannot be found by structure;
+- URLs and option strings the user typed (custom `server`, `FFURL`, browser `url`, media source
+  `input` and `ffmpeg_options`, VLC playlist `value`), even after the URL rule, because a token
+  inside a URL path or an option string cannot be found by structure;
 - `service.json` files with any other `type`.
 
 Entries name their rules by ID. Export re-runs the current rules, so they can get stricter without
@@ -519,6 +522,14 @@ larger input, which is the safe failure.
 | Path | 512 bytes, 8 components, 255 bytes per component | OBS builds its paths in 512-byte buffers (`OBSApp.cpp:418,548`); its layout is at most 4 components deep |
 | Parent chain | 10,000 revisions | recovery walks the chain; nothing is pruned before S2 |
 
+**Stored entries are bound to the allowlist.** A `stored` entry's `root`, `role` and `path` must
+match a row of the section 7 table (`<f>` and `<d>` are one path component); anything else is
+invalid, so a manifest cannot name the store (`workspaces/`, `machine-id`, which after M0 sit
+under the same app dir) or any other file as a restore target. Restore (S2) and import (S3) write
+only such entries, resolve each destination under its root, and check collisions there with
+`O_EXCL`/`CREATE_NEW` in staging, because the destination filesystem decides what collides.
+Omitted entries are never written.
+
 **Parser** (manifests in PR1, documents in PR2). It rejects the following while parsing:
 - duplicate keys (OBS does too: `JSON_REJECT_DUPLICATES` at `obs-data.c:611`);
 - invalid UTF-8;
@@ -627,3 +638,10 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 - Until PR3 reviews the first-party source list, every collection is `opaque-unreviewed`.
 - Two cases are not detected: tokens inside URL paths, and plugins that write OBS files directly
   instead of through `config_t` or `SaveService()`.
+- Open for PR3 (CapturePlanner): live OBS states that PathRules rejects. On Linux, profiles `Main`
+  and `main` can both exist (OBS checks for an existing folder case-sensitively,
+  `OBSBasic_Profiles.cpp:146-160`), and a stray file named `What?.txt`, `notes .txt` or with a
+  name that is not UTF-8 can sit in a captured folder. Options: record such names as one omitted
+  entry per folder with a count and no names, and record case collisions as a flag that blocks
+  restore onto a case-insensitive filesystem instead of rejecting the manifest. Also open: 8.3
+  short names, HFS+ normalization and file-versus-folder clashes.
