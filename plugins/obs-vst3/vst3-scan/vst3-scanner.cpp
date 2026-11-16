@@ -24,7 +24,6 @@
 #include <util/platform.h>
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cerrno>
@@ -58,6 +57,9 @@
 #else
 #include <fcntl.h>
 #include <sys/file.h>
+#if defined(__linux__)
+#include <sys/utsname.h>
+#endif
 #include <unistd.h>
 #endif
 
@@ -69,6 +71,8 @@ constexpr int kDefaultProbeTimeoutMs = 30000;
 constexpr int kMinimumProbeTimeoutMs = 500;
 constexpr int kMaximumProbeTimeoutMs = 120000;
 constexpr int kProbeWatchdogExitCode = 86;
+constexpr int kProbeSaveFailedExitCode = 90;
+constexpr int kProbeWatchdogMarkerFailedExitCode = 91;
 constexpr size_t kProbeOutputBufferSize = 4096;
 constexpr size_t kFingerprintReadSize = 64 * 1024;
 constexpr int64_t kMissingEntryRetentionSeconds = 30 * 24 * 60 * 60;
@@ -241,6 +245,26 @@ bool sameFingerprint(const SkipEntry &entry, const BinaryFingerprint &fingerprin
 	       entry.mtimeTicks == fingerprint.mtimeTicks && entry.crc32 == fingerprint.crc32;
 }
 
+bool readIntegerField(obs_data_t *obj, const char *name, long long &value)
+{
+	if (!obj || !obs_data_has_user_value(obj, name)) {
+		return false;
+	}
+
+	obs_data_item_t *item = obs_data_item_byname(obj, name);
+	if (!item || obs_data_item_gettype(item) != OBS_DATA_NUMBER ||
+	    obs_data_item_numtype(item) != OBS_DATA_NUM_INT) {
+		if (item) {
+			obs_data_item_release(&item);
+		}
+		return false;
+	}
+
+	value = obs_data_item_get_int(item);
+	obs_data_item_release(&item);
+	return true;
+}
+
 bool skipEntryHasRequiredFields(obs_data_t *obj)
 {
 	const char *path = obs_data_get_string(obj, "path");
@@ -253,24 +277,25 @@ bool skipEntryHasRequiredFields(obs_data_t *obj)
 		return false;
 	}
 
-	if (!obs_data_has_user_value(obj, "size") || !obs_data_has_user_value(obj, "mtime_ticks") ||
-	    !obs_data_has_user_value(obj, "crc32") || !obs_data_has_user_value(obj, "failures") ||
-	    !obs_data_has_user_value(obj, "first_failed") || !obs_data_has_user_value(obj, "last_failed") ||
-	    !obs_data_has_user_value(obj, "retry_after") || !obs_data_has_user_value(obj, "missing_since")) {
-		return false;
-	}
-
 	if (std::strcmp(kind, "failure") != 0 && std::strcmp(kind, "timeout") != 0) {
 		return false;
 	}
 
-	const long long size = obs_data_get_int(obj, "size");
-	const long long crc32 = obs_data_get_int(obj, "crc32");
-	const long long failures = obs_data_get_int(obj, "failures");
-	const long long firstFailed = obs_data_get_int(obj, "first_failed");
-	const long long lastFailed = obs_data_get_int(obj, "last_failed");
-	const long long retryAfter = obs_data_get_int(obj, "retry_after");
-	const long long missingSince = obs_data_get_int(obj, "missing_since");
+	long long size = 0;
+	long long mtimeTicks = 0;
+	long long crc32 = 0;
+	long long failures = 0;
+	long long firstFailed = 0;
+	long long lastFailed = 0;
+	long long retryAfter = 0;
+	long long missingSince = 0;
+	if (!readIntegerField(obj, "size", size) || !readIntegerField(obj, "mtime_ticks", mtimeTicks) ||
+	    !readIntegerField(obj, "crc32", crc32) || !readIntegerField(obj, "failures", failures) ||
+	    !readIntegerField(obj, "first_failed", firstFailed) || !readIntegerField(obj, "last_failed", lastFailed) ||
+	    !readIntegerField(obj, "retry_after", retryAfter) ||
+	    !readIntegerField(obj, "missing_since", missingSince)) {
+		return false;
+	}
 	return size >= 0 && crc32 >= 0 && crc32 <= std::numeric_limits<uint32_t>::max() && failures > 0 &&
 	       firstFailed > 0 && lastFailed >= firstFailed && retryAfter >= 0 && missingSince >= 0;
 }
@@ -342,7 +367,8 @@ void loadSkipList()
 
 	skipList.enabled = true;
 	obs_data_t *root = obs_data_create_from_json_file_safe(skipList.path.c_str(), "bak");
-	if (!root || obs_data_get_int(root, "version") != 1) {
+	long long version = 0;
+	if (!root || !readIntegerField(root, "version", version) || version != 1) {
 		if (root) {
 			obs_data_release(root);
 		}
@@ -559,15 +585,12 @@ bool resolveVst3Binary(const std::string &bundlePath, std::string &binaryPath)
 	binaryPath = pathBuffer.data();
 	return true;
 #elif defined(__linux__)
-#if defined(__x86_64__)
-	constexpr char architecture[] = "x86_64-linux";
-#elif defined(__aarch64__)
-	constexpr char architecture[] = "arm64-linux";
-#elif defined(__i386__)
-	constexpr char architecture[] = "x86-linux";
-#else
-	return false;
-#endif
+	struct utsname systemInfo = {};
+	if (uname(&systemInfo) != 0 || !systemInfo.machine[0]) {
+		return false;
+	}
+
+	const std::string architecture = std::string(systemInfo.machine) + "-linux";
 	binaryPath = (bundle / "Contents" / architecture / (bundle.stem().u8string() + ".so")).u8string();
 	return true;
 #else
@@ -997,12 +1020,23 @@ bool parseProcessId(const char *value, unsigned long long &processId)
 	return true;
 }
 
+struct ProbeSetupState {
+	std::mutex mutex;
+	bool written = false;
+};
+
+bool probeSetupWasWritten(ProbeSetupState &setupState)
+{
+	std::lock_guard<std::mutex> lock(setupState.mutex);
+	return setupState.written;
+}
+
 bool startProbeWatchdog(int timeoutMs, unsigned long long parentProcessId, const std::string &resultPath,
-			const std::string &nonce, std::atomic<bool> &setupWritten)
+			const std::string &nonce, ProbeSetupState &setupState)
 {
 	std::promise<bool> startPromise;
 	std::future<bool> startResult = startPromise.get_future();
-	std::thread watchdog([timeoutMs, parentProcessId, resultPath, nonce, &setupWritten,
+	std::thread watchdog([timeoutMs, parentProcessId, resultPath, nonce, &setupState,
 			      startPromise = std::move(startPromise)]() mutable {
 		const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 #ifdef _WIN32
@@ -1032,10 +1066,16 @@ bool startProbeWatchdog(int timeoutMs, unsigned long long parentProcessId, const
 
 		for (;;) {
 			if (std::chrono::steady_clock::now() >= deadline) {
-				if (setupWritten.load(std::memory_order_acquire)) {
-					writeProbeStatus(resultPath, ProbeMarker::Timeout, nonce, true);
+				bool timeoutMarkerWritten = false;
+				{
+					std::lock_guard<std::mutex> lock(setupState.mutex);
+					if (setupState.written) {
+						timeoutMarkerWritten =
+							writeProbeStatus(resultPath, ProbeMarker::Timeout, nonce, true);
+					}
 				}
-				probeExit(kProbeWatchdogExitCode);
+				probeExit(timeoutMarkerWritten ? kProbeWatchdogExitCode
+							       : kProbeWatchdogMarkerFailedExitCode);
 			}
 
 #ifndef _WIN32
@@ -1093,8 +1133,8 @@ int runProbe(const char *bundlePath, const char *resultPath, const char *nonce, 
 #ifdef _WIN32
 	SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
-	std::atomic<bool> setupWritten = false;
-	if (!startProbeWatchdog(timeoutMs, parentProcessId, resultPath, nonce, setupWritten)) {
+	ProbeSetupState setupState;
+	if (!startProbeWatchdog(timeoutMs, parentProcessId, resultPath, nonce, setupState)) {
 		return EXIT_FAILURE;
 	}
 
@@ -1103,13 +1143,22 @@ int runProbe(const char *bundlePath, const char *resultPath, const char *nonce, 
 	}
 
 	VST3Scanner scanner;
-	setupWritten.store(writeProbeStatus(resultPath, ProbeMarker::Setup, nonce, false), std::memory_order_release);
+	{
+		std::lock_guard<std::mutex> lock(setupState.mutex);
+		setupState.written = writeProbeStatus(resultPath, ProbeMarker::Setup, nonce, false);
+	}
 	if (!scanner.loadModuleClassesInProcess(bundlePath)) {
-		if (setupWritten.load(std::memory_order_acquire)) {
+		if (probeSetupWasWritten(setupState)) {
 			writeProbeStatus(resultPath, ProbeMarker::LoadFailed, nonce, false);
 		}
 		probeExit(EXIT_FAILURE);
 	}
+
+	auto exitAfterSaveFailure = [&] {
+		const bool markerWritten = probeSetupWasWritten(setupState) &&
+					   writeProbeStatus(resultPath, ProbeMarker::SaveFailed, nonce, false);
+		probeExit(markerWritten ? EXIT_FAILURE : kProbeSaveFailedExitCode);
+	};
 
 	obs_data_t *root = obs_data_create();
 	obs_data_array_t *plugins = obs_data_array_create();
@@ -1120,20 +1169,14 @@ int runProbe(const char *bundlePath, const char *resultPath, const char *nonce, 
 		if (root) {
 			obs_data_release(root);
 		}
-		if (setupWritten.load(std::memory_order_acquire)) {
-			writeProbeStatus(resultPath, ProbeMarker::SaveFailed, nonce, false);
-		}
-		probeExit(EXIT_FAILURE);
+		exitAfterSaveFailure();
 	}
 	for (const auto &classInfo : scanner.pluginList) {
 		obs_data_t *obj = obs_data_create();
 		if (!obj) {
 			obs_data_array_release(plugins);
 			obs_data_release(root);
-			if (setupWritten.load(std::memory_order_acquire)) {
-				writeProbeStatus(resultPath, ProbeMarker::SaveFailed, nonce, false);
-			}
-			probeExit(EXIT_FAILURE);
+			exitAfterSaveFailure();
 		}
 		saveVST3ClassInfo(obj, classInfo);
 		obs_data_array_push_back(plugins, obj);
@@ -1148,10 +1191,7 @@ int runProbe(const char *bundlePath, const char *resultPath, const char *nonce, 
 	const bool saved = obs_data_save_json_safe(root, resultPath, "tmp", nullptr);
 	obs_data_release(root);
 	if (!saved) {
-		if (setupWritten.load(std::memory_order_acquire)) {
-			writeProbeStatus(resultPath, ProbeMarker::SaveFailed, nonce, false);
-		}
-		probeExit(EXIT_FAILURE);
+		exitAfterSaveFailure();
 	}
 
 	probeExit(EXIT_SUCCESS);
@@ -1271,13 +1311,21 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 	const auto now = std::chrono::steady_clock::now();
 	uint32_t remainingMs = 0;
 	if (now < deadline) {
-		remainingMs = static_cast<uint32_t>(
-			std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
+		const auto remaining = deadline - now;
+		remainingMs =
+			static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(remaining).count());
+		if (std::chrono::milliseconds(remainingMs) < remaining) {
+			++remainingMs;
+		}
 	}
 
+	bool waitError = false;
 	if (!os_process_pipe_wait(pipe, remainingMs)) {
-		coordinatorKilled = os_process_pipe_kill(pipe) || coordinatorKilled;
-		os_process_pipe_wait(pipe, 5000);
+		const bool deadlinePassed = std::chrono::steady_clock::now() >= deadline;
+		const bool killed = os_process_pipe_kill(pipe);
+		coordinatorKilled = coordinatorKilled || (deadlinePassed && killed);
+		const bool cleanupWaitSucceeded = os_process_pipe_wait(pipe, 5000);
+		waitError = !deadlinePassed || !cleanupWaitSucceeded;
 	}
 
 	const int status = os_process_pipe_destroy(pipe);
@@ -1331,6 +1379,17 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 		}
 	}
 
+	if (validResult) {
+		removeSkipEntry(bundlePath);
+		removeProbeFiles(resultPath);
+		classes = std::move(parsedClasses);
+		return true;
+	}
+
+	if (waitError) {
+		return reject("probe wait failed");
+	}
+
 	if (!validStatus) {
 		if (resultNonceMismatch) {
 			return reject("probe nonce mismatch");
@@ -1347,12 +1406,6 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 	if (resultNonceMismatch || resultMalformed) {
 		return reject(resultNonceMismatch ? "probe nonce mismatch" : "invalid probe result");
 	}
-	if (validResult) {
-		removeSkipEntry(bundlePath);
-		removeProbeFiles(resultPath);
-		classes = std::move(parsedClasses);
-		return true;
-	}
 
 	if (probeStatus.marker == ProbeMarker::Timeout) {
 		return rememberFailure("timeout", "timeout",
@@ -1365,6 +1418,15 @@ bool probeVst3Module(const std::string &bundlePath, std::vector<VST3ClassInfo> &
 		return rememberFailure("failure", "load-failed", "probe failed");
 	}
 	if (probeStatus.marker == ProbeMarker::Setup && !resultExists) {
+		if (status == kProbeSaveFailedExitCode) {
+			return reject("probe save failed");
+		}
+		if (status == kProbeWatchdogMarkerFailedExitCode) {
+			return rememberFailure("timeout", "timeout", "probe timed out");
+		}
+		if (coordinatorKilled) {
+			return rememberFailure("timeout", "timeout", "probe timed out (killed)");
+		}
 		return rememberFailure("failure", "probe failed", "probe failed");
 	}
 
