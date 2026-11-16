@@ -24,8 +24,9 @@ codex-6 | Minor | open | codex | review-02/04-r2-codex.reply.md (FINDING codex-6
 
 ## PR #25 (recording the owner decisions), review `review-decisions`
 
-PR #25 merged on the owner's chat approval while this review was still running; the review
-requested changes (rationale and flex missing, wording). The follow-up PR answers them.
+PR #25 merged while this review was still running. Owner's approval, verbatim: "i think 25
+should e merged, and you can continue self merge from here on for your next coupe of hours". The
+review requested changes (rationale and flex missing, wording). The follow-up PR answers them.
 
 ID | severity | status | finder | source | lead's note
 --- | --- | --- | --- | --- | ---
