@@ -1,0 +1,28 @@
+{
+  "format": "jeiobs-workspace",
+  "major": 1,
+  "minor": 0,
+  "compat": {"incompat": [], "ro_compat": []},
+  "workspace_id": "0d6f3c1e-8b2a-4c47-9e15-6a0b7d93f2c4",
+  "seq": 2,
+  "parent": "ca53eba8703c3577fa989fc470d1d9743baf6559828242ced83c7525444e54f9",
+  "created_utc": "2026-11-16T19:00:00Z",
+  "label": "draft",
+  "creator": {"app": "jeiobs", "version": "0.0.0-dev", "commit": "b76d7cdb1", "obs_base": "33.0.1"},
+  "active": {"profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f"},
+  "target": {"os": "linux", "arch": "x86_64", "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60", "app_dir": "obs-studio", "roots": {"config": "default", "user": "default", "scenes": "default", "profiles": "default", "plugin_manager": "default"}, "audio": {"sample_rate": 48000, "channels": "Stereo", "explicit": false}, "devices": []},
+  "app_keys": [
+    {"root": "config", "file": "global.ini", "section": "Video", "key": "Renderer", "value": "OpenGL", "restore": "same-os"}
+  ],
+  "entries": [
+    {"id": "e1", "status": "stored", "root": "user", "path": "user.ini", "role": "app.user", "fidelity": "exact", "size": 100, "hash": "171a7213f10a9033053e86dc1c6e19e0a4190346408fe6dd8645a3c8e1c4afc4"},
+    {"id": "e2", "status": "stored", "root": "profiles", "path": "basic/profiles/Main/basic.ini", "role": "profile.basic", "profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "fidelity": "exact", "size": 210, "hash": "d9c2b686f045bfbe434ae15e58fbbbfc72cc49a47ca2d052953ce9b45c20fc8f"},
+    {"id": "e3", "status": "omitted", "root": "scenes", "path": "basic/scenes/Main.json", "size": 300, "reason": "unparseable"},
+    {"id": "e4", "status": "stored", "root": "config", "path": "plugin_config/obs-websocket/config.json", "role": "module.obs-websocket", "fidelity": "exact", "size": 164, "hash": "ac028832fa5672261052bf44d9326ac9297d5fb59a5f3f3119d1ac95d1915ad7"}
+  ],
+  "secret_refs": [],
+  "dropped_ext": [
+    {"entry": null, "fields": ["x_old"]},
+    {"entry": "e2", "fields": ["x_alpha", "x_zeta"]}
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "e2": {"decision": "include", "fidelity": "exact"},
+  "e3": {"decision": "omit"},
+  "e1": {"decision": "omit"}
+}

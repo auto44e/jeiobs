@@ -1,0 +1,21 @@
+{
+  "format": "jeiobs-workspace",
+  "major": 1,
+  "minor": 0,
+  "compat": {"incompat": [], "ro_compat": []},
+  "workspace_id": "0d6f3c1e-8b2a-4c47-9e15-6a0b7d93f2c4",
+  "seq": 3,
+  "parent": "f70b87700e2b306a737ac4ec3cbb4565da15bd06cb23e3ac795e86d59cd69b95",
+  "created_utc": "2026-11-16T18:04:05Z",
+  "label": "base",
+  "creator": {"app": "jeiobs", "version": "0.0.0-dev", "commit": "b76d7cdb1", "obs_base": "33.0.1"},
+  "active": {"profile": "7b1e4c2a-90d3-4f6e-8a5b-2c1d0e9f8a7b", "collection": "c3d2e1f0-4a5b-4c6d-9e8f-0a1b2c3d4e5f"},
+  "target": {"os": "linux", "arch": "x86_64", "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60", "app_dir": "obs-studio", "roots": {"config": "default", "user": "default", "scenes": "default", "profiles": "default", "plugin_manager": "default"}, "audio": {"sample_rate": 48000, "channels": "Stereo", "explicit": false}, "devices": []},
+  "app_keys": [
+    {"root": "config", "file": "global.ini", "section": "Video", "key": "Renderer", "value": "OpenGL", "restore": "same-os"},
+    {"root": "config", "file": "global.ini", "section": "General", "key": "Pre31Migrated", "value": "true", "restore": "never"}
+  ],
+  "entries": {},
+  "secret_refs": [],
+  "dropped_ext": []
+}
