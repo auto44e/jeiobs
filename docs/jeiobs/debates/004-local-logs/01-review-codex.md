@@ -1,6 +1,6 @@
 # Adversarial review of the local-log change (PR #11) — Codex
 
-_Raw peer correspondence (2026-11-15). Tool-call output trimmed; final answer verbatim. AI-assisted, not human review. Prompt: review commit 6cf380218 for Windows/macOS compile risk, remaining upload paths, SaveLogCopy bugs and crash-detection changes._
+_Raw peer correspondence (2026-11-15). Tool-call output trimmed; final answer verbatim. AI-assisted, not human review. Prompt: review commit 6cf380218 for Windows/macOS compile risk, remaining upload paths, SaveLogCopy bugs and crash-detection changes._ **Prompt not retained verbatim** (it was passed inline and not saved); the summary of what was asked is given instead.
 
 Review target: `6cf380218` vs `33b31a6d2`. No files edited.
 

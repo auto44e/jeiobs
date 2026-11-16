@@ -1,6 +1,6 @@
 # Review of lead fixes — Codex
 
-_Raw peer correspondence, task 003 (2026-11-15/16). Codex tool-call output trimmed; prompt and final answer kept verbatim. AI-assisted, not human review._
+_Raw peer correspondence, task 003 (2026-11-15/16). Codex tool-call output trimmed; prompt and final answer kept verbatim. AI-assisted, not human review._ **Prompt not retained verbatim** (it was passed inline and not saved); the summary of what was asked is given instead.
 
 ## Prompt
 

@@ -11,8 +11,9 @@ for historical and upstream submission guidance. AI-assisted work is welcome her
 1. Pick a bounded task from the backlog. First: upstream VST3 backport.
 2. Create a branch from main, inspect the code, and open a small PR early.
 3. Implement and test the changed behavior. Record genuine blockers plainly.
-4. Update the handoff when status changes. Maintainer reviews and merges; the lead
-   agent may merge its own PR after the peer review in [DECISIONS](DECISIONS.md).
+4. Update the handoff when status changes. The owner reviews and merges. The lead
+   agent may merge its own PR only through the self-merge gate in
+   [DECISIONS](DECISIONS.md), which requires both peer lineages.
 
 Use Backlog → Ready → In progress → Review → Done; use Blocked with a reason and
 next unblock action. Limit each contributor to one active implementation task.
@@ -32,8 +33,10 @@ major audio topology choices. Ordinary implementation choices belong in the PR.
 
 Code may land as an opt-in experiment before every platform is qualified.
 However, do not distribute an installer as coexistence-safe before the relevant
-install/update/uninstall tests pass. Release publishing remains maintainer-only.
-No branch-protection rules or required reviewer counts are automatically imposed.
+install/update/uninstall tests pass. Release publishing, signing and installers
+are owner-only.
+No branch-protection rules are imposed. The only required review is the self-merge
+gate's two-lineage peer debate, and it applies to the lead agent's own PRs only.
 
 Help is available from plain-language, fully guided contributions through expert
 mode. Adjust coaching to the contributor; keep the same evidence requirements.
