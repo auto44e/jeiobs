@@ -21,7 +21,7 @@ The runtime check in [task 001](001-vst3.md#runtime-evidence-2026-11-15-branch-j
 ## Design
 
 Agreed from two independent design reviews (Codex and Claude, read-only), then
-adjusted after two rounds of adversarial code review.
+adjusted after three rounds of adversarial code review.
 
 - **The scanner is a coordinator that never loads plugin code.** Bundles with a
   valid, non-discardable `moduleinfo.json` are read without loading code (also
@@ -34,25 +34,30 @@ adjusted after two rounds of adversarial code review.
   `LoadLibrary`). The watchdog hard-exits (`_exit` / `TerminateProcess`, code
   86) at the timeout or when the coordinator is gone (`getppid()` change on
   POSIX, the coordinator's process handle on Windows). Before loading the plugin,
-  the child points its stdout/stderr at `/dev/null` (POSIX) or makes them
-  non-inheritable (Windows), so plugin output and helper processes cannot reach
-  or hold the coordinator's pipe. The result is a JSON file written atomically
+  the child points its stdout/stderr at `/dev/null` (POSIX) or `NUL` (Windows,
+  closing the original pipe handles), so plugin output and helper processes
+  cannot reach or hold the coordinator's pipe. The result is a JSON file written atomically
   with the nonce; the child then hard-exits without running plugin unload code.
-- **Coordinator.** Drains each probe's stdout and stderr concurrently and kills
-  the probe itself at timeout + 2 s if the watchdog failed. It accepts a result
+- **Coordinator.** Drains each probe's stdout and stderr concurrently, then
+  waits for the probe to exit with a bound of timeout + `max(5 s, timeout/4)`
+  from spawn, and kills it if it is still there (the watchdog may be unable to
+  run, e.g. a stopped process). It accepts a result
   only with exit status 0, a readable file, the right nonce and non-empty class
   IDs. Anything else skips only that bundle, logged once:
   `[VST3 Scanner] Skipped <path>: <reason>` (`probe failed`, `probe timed out`,
   `probe timed out (killed)`, `probe produced no result`, ...). The host repeats
-  these lines in the OBS log. `VST3_SCAN_DONE` is printed only if the cache was
+  the scanner's `[VST3 Scanner]` lines in the OBS log. `VST3_SCAN_DONE` is printed only if the cache was
   saved. Stale probe files older than an hour are removed at start.
 - **Timeout.** 30 s per probe by default (slow but valid plugins on a cold
   start); `OBS_VST3_PROBE_TIMEOUT_MS` overrides it (clamped to 0.5–120 s). There
   is no overall deadline: a scan with many hanging plugins takes longer, but OBS
   is usable meanwhile (filters fall back to their saved plugin path) and exit is
   bounded by the kill below.
-- **Host.** New libobs export `os_process_pipe_kill()` (POSIX `SIGKILL`, Windows
-  `TerminateProcess`; signal only, `os_process_pipe_destroy` still reaps). On
+- **Host.** Two new libobs exports: `os_process_pipe_kill()` (POSIX `SIGKILL`,
+  Windows `TerminateProcess`) and `os_process_pipe_wait(pp, timeout_ms)`
+  (POSIX `waitid(…WNOWAIT)` polling, Windows `WaitForSingleObject`). Neither
+  reaps; `os_process_pipe_destroy` still does, so a kill can never hit a reused
+  PID. On
   unload, `cancelVst3Scan()` sets a flag and kills the coordinator under a mutex,
   then joins. Probes notice the coordinator is gone and exit.
 - **Discovery.** Sorted and deterministic; permission errors and missing
@@ -64,17 +69,21 @@ adjusted after two rounds of adversarial code review.
 
 ## Evidence (Linux, Ubuntu 24.04, `ENABLE_VST3=ON`, warnings as errors)
 
-`run.sh` now has 15 checks. Fixtures: the SDK samples (ADelay, AGain Sample
+`run.sh` now has 16 checks. Fixtures: the SDK samples (ADelay, AGain Sample
 Accurate, Advanced Tutorial: class IDs pinned), `invalid` (random bytes),
 `crash` (SIGSEGV on load), `hang` (never returns), `noisy` (writes fake markers
 and junk, forks a grandchild that holds every inherited fd for 30 s, then
-crashes), `exit0` (clean exit on load, no result), and two moduleinfo-only
-bundles on top of crashing code (zero audio classes; one made-up class).
+crashes), `exit0` (clean exit on load, no result), two moduleinfo-only
+bundles on top of crashing code (zero audio classes; one made-up class), and a
+hang probe frozen with SIGSTOP inside the plugin so that only the coordinator can
+end it.
 
 | Build | Result |
 | --- | --- |
-| this branch | **15 PASS, 0 FAIL**, 43 s, no process left. Hang probe skipped in 2.1 s with a 2 s timeout; OBS quits mid-scan in 2.8 s with 0 leaks while the scanner runs; the noisy grandchild is alive while the scan finishes in 26 ms. |
-| unfixed (main) | the 6 original checks PASS, **all 9 new checks FAIL** (crash: exit 139 and no list; hang: still running at 20 s; OBS blocked at exit until the 30 s timeout). |
+| this branch | **16 PASS, 0 FAIL**, about 50 s, no process left. Hang probe skipped in 2.1 s with a 2 s timeout; frozen probe killed by the coordinator at 7.0 s; OBS quits mid-scan in 1.4–2.8 s with 0 leaks while the scanner runs; the noisy grandchild is alive while the scan finishes in about 30 ms. |
+| this branch, clean Ubuntu 24.04 container (`tools/jeiobs/cleanroom`, under `xvfb-run`) | **15 PASS, 0 FAIL** at `73b9c2190` (before the frozen-probe check existed) |
+| round-2 code (`e5d433625`) | the frozen-probe check FAILS (still running at 20 s), the other 15 PASS |
+| unfixed (main) | the 6 original checks PASS, **all new checks FAIL** (crash: exit 139 and no list; hang: still running at 20 s; OBS blocked at exit until the 30 s timeout). |
 
 The script exits 2 (no verdict) if a needed tool is missing, if `pgrep`/`pkill`
 do not work, or if `/usr/lib/vst3` or `/usr/local/lib/vst3` contain plugins,

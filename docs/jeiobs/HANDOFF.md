@@ -49,10 +49,11 @@ containing commit (use `git log -1 -- docs/jeiobs/HANDOFF.md`).
 - Task 003 scanner robustness (2026-11-16, `jeiobs/vst3-scanner-robustness`):
   the scanner probes each code-loading bundle in its own child process with a
   watchdog, so a crashing or hanging plugin is skipped (and logged) instead of
-  hiding all plugins; OBS kills a running scan on exit. New libobs export
-  `os_process_pipe_kill`. `run.sh` grows to 15 checks: 15/15 on the fix, and the
-  9 new ones fail on the old code. Built in worker mode (Codex implementation,
-  Claude tests, each cross-reviewed twice by the other lineage). Linux only;
+  hiding all plugins; OBS kills a running scan on exit. New libobs exports
+  `os_process_pipe_kill` and `os_process_pipe_wait`. `run.sh` grows to 16
+  checks: 16/16 on the fix, and the new ones fail on the old code. Built in
+  worker mode (Codex implementation, Claude tests, each cross-reviewed three
+  times by the other lineage). Linux only;
   Windows/macOS not compiled. See [task 003](tasks/003-vst3-scanner-robustness.md).
 
 ## Evidence
