@@ -940,11 +940,14 @@ std::vector<std::string> ExportUnknownFields(const Json &document)
 	AppendUnknownObjectFields(document.at("compat"), "compat", {"incompat", "ro_compat"}, fields);
 
 	const Json &target = document.at("target");
-	AppendUnknownObjectFields(target, "target", {"os", "audio"}, fields);
+	// Known local fields that the projection drops on purpose are not "unknown" (dropped_ext is
+	// only for fields this version does not know).
+	AppendUnknownObjectFields(target, "target",
+				  {"os", "arch", "machine_id", "app_dir", "roots", "audio", "devices"}, fields);
 	if (target.contains("audio")) {
 		if (target.at("audio").is_object()) {
-			AppendUnknownObjectFields(target.at("audio"), "target.audio", {"sample_rate", "channels"},
-						  fields);
+			AppendUnknownObjectFields(target.at("audio"), "target.audio",
+						  {"sample_rate", "channels", "explicit", "src"}, fields);
 		} else {
 			fields.emplace_back("target.audio");
 		}
