@@ -276,6 +276,25 @@ static void getScanResult(obs_source_t *src)
 		}
 	}
 
+	/* The scanner reports each bundle it had to skip (crash, timeout, bad
+	 * result) on stdout, before the end marker. Pass those on, so the log
+	 * says which plugin is missing and why. */
+	for (size_t start = 0; start < status.size();) {
+		size_t end = status.find('\n', start);
+		if (end == std::string::npos) {
+			end = status.size();
+		}
+		std::string line = status.substr(start, end - start);
+		if (!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+		const size_t skipped = line.find("[VST3 Scanner] Skipped ");
+		if (skipped != std::string::npos) {
+			blog(LOG_WARNING, "%s", line.substr(skipped).c_str());
+		}
+		start = end + 1;
+	}
+
 	bool ready = false;
 	const bool cancelled = vst3ScanCancelled.load(std::memory_order_acquire);
 	if (!cancelled) {
