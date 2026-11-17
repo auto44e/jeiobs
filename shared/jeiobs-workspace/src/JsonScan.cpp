@@ -30,7 +30,7 @@ namespace {
 // Called only for a grammar-valid token that the parser reported out of range, which is either
 // huge (overflow) or tiny (underflow). Decide from the decimal position of the first non-zero digit:
 // positive means a magnitude of at least 1, so the out-of-range result was an overflow.
-bool IsOverflowingExponent(std::string_view token)
+long long DecimalMagnitude(std::string_view token, bool &zero)
 {
 	std::size_t i = 0U;
 	if (i < token.size() && token[i] == '-') {
@@ -61,8 +61,9 @@ bool IsOverflowingExponent(std::string_view token)
 			++i;
 		}
 	}
-	if (!seen_nonzero) {
-		return false; // zero never overflows
+	zero = !seen_nonzero;
+	if (zero) {
+		return 0;
 	}
 	long long exponent = 0;
 	if (i < token.size() && (token[i] == 'e' || token[i] == 'E')) {
@@ -83,15 +84,30 @@ bool IsOverflowingExponent(std::string_view token)
 		}
 	}
 	(void)integer_digits;
-	return first_digit_position + exponent > 0;
+	return first_digit_position + exponent;
 }
 
 // The token already matched the JSON number grammar; only overflow to infinity is rejected
 // (an underflow to zero or a denormal is a valid number). Locale independent on every platform:
 // std::from_chars for double where the standard library has it, otherwise a classic-locale
 // stream (Apple's libc++ lacks floating-point from_chars for older deployment targets).
+bool IsOverflowingExponent(std::string_view token)
+{
+	bool zero = false;
+	const long long magnitude = DecimalMagnitude(token, zero);
+	return !zero && magnitude > 0;
+}
+
 bool IsFiniteJsonNumber(std::string_view token)
 {
+	// Fast path: a grammar-valid number whose first significant digit sits well inside the double
+	// range (10^-300 .. 10^300) is finite; no conversion needed. Only numbers near the limits are
+	// converted, so a document with a million numbers stays linear and cheap on every platform.
+	bool zero = false;
+	const long long magnitude = DecimalMagnitude(token, zero);
+	if (zero || (magnitude > -300 && magnitude < 300)) {
+		return true;
+	}
 #if !defined(JW_NO_FROM_CHARS) && defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
 	double number = 0.0;
 	const std::from_chars_result parsed =
