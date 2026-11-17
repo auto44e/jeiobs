@@ -209,13 +209,17 @@ A13. **Grants.** Peer grants and trust overrides are machine-local state in `gra
      capture, export and import, so an old snapshot cannot re-grant a revoked peer and an imported
      mapping cannot widen trust. UDP source addresses are spoofable: a UDP peer allowlist is
      advisory, and no grant over UDP can give `output-control`, `profile` or `meta`. Only an
-     authenticated, connection-oriented transport can hold those classes: a token-authenticated
-     OSC/TCP session whose secret is in `secrets.json`. Network MIDI 2.0 is UDP and authenticates
+     authenticated, confidential, connection-oriented transport can hold those classes: an OSC/TCP
+     session that proves a secret from `secrets.json` by challenge-response with a per-session nonce
+     (the secret is never sent), and that runs over TLS, or over loopback TCP that passes A14's
+     checks. K4 specifies the handshake, replay protection and the TLS choice; until it does, no
+     session can hold a privileged class. Network MIDI 2.0 is UDP and authenticates
      only the invitation, so it counts as UDP here: no privileged grant.
 A14. **Loopback is not trusted by default.** A listener on `127.0.0.1` is reachable by web pages
      and browser sources (DNS rebinding, `no-cors` POSTs). Default grants for `loopback-net`
      apply to UDP only. TCP and HTTP listeners (OSC over TCP/SLIP, OSCQuery) default to read-only
-     until the listener enforces a loopback `Host`, rejects any `Origin`, sends no CORS headers,
+     until the listener enforces a `Host` that equals the address it is bound to (or a configured name),
+     rejects any `Origin`, sends no CORS headers,
      and closes the connection on the first malformed frame; they never get write classes by
      default. Those checks are unconditional for every TCP, HTTP and WebSocket listener, reads
      included (a mapped value streamed over an OSCQuery WebSocket to a web page or a browser
@@ -255,17 +259,28 @@ A17. **A7 corrected.** The balance field is READ on whichever thread pushes audi
      shadow once when the source becomes active, unless a newer write by another writer (the OBS UI or
      obs-websocket, observed through the signals) arrived meanwhile; a newer observed write wins and
      the shadow is dropped.
-A18. **Record, who settled what.**
-     - Debate (Claude and Codex agreed): items 1-7 and 9; the principle.
-     - Review round 1 (both peers asked, the lead answered): A1-A7 (authorization, output control,
-       targets, reads, queues, audio-thread facts), A9, A10 (the lead's outline; PR1 fixes the types).
-     - Review round 2 (Claude asked, Codex agreed where noted): A11 (routes; the lead's
-       definition), A15-A17 (targets table, coalescing, audio facts).
-     - The lead alone, as proposals that only Claude's review tested: A12 (bindings capture as
-       `local-only`; the debate had Claude and Codex wanting bindings outside capture, review round 1
-       asked for capture, the lead chose capture with no export path), A13 (grants machine-local)
-       and A14 (loopback), which no Codex reply addressed. Codex has not accepted A12-A14.
-     - Item 8's persistence layout was settled by the debate except for bindings (A12).
+A18. **Record, who settled what** (sources: the debate transcript `02`, the review transcripts
+     `review-01` to `review-04`, and the ledger).
+     - Items 1-4 (values, applying commands, arbitration, loops): Claude proposed, Codex disputed
+       in the debate's round 2, and the lead adopted Codex's positions where they differed:
+       exact tagged values (not a `double` view), adapters own application with the graph emitting
+       commands, explicit merge policies (not equal-priority rejection), and layered loop
+       protection. Claude's address-path idea was kept.
+     - Items 5-7 and 9 (targets by UUID, queues, library layout, security basics): both agreed in the
+       debate; the review rounds then added A1-A7 and A9, each accepted by the finder that raised it
+       (the ledger lists the acceptances).
+     - Item 8 (persistence layout): the debate had Claude and Codex want bindings outside the
+       portable workspace; review rounds 1 and 2 (both peers) asked for capture instead; the lead
+       chose capture as `local-only` with no export path (A12), and Codex accepted A12
+       (`review-03/04-r2-codex.reply.md`).
+     - Item 10 and A10: the lead's outline of transform, bank, layer, modifier, learn and device
+       identity scope; PR1 fixes the exact types. A11 (routes): the lead's definition, in answer to
+       Claude's finding; A15-A17: the lead, accepted by Codex (A15, A16) and open on A17's factual
+       wording until this head.
+     - A13 (grants machine-local, UDP and Network MIDI 2.0 never privileged) and A14 (listener
+       checks): proposed by the lead, tested by Claude's reviews (Claude's `claude-13`, `claude-14`,
+       `claude-19`, `claude-20`); Codex confirmed `claude-14` as Major and raised `codex-10`,
+       `codex-11` but has not stated acceptance of A13 or A14 as a whole.
      **Every decision above that has no flex bullet is firm.**
 
 **Additional if-otherwise and flex.**

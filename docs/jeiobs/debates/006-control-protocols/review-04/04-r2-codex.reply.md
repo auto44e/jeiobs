@@ -1,0 +1,12 @@
+FINDING codex-1 | Major | accepted-fix | A7 assigns balance to the atomic latest-value slot (006:160-167)
+FINDING codex-2 | Major | accepted-fix | A12 makes bindings local-only and excluded from exports (006:200-207)
+FINDING codex-3 | Major | accepted-fix | A5 defines TargetState snapshots, polling, and feedback reads (006:145-150)
+FINDING codex-4 | Major | accepted-fix | A15 defines target identities, paths, classes, and profile switching (006:223-243)
+FINDING codex-5 | Major | accepted-fix | A1 defines principals, capability checks, defaults, and hard denies (006:117-126)
+FINDING codex-6 | Major | accepted-fix | A6 defines queue isolation, fairness, overflow, reducers, and privileged handling (006:151-159)
+FINDING codex-7 | Minor | accepted-fix | A17 now correctly distinguishes balance reads and setter writes (006:247-251)
+FINDING codex-8 | Minor | accepted-fix | A16 defines per-writer absolute retention and relative-delta accumulation (006:244-246)
+FINDING codex-9 | Major | open | A18 still says “Codex has not accepted A12-A14,” contradicting Codex’s acceptance of A12 (006:267; review-03/04-r2-codex.reply.md:1,6)
+FINDING codex-10 | Minor | open | A14 requires “a loopback Host” “unconditional for every ... listener,” but A9 exposes OSCQuery to remote peers; LAN Host matching is undefined (006:174-177,218-222)
+FINDING codex-11 | Minor | open | A13 specifies a “token-authenticated OSC/TCP session” but no handshake, replay, or confidentiality requirement (006:208-214; ROADMAP:266-270)
+VERDICT: request changes
