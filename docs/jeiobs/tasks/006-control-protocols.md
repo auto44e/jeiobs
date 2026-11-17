@@ -273,16 +273,16 @@ A18. **Record, who settled what** (sources: the debate transcript `02`, the revi
        by the finder that raised it (the ledger lists the acceptances).
      - Item 8 (persistence): Claude's round-2 proposal captured `bindings.json` as
        `opaque-unreviewed`; Codex wanted bindings outside capture and export; the first draft took
-       Codex's position; review rounds 1 and 2 asked for capture; the lead chose capture as
+       Codex's position; review round 1 asked for capture and round 2 asked that bindings have no export path; the lead chose capture as
        `local-only` with no export path (A12), and Codex accepted A12 (`review-03/04-r2-codex.reply.md`).
      - Item 10 (slices): Claude proposed a large PR1 (all types, validator, compiler, transforms);
        Codex disputed its size; the lead took Codex's narrower PR1. A10: the lead's outline of
        transform, bank, layer, modifier, learn and device-identity scope; PR1 fixes the exact types.
-     - A11 (routes): the lead's definition, in answer to Claude's finding. A15 and A16: the lead,
-       accepted by Codex in review-03. A17: the lead, corrected after both peers' findings and
+     - A11 (routes): the lead's definition, in answer to Claude's finding. A15: the lead, accepted by Codex in review-03; A16: the lead, in answer to
+       Claude's `claude-8` and Codex's `codex-8`, accepted in review-03. A17: the lead, corrected after both peers' findings and
        accepted by Codex in review-04.
      - A13 (grants machine-local, UDP and Network MIDI 2.0 never privileged) and A14 (listener
-       checks): proposed by the lead and tested by Claude's reviews; Codex confirmed `claude-14` as
+       checks): written by the lead as answers to Claude's run-02 findings `claude-13` and `claude-14` and then tested by its later reviews; Codex confirmed `claude-14` as
        Major and raised `codex-10` and `codex-11`, but has not stated acceptance of A13 or A14 as a
        whole.
      **Every decision above that has no flex bullet is firm.**
