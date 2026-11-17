@@ -10,7 +10,7 @@ here wins. Integrity hashes detect corruption; they are not signatures and prove
 Settled by the two-round Claude/Codex design debate (its round-2 positions are this design) and by
 the lead, who resolved what round 2 left open. Correspondence:
 [debates/002-workspace-format](debates/002-workspace-format/). Each section gives the decision and
-the main rejected alternative; section 14 lists what the owner decides.
+the main rejected alternative; section 14 records the owner's decisions.
 
 ## 1. Terms
 
@@ -472,7 +472,7 @@ Writer inventory (audit section 2, re-checked):
 | `persistent_data.json`, `vst3list.json` | obs-websocket worker (`RequestHandler_Config.cpp:109`); scanner process (`vst3-scanner.cpp:646`) | plain; tmp + `.bak` | not captured |
 
 A writer found later that bypasses `config_t` and `SaveService()` either joins the protocol or
-makes capture refuse while it can run. Without `config_lock` (owner decision 1: added), capture would refuse
+makes capture refuse while it can run. Without `config_lock` (owner decision 1: approved, not yet implemented), capture would refuse
 while obs-websocket's server is enabled.
 
 ## 11. Durability and recovery (S2 implements; fixed now)
@@ -594,26 +594,44 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 | CI | `.github/workflows/jeiobs-workspace.yaml`: build and ctest on ubuntu, macos, windows | owner (`.github/`) |
 | PR2 | bounded JSON scanner with byte positions; INI reader that keeps BOM (written on Windows, `config-file.c:378-381`), CRLF and duplicates; redactor with per-kind placeholders. Fixtures: rtmp_common, custom RTMP with auth, WHIP, Twitch/YouTube/Restream tokens, websocket placeholder with forced auth, URL rule; a scan proving no secret bytes remain; a fuzz target | self-merge gate |
 | PR3 | `CapturePlanner` (allowlist, omit-by-default, `.bak` pairs, symlinks, `u1` rules), `CollectionIndex`, identity; synthetic Windows/macOS/Linux root trees with custom locations and portable mode | self-merge gate |
-| PR4 | frontend capture host: save result, `StageWindowState`, `persistMutex`, root gate, Windows sharing, coordinator. Tests: an off-thread `config_save` blocks instead of tearing a read; an out-of-protocol writer makes capture refuse; `ReplaceFileW` succeeds during a capture read; a failed save yields no result | owner decision 1 (made: add `config_lock`) |
-| S2 | store writer, recovery, history, restore | — |
+| PR4 | frontend capture host: save result, `StageWindowState`, `persistMutex`, root gate, Windows sharing, coordinator. Tests: an off-thread `config_save` blocks instead of tearing a read; an out-of-protocol writer makes capture refuse; `ReplaceFileW` succeeds during a capture read; a failed save yields no result | self-merge gate with decision 1 already made; it changes libobs public API, so review rounds repeat until one finds no Blocker or Major |
+| S2 | store writer, recovery, history, restore, and the purge (delete a revision or a workspace; remove unreferenced blobs) that decision 2 depends on | — |
+| Unicode tables | owner-merged: pin the Unicode Character Database, a committed generator script and the generated normalization and case-fold tables (decision 3); needed before S2 or S3 may write from a manifest with non-ASCII paths | owner (third-party data) |
 
 ## 14. Owner decisions
 
 Decided 2026-11-16. The owner's words, verbatim: "will go with all you recs for all 3".
 
-- **Decision 1: add `config_lock()` / `config_unlock()` to libobs util.** PR4 may now implement it.
-  It is a new public libobs API, so PR4 must also show the lock-order proof and hold times
-  described in section 10.
+- **Decision 1: add `config_lock()` / `config_unlock()` to libobs util.** Approved; not yet
+  implemented. PR4 may now implement it. It is a new public libobs API, so PR4 must also show the
+  lock-order proof and hold times described in section 10.
+  - Why: it is the only mechanism found that serializes obs-websocket's pool writes and
+    third-party `config_t` writers without changing them.
+  - Flex: reopen if the lock-order proof fails, if hold times starve the audio or video threads,
+    or if upstream OBS adds its own config lock; the fallback is the "if declined" behaviour below.
 - **Decision 2: keep `opaque-unreviewed` data in local history**, under the stated cost (no
-  encryption, kept until S2 adds a purge) and the fail-closed export gate of section 6.
+  encryption; kept after the user removes it from OBS until S2 adds a purge) and the fail-closed
+  export gate of section 6. S2 therefore includes the purge (section 13).
+  - Why: restoring the user's own setup must not lose browser, script or VST state.
+  - Cost, as accepted: history keeps the data until the S2 purge removes it. S2's scope includes
+    that purge (delete a revision, delete a workspace, and remove blobs no revision references).
+  - Flex: reopen if a purge cannot be built, or if a leak of local history is shown to be
+    realistic for this store; the alternative is stripping at capture (below).
 - **Decision 3: generate the Unicode tables from a pinned Unicode Character Database with a
   committed script** (the first option below), not a vendored `utf8proc`. This item had no
   recommendation written in this section; that pick is the lead's, taken under the owner's "all you
   recs". It adds third-party data (Unicode License v3), so the PR that adds the pin and the
   generated tables is owner-merged. Until it lands, PR1's ASCII-only fold and the "unchecked"
   rule stay.
+  - Why generated tables over `utf8proc`: no vendored code and no new runtime dependency, the
+    data is pinned and reproducible from one script, and only the two functions needed (NFD and
+    case fold) are built.
+  - If `utf8proc` had been chosen: a maintained library and fewer bugs in our own folding, at the
+    cost of vendored code under `deps/` and its update burden.
+  - Flex: reopen if the generator proves hard to keep correct across Unicode releases; then
+    vendor `utf8proc`. The owner may also pick it now.
 
-The options and costs as they were put to the owner:
+The options and costs as they were put to the owner. The "Decided:" labels were added after the owner's answer:
 
 1. **`config_lock()` and `config_unlock()` in libobs util (needed by PR4). Decided: add it.** This is a new public
    libobs API around the existing recursive `config->mutex`. It is the only mechanism found that
