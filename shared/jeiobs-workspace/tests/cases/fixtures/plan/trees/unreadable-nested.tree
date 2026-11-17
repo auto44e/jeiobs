@@ -1,0 +1,9 @@
+# r2.4: a folder that cannot be listed inside a folder excluded as a whole (the secret store) and inside
+# a profiles folder without basic.ini.
+needs unreadable-dirs
+file config/obs-studio/plugin_config/obs-browser/Cookies 100
+file config/obs-studio/plugin_config/obs-browser/Cache/data_0 5000
+unreadable config/obs-studio/plugin_config/obs-browser/Cache
+file profiles/obs-studio/basic/profiles/NoIni/notes.txt 5
+file profiles/obs-studio/basic/profiles/NoIni/sub/x.txt 6
+unreadable profiles/obs-studio/basic/profiles/NoIni/sub

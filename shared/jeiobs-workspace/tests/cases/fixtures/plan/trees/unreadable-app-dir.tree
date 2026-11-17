@@ -1,0 +1,5 @@
+# r2.4: the user root's app dir cannot be listed.
+needs unreadable-dirs
+file user/obs-studio/user.ini 300
+unreadable user/obs-studio
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json

@@ -1,0 +1,5 @@
+# r2.3: the scenes root's app dir is a symlink to an app dir with a collection.
+needs symlinks
+file user/obs-studio/user.ini 300
+link scenes/obs-studio ../outside/obs-studio
+copy outside/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json

@@ -1,0 +1,14 @@
+# r2.4: directories that cannot be listed (no read or search right while the case runs): a profile
+# folder, basic/scenes, a listed module folder and plugin_manager, next to readable ones.
+needs unreadable-dirs
+file user/obs-studio/user.ini 300
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+file profiles/obs-studio/basic/profiles/Locked/basic.ini 200
+unreadable profiles/obs-studio/basic/profiles/Locked
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json
+unreadable scenes/obs-studio/basic/scenes
+file config/obs-studio/plugin_config/obs-websocket/config.json 160
+unreadable config/obs-studio/plugin_config/obs-websocket
+file config/obs-studio/plugin_config/aja-output-ui/ajaOutputProps.json 140
+file plugin_manager/obs-studio/plugin_manager/modules.json 256
+unreadable plugin_manager/obs-studio/plugin_manager

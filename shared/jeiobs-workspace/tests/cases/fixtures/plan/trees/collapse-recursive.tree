@@ -1,0 +1,10 @@
+# r2.7: collapsed folders with subfolders: basic/scenes (101 unknown files, a stored pair, sub/ with 2
+# files below it) and profile P (101 unknown files and 150 subfolders of 2 files each).
+copy scenes/obs-studio/basic/scenes/A.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/A.json.bak 50
+many scenes/obs-studio/basic/scenes 101 u
+file scenes/obs-studio/basic/scenes/sub/one.txt 3
+file scenes/obs-studio/basic/scenes/sub/deeper/two.txt 4
+file profiles/obs-studio/basic/profiles/P/basic.ini 100
+many profiles/obs-studio/basic/profiles/P 101 u
+profiles profiles/obs-studio/basic/profiles/P 150 1

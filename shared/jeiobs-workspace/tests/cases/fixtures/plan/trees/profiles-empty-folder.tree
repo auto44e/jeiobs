@@ -1,0 +1,3 @@
+# r2.8: an empty folder in basic/profiles, next to a profile.
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+dir profiles/obs-studio/basic/profiles/Empty

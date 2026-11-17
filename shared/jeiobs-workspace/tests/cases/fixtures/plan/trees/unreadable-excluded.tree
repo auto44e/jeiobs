@@ -1,0 +1,9 @@
+# r2.4: folders excluded as a whole that cannot be listed: a runtime folder, an unlisted module folder
+# and the secret store.
+needs unreadable-dirs
+file config/obs-studio/logs/a.txt 10
+unreadable config/obs-studio/logs
+file config/obs-studio/plugin_config/foo-plugin/a.json 11
+unreadable config/obs-studio/plugin_config/foo-plugin
+file config/obs-studio/plugin_config/obs-browser/Cookies 12
+unreadable config/obs-studio/plugin_config/obs-browser

@@ -1,0 +1,3 @@
+# r2.1: X keeps its path but now has the scene set of the parent's Y. Alpha, renamed from Y, has it too.
+copy scenes/obs-studio/basic/scenes/Alpha.json fixtures/plan/files/ord-s2.json
+copy scenes/obs-studio/basic/scenes/X.json fixtures/plan/files/ord-s2.json

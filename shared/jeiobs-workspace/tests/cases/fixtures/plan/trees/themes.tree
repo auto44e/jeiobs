@@ -1,0 +1,13 @@
+# r2.2: themes/ is skipped only directly under the config root's app dir. Elsewhere "themes" is an
+# ordinary name: a profile folder, a collection, files in walked folders and a module folder.
+file config/obs-studio/themes/Custom.obt 900
+file config/obs-studio/themes/Custom/extra.qss 50
+file config/obs-studio/plugin_config/themes/settings.json 60
+file config/obs-studio/plugin_config/obs-websocket/config.json 160
+file config/obs-studio/plugin_config/obs-websocket/themes 9
+copy scenes/obs-studio/basic/scenes/themes.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/themes 8
+file profiles/obs-studio/basic/profiles/Main/basic.ini 200
+file profiles/obs-studio/basic/profiles/Main/themes 7
+file profiles/obs-studio/basic/profiles/themes/basic.ini 300
+file profiles/obs-studio/basic/profiles/themes/service.json 40

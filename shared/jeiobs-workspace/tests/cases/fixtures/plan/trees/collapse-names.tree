@@ -1,0 +1,4 @@
+# r2.7: a collapsed folder that also holds a name PathRules rejects: one entry for the folder.
+needs reserved-names
+many scenes/obs-studio/basic/scenes 101 u
+file scenes/obs-studio/basic/scenes/What?.txt 7

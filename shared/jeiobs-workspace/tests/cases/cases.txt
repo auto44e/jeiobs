@@ -51,6 +51,7 @@
 #     uids=random   (with @FILE) every uid is a distinct lowercase UUIDv4. Each is replaced, collections
 #                   first, by uid-random-0001, uid-random-0002, ... before the comparison, and a second run
 #                   must give other uids
+#     timeout=N     the case fails after N seconds (default 120)
 #   followed by TEXT, ~REGEX or * as above, or by
 #     @FILE,FILE,...  stdout is one JSON object equal to one of the FILEs (several only where the contract
 #                     allows more than one reading), both in canonical form: inside each run of consecutive
@@ -58,20 +59,27 @@
 #                     module.*) the entries are sorted by path, then ids are renumbered and every bak
 #                     follows its entry. A profiles dir "basic/profiles/<d>" counts as "<d>", and warnings
 #                     are sorted. Before that, the ids of stdout must be e1, e2, ... in entry order and
-#                     every bak must name an entry.
+#                     every bak must name an entry. FILE is relative to this directory, or ${WORK}/... for
+#                     a file run-cases.cmake generates. The string "<any>" in a FILE stands for any value
+#                     (only where the contract leaves a value open)
 #     entries=N       stdout is one JSON object with N entries (an output too big to compare)
 #   A tree file has one item per line, blank lines and # comments aside. PATH is relative to the tree, %XX
 #   is the byte 0xXX and {N*C} the character C repeated N times. No semicolon, square bracket or backslash
 #   (use %XX).
-#     needs F ...         the tree needs symlinks, case-sensitive, non-utf8-names, reserved-names or
-#                         long-names. Where the filesystem lacks one (probed in ${WORK}/plan-probe), its
-#                         cases are skipped
+#     needs F ...         the tree needs symlinks, case-sensitive, non-utf8-names, reserved-names,
+#                         long-names or unreadable-dirs. Where the filesystem lacks one (probed in
+#                         ${WORK}/plan-probe), its cases are skipped. unreadable-dirs is missing on Windows
+#                         and for root, who can list any directory
 #     dir PATH            a directory
 #     file PATH SIZE      a file of SIZE bytes "x", every byte of its name kept, backslashes included
-#     copy PATH FILE      a copy of FILE (relative to this directory)
+#     copy PATH FILE      a copy of FILE (relative to this directory, or ${WORK}/... for a generated file)
+#     hardlink PATH FILE  a hard link to FILE (as for copy), or a copy where hard links fail
 #     link PATH TARGET    a symbolic link to TARGET (relative to the link's directory)
 #     many DIR N PREFIX   N files DIR/PREFIX0001.txt, ..., where file k has k bytes
 #     profiles DIR N M    N folders DIR/p000, ..., each with basic.ini and M files u001.txt, ... of 1 byte
+#     unreadable PATH     the directory PATH (made by an earlier line) has only the owner's write right
+#                         while each case of the tree runs, so it cannot be listed or entered, and 0755
+#                         between cases
 
 # ---- usage (exit 2, stdout not checked)
 usage-no-arguments | 2 | *
@@ -1303,8 +1311,8 @@ redact-usage-unknown-option | 2 | * | redact module.obs-websocket fixtures/redac
 # (bytes, across roots). Readings where the contract is silent, pinned here: a whole-folder dir entry
 # (module, secret-store, cache, runtime) has no count, only a collapse has one, cache is the three module
 # folders and runtime the five top-level folders, a symlink entry has size 0, load_rule comes only with a
-# bak, only new uids take the next number, and global.ini, themes/ and files that belong to no rule of a
-# root are not listed.
+# bak, only new uids take the next number, and global.ini, the config root's themes/ and files that belong
+# to no rule of a root are not listed.
 #
 # a realistic tree: two collections and two profiles with .bak pairs (bak-fallback for collections and
 # service.json, mixed for encoders, none without a .bak), the module configs, and every omitted reason
@@ -1327,15 +1335,18 @@ plan-near-misses | 0 | tree=near-misses @expected/plan/near-misses.json | plan $
 # (file k has k bytes)
 plan-collapse-99-100-101 | 0 | tree=collapse @expected/plan/collapse.json | plan ${TREE} --uid-seed 7
 # folders that also hold stored files: only unknown files count toward the 100 (100 unknown files beside
-# basic.ini stay single). either: the dir entry's size and count cover its unknown files, or all its files
-plan-collapse-with-stored-files | 0 | tree=collapse-mixed @expected/plan/collapse-mixed.json,expected/plan/collapse-mixed-alt2.json | plan ${TREE} --uid-seed 7
-# a .bak without its main is stored alone, with no bak link. either: a lone collection .bak gets no
-# collection uid, or it gets one whose collections item has the .bak path or the main path
-plan-bak-without-main | 0 | tree=bak-alone @expected/plan/bak-alone.json,expected/plan/bak-alone-alt2.json,expected/plan/bak-alone-alt3.json | plan ${TREE} --uid-seed 7
+# basic.ini stay single), and the dir entry's size and count cover the unknown files only (r2.7)
+plan-collapse-with-stored-files | 0 | tree=collapse-mixed @expected/plan/collapse-mixed.json | plan ${TREE} --uid-seed 7
+# a .bak without its main is stored alone, with no bak link. A lone collection .bak is no collection: no
+# uid, no collections item (r1.2, r2.10). A lone service.json.bak in a profile folder has the profile's uid
+plan-bak-without-main | 0 | tree=bak-alone @expected/plan/bak-alone.json | plan ${TREE} --uid-seed 7
 # symlinks to a file, to a directory, to their own folder and dangling ones, at every walked place (in
 # basic/scenes, in a profile folder and as one, as a listed and an unlisted module folder, as logs,
 # user.ini and plugin_manager): one symlink entry each, never followed. The targets under outside/ hold
-# a profile service.json, a websocket config.json, modules.json and user.ini, and none is planned
+# a profile service.json, a websocket config.json, modules.json and user.ini, and none is planned.
+# plugin_manager is a subpath the root owns, so it also gets a root-symlink warning (r2.3). logs and
+# user.ini are not in r2.3's list of such subpaths (basic, basic/scenes, basic/profiles, plugin_manager,
+# plugin_config) and get none
 plan-symlinks@posix | 0 | tree=symlinks @expected/plan/symlinks.json | plan ${TREE} --uid-seed 7
 # either: a symlink inside a folder excluded as a whole only stays out of the folder's size, or it also
 # gets its own symlink entry
@@ -1374,7 +1385,8 @@ plan-scene-uuids | 0 | tree=scene-uuids @expected/plan/scene-uuids.json | plan $
 # scenes changed) and Broken (it does not parse, the parent entry is omitted). Renamed has the scene set of
 # exactly one parent collection (Old Name) and keeps its uid. Copy has Main's set, but Main is claimed by
 # its path. Dup1 and Dup2 both claim Original. Tie matches TieA and TieB. Empty and EmptyOld have empty
-# sets. Profile Main keeps its uid, Renamed is new. New uids are numbered in plan order, collections first
+# sets. Profile Main keeps its uid, Renamed is new. New uids are numbered in plan order, collections first.
+# The order-independence of the two passes (r2.1) has its own cases below
 plan-identity-no-parent | 0 | tree=identity @expected/plan/identity-no-parent.json | plan ${TREE} --uid-seed 7
 plan-identity-parent | 0 | tree=identity @expected/plan/identity-parent.json | plan ${TREE} --parent fixtures/plan/parent-identity.json --uid-seed 7
 # the same parent without scene_uuids: only paths match
@@ -1403,6 +1415,85 @@ plan-usage-parent-without-value | 2 | * | plan ${WORK} --parent
 plan-usage-uid-seed-without-value | 2 | * | plan ${WORK} --uid-seed
 plan-usage-app-dir-without-value | 2 | * | plan ${WORK} --app-dir
 
+# ---- plan: the PR #32 review fixes (S1-PR3 contract r2)
+# r2.1: identity in two passes. Pass 1 gives every collection and profile with a parent's root and path
+# that parent's uid. Pass 2 applies the scene-set rule to the collections still without one, against the
+# parent collections pass 1 did not claim. Against fixtures/plan/parent-identity-order.json: Changed keeps
+# its uid by its path, and the copy with Changed's old scene set gets a new one, whether it sorts before
+# (Archive) or after (Zarchive) Changed
+plan-identity-copy-sorts-before | 0 | tree=identity-order-before @expected/plan/identity-order-before.json | plan ${TREE} --parent fixtures/plan/parent-identity-order.json --uid-seed 7
+plan-identity-copy-sorts-after | 0 | tree=identity-order-after @expected/plan/identity-order-after.json | plan ${TREE} --parent fixtures/plan/parent-identity-order.json --uid-seed 7
+# X keeps its uid by its path although it now has Y's scene set, and takes no part in pass 2: Alpha
+# (renamed from Y, sorting before X) is the only collection left with Y's set, and gets Y's uid
+plan-identity-path-match-not-in-pass-2 | 0 | tree=identity-pass2 @expected/plan/identity-pass2.json | plan ${TREE} --parent fixtures/plan/parent-identity-order.json --uid-seed 7
+# either: Other, with the scene set TwinA and TwinB shared in the parent, gets TwinB's uid (TwinA is
+# claimed by its path, so TwinB is the only unclaimed match), or a new one (two parent collections have
+# the set, a tie). TwinA keeps its uid either way
+plan-identity-tie-with-a-claimed-parent | 0 | tree=identity-claimed-tie @expected/plan/identity-claimed-tie.json,expected/plan/identity-claimed-tie-alt2.json | plan ${TREE} --parent fixtures/plan/parent-identity-order.json --uid-seed 7
+# r2.2: themes/ directly under the config root's app dir is not listed. A profile folder named themes is a
+# profile, themes.json a collection, a module folder named themes one unknown dir entry, and files named
+# themes in basic/scenes, a profile folder and a listed module folder unknown files
+plan-themes-only-in-config-app-dir | 0 | tree=themes @expected/plan/themes.json | plan ${TREE} --uid-seed 7
+# folders named themes in basic/scenes, a profile folder and a listed module folder are listed (the
+# contract does not fix how a subfolder there is listed: as one entry or file by file)
+plan-themes-folder-in-scenes | 0 | tree=themes-subfolders ~"path": *"basic/scenes/themes("|/) | plan ${TREE} --uid-seed 7
+plan-themes-folder-in-profile | 0 | tree=themes-subfolders ~"path": *"basic/profiles/Main/themes("|/) | plan ${TREE} --uid-seed 7
+plan-themes-folder-in-module-folder | 0 | tree=themes-subfolders ~"path": *"plugin_config/obs-websocket/themes("|/) | plan ${TREE} --uid-seed 7
+# r2.3: a subpath a root owns that is a symlink is not followed: one symlink entry (size 0) and a
+# root-symlink warning with its path. basic/scenes, basic, plugin_config and plugin_manager here, and
+# with the alternative roots basic of the scenes root and basic/profiles. Nothing under outside/ is planned
+plan-root-symlink-owned-subpaths@posix | 0 | tree=root-symlinks @expected/plan/root-symlinks.json | plan ${TREE} --uid-seed 7
+plan-root-symlink-basic-and-profiles@posix | 0 | tree=root-symlinks @expected/plan/root-symlinks-alt.json | plan ${TREE} --roots fixtures/plan/roots/root-symlinks-alt.json --uid-seed 7
+# the scenes root's app dir is a symlink: one symlink entry and one root-symlink warning. The contract
+# does not say which path names the app dir itself ("<any>" in the expected file)
+plan-root-symlink-app-dir@posix | 0 | tree=root-symlink-app-dir @expected/plan/root-symlink-app-dir.json | plan ${TREE} --uid-seed 7
+# r2.4: a directory that cannot be listed is one omitted entry, reason unreadable, kind dir (size 0: nothing
+# was read) and a listing-error warning with its path: the plan says so instead of being partial. A profile
+# folder that cannot be listed is no profile (its basic.ini cannot be seen). Here also basic/scenes, a
+# listed module folder and plugin_manager. Cases skip as root
+plan-unreadable-folders@posix | 0 | tree=unreadable @expected/plan/unreadable.json | plan ${TREE} --uid-seed 7
+# either: a folder excluded as a whole that cannot be listed is unreadable, or keeps its own reason (runtime,
+# unknown, secret-store) with size 0, both with a listing-error warning
+plan-unreadable-excluded-folders@posix | 0 | tree=unreadable-excluded @expected/plan/unreadable-excluded.json,expected/plan/unreadable-excluded-alt2.json | plan ${TREE} --uid-seed 7
+# a folder that cannot be listed inside a folder excluded as a whole (obs-browser/Cache, and a subfolder
+# of a folder without basic.ini): the plan has two listing-error warnings, whatever the entries
+plan-unreadable-inside-excluded-folders@posix | 0 | tree=unreadable-nested ~"listing-error".*"listing-error" | plan ${TREE} --uid-seed 7
+# the user root's app dir cannot be listed: one unreadable entry and a listing-error warning ("<any>" path,
+# as for a symlinked app dir). The scenes root is planned
+plan-unreadable-app-dir@posix | 0 | tree=unreadable-app-dir @expected/plan/unreadable-app-dir.json | plan ${TREE} --uid-seed 7
+# r2.6: scene-UUID extraction stops at 100,000 UUIDs. Many.json has 100,000 scenes and a group (all listed,
+# the group's uuid not). TooMany.json has 100,001 scenes: stored, scene_uuids empty, a scene-uuids-limit
+# warning. Expected output generated by run-cases.cmake
+plan-scene-uuids-100000-and-100001 | 0 | tree=scene-uuids-limit @${WORK}/plan-gen/expected-scene-uuids-limit.json | plan ${TREE} --uid-seed 7
+# extraction is linear: 330,000 sources items {"id":0} in 2.9 MB (claude-6's reproducer) within 60 s
+plan-scene-uuids-linear | 0 | tree=scene-uuids-linear timeout=60 @expected/plan/scene-uuids-linear.json | plan ${TREE} --uid-seed 7
+# r2.7: a collapsed folder's size and count cover its unknown regular files recursively, subfolders
+# included: basic/scenes count 103 (101 + 2 below sub/), size 5158. Profile P has 150 subfolders of 2 files
+# each besides its 101 unknown files: count 401, size 5451 (every subfolder counts). Stored files stay
+plan-collapse-recursive | 0 | tree=collapse-recursive @expected/plan/collapse-recursive.json | plan ${TREE} --uid-seed 7
+# a symlink in a subfolder of a collapsed folder is not followed: count 102, size 5152 (the 3,000 bytes
+# under outside/dir do not count). either: it gets its own symlink entry or not (as in folders excluded
+# as a whole)
+plan-collapse-symlink-in-subfolder@posix | 0 | tree=collapse-symlinks @expected/plan/collapse-symlinks.json,expected/plan/collapse-symlinks-alt2.json | plan ${TREE} --uid-seed 7
+# one entry per folder path: basic/scenes with 101 unknown files and a name PathRules rejects gives one
+# entry, not a collapse and a names entry with the same path. either: the collapse also counts the
+# rejected name (count 102, size 5158), or not (count 101, size 5151)
+plan-collapse-with-unrepresentable-name@posix | 0 | tree=collapse-names @expected/plan/collapse-names.json,expected/plan/collapse-names-alt2.json | plan ${TREE} --uid-seed 7
+# r2.8: a folder in basic/profiles without a basic.ini file is no profile: no uid, no profiles item, and
+# its contents are one omitted unknown dir entry (size of its regular files, recursively, no count). A
+# folder named basic.ini and a lone basic.ini.bak make no profile
+plan-profiles-without-basic-ini | 0 | tree=profiles-no-basic-ini @expected/plan/profiles-no-basic-ini.json | plan ${TREE} --uid-seed 7
+# either: an empty folder in basic/profiles is one unknown dir entry of size 0, or not listed
+plan-profiles-empty-folder | 0 | tree=profiles-empty-folder @expected/plan/profiles-empty-folder.json,expected/plan/profiles-empty-folder-alt2.json | plan ${TREE} --uid-seed 7
+# r2.9: a stored-shape file over 64 MiB is omitted too-large (real size, no parse warning), exactly 64 MiB
+# is stored. A service.json.bak beside a too-large service.json is stored alone (no bak link). either: the
+# too-large collection Big.json is no collection (no uid), or it gets a uid and a collections item with
+# empty scene_uuids, with or without the uid on its omitted entry
+plan-too-large | 0 | tree=too-large @expected/plan/too-large.json,expected/plan/too-large-alt2.json,expected/plan/too-large-alt3.json | plan ${TREE} --uid-seed 7
+# stored entries stop at 256 MiB in plan order: A to D (64 MiB each) fill it exactly, E.json and the
+# module config after them are omitted too-large (E's identity: either, as above)
+plan-too-large-total | 0 | tree=too-large-total @expected/plan/too-large-total.json,expected/plan/too-large-total-alt2.json,expected/plan/too-large-total-alt3.json | plan ${TREE} --uid-seed 7
+
 # ---- manifest: scene_uuids (S1-PR3), an optional entry field: an array of strings sorted by bytes and
 # unique, each at most 256 bytes, at most 100,000 items, only on entries with role collection. Anything
 # else is E_SCHEMA scene_uuids. Export drops it (local identity data) and does not list it in dropped_ext.
@@ -1430,6 +1521,28 @@ scene-uuids-on-omitted-entry | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/
 # revision id of these bytes
 scene-uuids-export-dropped | 0 | @expected/export-scene-uuids.json | export fixtures/export/scene-uuids.json fixtures/export/decisions-example.json --now 2026-11-16T19:10:42Z
 scene-uuids-export-output-validates | 0 | OK | manifest expected/export-scene-uuids.json --export
+
+# ---- manifest: count (S1-PR3 contract r2.5), an optional entry field: an integer >= 1, only on omitted
+# entries with kind dir or names (the planner's collapse and names entries). Anything else is
+# E_SCHEMA count. Export keeps it (not in dropped_ext), and a child takes it from the draft like any known
+# field (nothing in dropped_ext, although omitted entries have no hash to match)
+count-dir-ok | 0 | OK | manifest fixtures/manifest/count-dir.json
+count-names-ok | 0 | OK | manifest fixtures/manifest/count-names.json
+count-one-ok | 0 | OK | manifest fixtures/manifest/count-one.json
+count-2-pow-32-ok | 0 | OK | manifest fixtures/manifest/count-large.json
+count-zero | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-zero.json
+count-negative | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-negative.json
+count-fraction | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-fraction.json
+count-string | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-string.json
+count-null | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-null.json
+count-bool | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-bool.json
+count-omitted-without-kind | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-without-kind.json
+count-on-stored-entry | 1 | ERR E_SCHEMA count | manifest fixtures/manifest/count-on-stored-entry.json
+# the spec example with a collapse and a names entry added: the export equals the spec export with them,
+# count kept, but for the revision id of these bytes
+count-export-kept | 0 | @expected/export-count.json | export fixtures/export/count.json fixtures/export/decisions-example.json --now 2026-11-16T19:10:42Z
+count-export-output-validates | 0 | OK | manifest expected/export-count.json --export
+count-child-known-field | 0 | @expected/child-count-known.json | child fixtures/child/parent-count.json fixtures/child/draft-count.json
 
 # ---- redact collection: ReviewRules u1 (S1-PR3). A source type (versioned_id if it is a non-empty string,
 # else id) in the reviewed table, scene and group only, needs no count. Every other type counts 1 and the

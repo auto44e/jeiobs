@@ -1,0 +1,8 @@
+# r2.2: folders named themes inside walked folders (how a subfolder is listed is not fixed by the
+# contract: the cases only check that it is listed).
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/themes/Dark.obt 10
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+file profiles/obs-studio/basic/profiles/Main/themes/Light.obt 11
+file config/obs-studio/plugin_config/obs-websocket/config.json 160
+file config/obs-studio/plugin_config/obs-websocket/themes/x.json 12

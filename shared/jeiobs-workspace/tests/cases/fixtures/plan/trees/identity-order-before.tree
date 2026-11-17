@@ -1,0 +1,4 @@
+# r2.1: a renamed copy that sorts before the collection keeping its path (see
+# fixtures/plan/parent-identity-order.json). Archive has the scene set Changed had in the parent.
+copy scenes/obs-studio/basic/scenes/Archive.json fixtures/plan/files/ord-changed-parent.json
+copy scenes/obs-studio/basic/scenes/Changed.json fixtures/plan/files/id-changed.json
