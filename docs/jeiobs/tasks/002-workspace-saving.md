@@ -42,4 +42,4 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
 - Next: S1-PR2 (JSON scanner with byte positions, INI reader, redactor), then PR3 and PR4 (PR4
   adds `config_lock`, which the owner approved: WORKSPACE_FORMAT section 14). Also owed: an
   owner-merged PR that pins the Unicode Character Database and adds the generated collision
-  tables (decision 3), and a purge for local history in or before S2 (decision 2).
+  tables (decision 3), and S2 includes a purge for local history (decision 2).
