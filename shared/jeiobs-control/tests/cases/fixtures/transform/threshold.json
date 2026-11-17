@@ -1,0 +1,12 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "half", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "threshold", "at": 0.5}], "target": {"kind": "scene", "id": "half"}},
+    {"id": "neg", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "threshold", "at": -0.5}], "target": {"kind": "scene", "id": "neg"}},
+    {"id": "zero", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "threshold", "at": 0}], "target": {"kind": "scene", "id": "zero"}},
+    {"id": "code", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "threshold", "at": 64}], "target": {"kind": "scene", "id": "code"}}
+  ]
+}

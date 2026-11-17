@@ -1,0 +1,15 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "t", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "toggle"}], "target": {"kind": "scene", "id": "t"}},
+    {"id": "t_scale", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "toggle"}, {"op": "scale", "in": [0, 1], "out": [0, 100]}], "target": {"kind": "scene", "id": "t_scale"}},
+    {"id": "t_invert", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "toggle"}, {"op": "invert"}], "target": {"kind": "scene", "id": "t_invert"}},
+    {"id": "t_split", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "toggle"}, {"op": "split14"}], "target": {"kind": "scene", "id": "t_split"}},
+    {"id": "thr_t", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "threshold", "at": 0.5}, {"op": "toggle"}], "target": {"kind": "scene", "id": "thr_t"}},
+    {"id": "t_huge", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "toggle"}, {"op": "scale", "in": [0, 1e-300], "out": [0, 1e+300]}], "target": {"kind": "scene", "id": "t_huge"}},
+    {"id": "rel_t", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.25}, {"op": "toggle"}], "target": {"kind": "scene", "id": "rel_t"}}
+  ]
+}

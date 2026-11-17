@@ -1,0 +1,10 @@
+[
+  {"type": "text", "value": "0.5"},
+  {"type": "text", "value": ""},
+  {"type": "blob", "hex": "00"},
+  {"type": "blob", "hex": ""},
+  {"type": "tuple", "values": []},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "uint", "bits": 7, "value": "2"}]},
+  {"type": "tuple", "values": [{"type": "trigger"}]}
+]

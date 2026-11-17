@@ -1,0 +1,6 @@
+FINDING codex-1 | Major | open | `"char *file = config->file"` precedes locking at `libobs/util/config-file.c:414`; concurrent `config_save_safe` calls can capture another call’s temporary, restore a freed pointer at `:432`, and pass it to `os_safe_replace` at `:449` after `dstr_free` at `:454`.
+FINDING codex-2 | Minor | open | The API claims every getter takes the lock (`libobs/util/config-file.h:52-54`), but `config_num_sections` reads the hash unlocked at `libobs/util/config-file.c:481-484`.
+FINDING codex-3 | Minor | open | The test has an unsynchronized cross-thread stop flag: `volatile int stop` (`test/cmocka/test_config_lock.c:50`) is read at `:68` and written at `:171`; `volatile` is not C thread synchronization.
+FINDING codex-4 | Minor | open | Lock-order documentation conflicts: the API requires `config_lock` before other locks (`libobs/util/config-file.h:55-56`), while the workspace protocol requires `persistMutex` before `config_lock` (`docs/jeiobs/WORKSPACE_FORMAT.md:459-464`).
+FINDING codex-5 | Minor | open | `WORKSPACE_FORMAT.md` still says cmocka “never runs” because only `test/test-input` is added (`docs/jeiobs/WORKSPACE_FORMAT.md:607-610`), contradicted by this commit’s conditional wiring (`CMakeLists.txt:35-37`).
+VERDICT: request changes

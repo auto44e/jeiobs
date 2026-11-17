@@ -1,0 +1,4 @@
+[
+  {"type": "trigger"},
+  {"type": "uint", "bits": 7, "value": "3"}
+]

@@ -1,0 +1,10 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "invert", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "invert"}], "target": {"kind": "scene", "id": "invert"}},
+    {"id": "twice", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "invert"}, {"op": "invert"}], "target": {"kind": "scene", "id": "twice"}}
+  ]
+}

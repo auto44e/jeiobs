@@ -280,3 +280,28 @@ codex-4 | Major | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FI
 codex-5 | Minor | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-5) | -
 codex-6 | Minor | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-6) | -
 codex-7 | Minor | open → fixed (awaiting finder) | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-7) | -
+
+## PR #37 (K1-PR2), review `review-pr37-01` on `6895a7d51`
+
+Run 01: Claude approves, Codex requests changes for one Major. The lead fixed all findings; run 02 on the fixed head
+checks them.
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Minor | fixed (awaiting finder) | claude | review-pr37-01/03-r2-claude.reply.md (FINDING claude-1) | unit tests for deadzone, threshold, negative zero, quantize over 2..64 steps, relative position bounds and error calls keeping state
+claude-2 | Minor | fixed (awaiting finder) | claude | review-pr37-01/03-r2-claude.reply.md (FINDING claude-2) | same as codex-1
+claude-3 | Minor | fixed (awaiting finder) | claude | review-pr37-01/03-r2-claude.reply.md (FINDING claude-3) | `Compile` checks op and parameters before positions (contract r1.5)
+claude-4 | Minor | fixed (awaiting finder) | claude | review-pr37-01/03-r2-claude.reply.md (FINDING claude-4) | `--position` is a plain decimal; nested floats keep `bits_hex` (contract r1.4, r1.6)
+claude-5 | Minor | fixed (awaiting finder) | claude | review-pr37-01/03-r2-claude.reply.md (FINDING claude-5) | case-file comments and task 006 wording corrected; contract r1.1 notes the underflow limit
+codex-1 | Major | fixed (awaiting finder) | codex | review-pr37-01/04-r2-codex.reply.md (FINDING codex-1) | join14 and split14 output is moved out, not copied (contract r1.7)
+codex-2 | Minor | fixed (awaiting finder) | codex | review-pr37-01/04-r2-codex.reply.md (FINDING codex-2) | as claude-3
+codex-3 | Minor | fixed (awaiting finder) | codex | review-pr37-01/04-r2-codex.reply.md (FINDING codex-3) | as claude-4
+
+### PR #37 run 02 (`review-pr37-02`) on `215c476d2`: both peers approve
+
+Codex's Major (codex-1) and every Minor of run 01 are `accepted-fix` by their finders, except claude-1 (the
+unit tests) and claude-5 (documentation accuracy), which stay Minor: claude-1 found that the "errors keep the
+state" property could not fail (the error came before any state change), and claude-5 that contract r1.1
+overstated the unit test's input range and a case-file comment misdescribed the blind cases. The lead fixed both
+after the run: the property now errors after `relative` has moved the position (a mutation that writes the
+state early makes it fail), and the contract and comments say what the tests do.

@@ -1,0 +1,9 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "pass", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "clamp", "min": -1.7976931348623157e+308, "max": 1.7976931348623157e+308}], "target": {"kind": "scene", "id": "pass"}}
+  ]
+}

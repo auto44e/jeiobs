@@ -1303,3 +1303,234 @@ value-fromdouble-i128-1.7014118346046923e38 | 0 | {"bits":128,"type":"int","valu
 value-fromdouble-i128-minus-1.7014118346046923e38 | 0 | {"bits":128,"type":"int","value":"-170141183460469231731687303715884105728"} | value fromdouble {"type":"int","bits":128,"value":"0"} -1.7014118346046923e38
 value-fromdouble-i128-minus-inf | 0 | {"bits":128,"type":"int","value":"-170141183460469231731687303715884105728"} | value fromdouble {"type":"int","bits":128,"value":"0"} -inf
 value-fromdouble-i128-nan | 1 | ERR E_VALUE | value fromdouble {"type":"int","bits":128,"value":"0"} nan
+
+# ---- K1-PR2 transform execution: black-box cases written from the contract without reading the library
+# ---- transform execution (K1-PR2): jc-check transform [--position P] [--toggled] FILE ROUTE_ID
+# INPUTS.json validates and compiles FILE, applies the route's transforms to each input in order
+# with one fresh state (position 0, toggled false) and prints {"outputs":[...]}: null for NoOutput,
+# {"error":"E_VALUE <detail>"} for an error (exit 0, the run goes on), value JSON otherwise, a float
+# as {"format","number","type"} with number = %.9g of the double. Written from the K1-PR2 contract,
+# not from the library, and checked by the worker against its own model of the contract (its notes are
+# in docs/jeiobs/debates/006-control-protocols/24-k1pr2-tests-claude.md). Every float result is meant to
+# print the same with libm off by 2 ulps, with or without fused multiply-add, and with inexact
+# operations off by 1 ulp.
+# An output holding only null, bool and error elements is matched as text (one serialization). Any
+# other output is compared as JSON with member order free (@FILE): the contract fixes the members
+# of a float, not their order. Readings, each stated at its case: a route without a transforms
+# member has the empty pipeline, an INPUTS element that is not a valid value (uint7 128) is E_SCHEMA
+# inputs or E_LIMIT value, INPUTS syntax, duplicate-key and file faults may keep their parser code
+# (E_JSON, E_DUPKEY, E_IO) or be E_SCHEMA inputs, and --position with a non-number is usage.
+# Not here: unit and Relative metadata (not in the value JSON, left to jc-unit), --position with
+# --toggled (seven arguments, the runner passes six), non-finite floats into relative, join14 or
+# split14 (E_VALUE type or nonfinite is not settled), floats nested in a tuple of the empty pipeline
+# (the lead's reading, contract r1.4: a float inside a tuple keeps `bits_hex` in the value JSON).
+# Lead's integration changes (contract r1): the worker's scale cases assume the literal formula and
+# the implementation's endpoint special case was removed to match them, transform-pos-before-target-error
+# and transform-pos-before-unknown-op expect the other error first (r1.2), where the worker had
+# expected E_SCHEMA transforms. Also transform-cli-usage-position-hex-float and -nan were added by the lead
+# (review run 01), not by the blind worker.
+
+# ---- transform: entry conversion of the input (through clamp [-DBL_MAX, DBL_MAX])
+transform-run-convert-numbers | 0 | @expected/transform/convert-numbers.json | transform fixtures/transform/convert.json pass fixtures/transform/inputs/convert-numbers.json
+transform-run-convert-nonfinite | 0 | {"outputs":[{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"}]} | transform fixtures/transform/convert.json pass fixtures/transform/inputs/convert-nonfinite.json
+transform-run-convert-type | 0 | {"outputs":[{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"}]} | transform fixtures/transform/convert.json pass fixtures/transform/inputs/convert-type.json
+transform-run-convert-errors-continue | 0 | @expected/transform/convert-errors-continue.json | transform fixtures/transform/convert.json pass fixtures/transform/inputs/convert-errors-continue.json
+
+# ---- transform: scale y = c + (x - a) * (d - c) / (b - a), in that order, not clamped
+transform-run-scale-identity | 0 | @expected/transform/scale-identity.json | transform fixtures/transform/scale.json identity fixtures/transform/inputs/scale-identity.json
+transform-run-scale-u7 | 0 | @expected/transform/scale-u7.json | transform fixtures/transform/scale.json u7 fixtures/transform/inputs/scale-u7.json
+transform-run-scale-reversed-in | 0 | @expected/transform/scale-reversed-in.json | transform fixtures/transform/scale.json rev_in fixtures/transform/inputs/scale-reversed-in.json
+transform-run-scale-reversed-out | 0 | @expected/transform/scale-reversed-out.json | transform fixtures/transform/scale.json rev_out fixtures/transform/inputs/scale-reversed-out.json
+transform-run-scale-both-reversed | 0 | @expected/transform/scale-both-reversed.json | transform fixtures/transform/scale.json both_rev fixtures/transform/inputs/scale-both-reversed.json
+transform-run-scale-extrapolates | 0 | @expected/transform/scale-extrapolates.json | transform fixtures/transform/scale.json extrap fixtures/transform/inputs/scale-extrapolates.json
+transform-run-scale-bipolar | 0 | @expected/transform/scale-bipolar.json | transform fixtures/transform/scale.json bipolar fixtures/transform/inputs/scale-bipolar.json
+transform-run-scale-constant-out | 0 | @expected/transform/scale-constant-out.json | transform fixtures/transform/scale.json const fixtures/transform/inputs/scale-constant-out.json
+transform-run-scale-huge-factors | 0 | @expected/transform/scale-huge-factors.json | transform fixtures/transform/scale.json huge fixtures/transform/inputs/scale-huge-factors.json
+transform-run-scale-span-overflows | 0 | {"outputs":[{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"}]} | transform fixtures/transform/scale.json wide_out fixtures/transform/inputs/scale-span-overflows.json
+transform-run-scale-evaluation-order-overflow | 0 | @expected/transform/scale-evaluation-order-overflow.json | transform fixtures/transform/scale.json order_over fixtures/transform/inputs/scale-evaluation-order-overflow.json
+transform-run-scale-evaluation-order-underflow | 0 | @expected/transform/scale-evaluation-order-underflow.json | transform fixtures/transform/scale.json order_under fixtures/transform/inputs/scale-evaluation-order-underflow.json
+
+# ---- transform: curve (x clamped to [0,1], linear, log10(1 + 9x), (10^x - 1) / 9, exact endpoints)
+transform-run-curve-linear | 0 | @expected/transform/curve-linear.json | transform fixtures/transform/curve.json linear fixtures/transform/inputs/curve-linear.json
+transform-run-curve-log | 0 | @expected/transform/curve-log.json | transform fixtures/transform/curve.json log fixtures/transform/inputs/curve-log.json
+transform-run-curve-exp | 0 | @expected/transform/curve-exp.json | transform fixtures/transform/curve.json exp fixtures/transform/inputs/curve-exp.json
+transform-run-curve-log-then-exp | 0 | @expected/transform/curve-log-then-exp.json | transform fixtures/transform/curve.json log_exp fixtures/transform/inputs/curve-log-then-exp.json
+transform-run-curve-exp-then-log | 0 | @expected/transform/curve-exp-then-log.json | transform fixtures/transform/curve.json exp_log fixtures/transform/inputs/curve-exp-then-log.json
+
+# ---- transform: invert y = 1 - x (not clamped)
+transform-run-invert | 0 | @expected/transform/invert.json | transform fixtures/transform/invert.json invert fixtures/transform/inputs/invert.json
+transform-run-invert-twice | 0 | @expected/transform/invert-twice.json | transform fixtures/transform/invert.json twice fixtures/transform/inputs/invert-twice.json
+
+# ---- transform: clamp y = min(max(x, min), max)
+transform-run-clamp-range | 0 | @expected/transform/clamp-range.json | transform fixtures/transform/clamp.json range fixtures/transform/inputs/clamp-range.json
+transform-run-clamp-min-equals-max | 0 | @expected/transform/clamp-min-equals-max.json | transform fixtures/transform/clamp.json equal fixtures/transform/inputs/clamp-min-equals-max.json
+transform-run-clamp-negative | 0 | @expected/transform/clamp-negative.json | transform fixtures/transform/clamp.json negative fixtures/transform/inputs/clamp-negative.json
+
+# ---- transform: deadzone (|x| <= width -> 0, else sign(x) * (|x| - width) / (1 - width))
+transform-run-deadzone-quarter | 0 | @expected/transform/deadzone-quarter.json | transform fixtures/transform/deadzone.json w25 fixtures/transform/inputs/deadzone-quarter.json
+transform-run-deadzone-zero-width | 0 | @expected/transform/deadzone-zero-width.json | transform fixtures/transform/deadzone.json w0 fixtures/transform/inputs/deadzone-zero-width.json
+transform-run-deadzone-0.999 | 0 | @expected/transform/deadzone-0.999.json | transform fixtures/transform/deadzone.json w999 fixtures/transform/inputs/deadzone-0.999.json
+
+# ---- transform: quantize (clamp to [0,1], nearbyint(x * n) / n with ties to even, n = steps - 1)
+transform-run-quantize-2 | 0 | @expected/transform/quantize-2.json | transform fixtures/transform/quantize.json s2 fixtures/transform/inputs/quantize-2.json
+transform-run-quantize-3 | 0 | @expected/transform/quantize-3.json | transform fixtures/transform/quantize.json s3 fixtures/transform/inputs/quantize-3.json
+transform-run-quantize-5 | 0 | @expected/transform/quantize-5.json | transform fixtures/transform/quantize.json s5 fixtures/transform/inputs/quantize-5.json
+transform-run-quantize-128 | 0 | @expected/transform/quantize-128.json | transform fixtures/transform/quantize.json s128 fixtures/transform/inputs/quantize-128.json
+transform-run-quantize-128-after-scale | 0 | @expected/transform/quantize-128-after-scale.json | transform fixtures/transform/quantize.json u7_s128 fixtures/transform/inputs/quantize-128-after-scale.json
+
+# ---- transform: threshold (Bool x >= at)
+transform-run-threshold-edge | 0 | {"outputs":[{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true},{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true}]} | transform fixtures/transform/threshold.json half fixtures/transform/inputs/threshold-edge.json
+transform-run-threshold-negative | 0 | {"outputs":[{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true},{"type":"bool","value":false}]} | transform fixtures/transform/threshold.json neg fixtures/transform/inputs/threshold-negative.json
+transform-run-threshold-zero | 0 | {"outputs":[{"type":"bool","value":true},{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true}]} | transform fixtures/transform/threshold.json zero fixtures/transform/inputs/threshold-zero.json
+transform-run-threshold-codes | 0 | {"outputs":[{"type":"bool","value":false},{"type":"bool","value":true},{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true}]} | transform fixtures/transform/threshold.json code fixtures/transform/inputs/threshold-codes.json
+transform-run-threshold-errors | 0 | {"outputs":[{"error":"E_VALUE nonfinite"},{"error":"E_VALUE type"},{"type":"bool","value":true}]} | transform fixtures/transform/threshold.json half fixtures/transform/inputs/threshold-errors.json
+
+# ---- transform: momentary (Bool x != 0)
+transform-run-momentary | 0 | @expected/transform/momentary.json | transform fixtures/transform/momentary.json m fixtures/transform/inputs/momentary.json
+transform-run-momentary-then-scale | 0 | @expected/transform/momentary-then-scale.json | transform fixtures/transform/momentary.json m_scale fixtures/transform/inputs/momentary-then-scale.json
+
+# ---- transform: toggle (a press flips and outputs, a release is NoOutput, errors roll back)
+transform-run-toggle-press-release | 0 | {"outputs":[{"type":"bool","value":true},null,{"type":"bool","value":false},null,{"type":"bool","value":true},null,{"type":"bool","value":false},{"type":"bool","value":true}]} | transform fixtures/transform/toggle.json t fixtures/transform/inputs/toggle-press-release.json
+transform-run-toggle-releases-only | 0 | {"outputs":[null,null,null,null]} | transform fixtures/transform/toggle.json t fixtures/transform/inputs/toggle-releases-only.json
+transform-run-toggle-initially-toggled | 0 | {"outputs":[{"type":"bool","value":false},{"type":"bool","value":true},null,{"type":"bool","value":false}]} | transform --toggled fixtures/transform/toggle.json t fixtures/transform/inputs/toggle-initially-toggled.json
+transform-run-toggle-errors-keep-state | 0 | {"outputs":[{"type":"bool","value":true},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"type":"bool","value":false}]} | transform fixtures/transform/toggle.json t fixtures/transform/inputs/toggle-errors-keep-state.json
+transform-run-toggle-then-scale | 0 | @expected/transform/toggle-then-scale.json | transform fixtures/transform/toggle.json t_scale fixtures/transform/inputs/toggle-then-scale.json
+transform-run-toggle-then-invert | 0 | @expected/transform/toggle-then-invert.json | transform fixtures/transform/toggle.json t_invert fixtures/transform/inputs/toggle-then-invert.json
+transform-run-toggle-release-ends-pipeline | 0 | {"outputs":[{"error":"E_VALUE type"},null,{"error":"E_VALUE type"}]} | transform fixtures/transform/toggle.json t_split fixtures/transform/inputs/toggle-release-ends-pipeline.json
+transform-run-toggle-after-threshold | 0 | {"outputs":[null,{"type":"bool","value":true},{"type":"bool","value":false},null,{"type":"bool","value":true}]} | transform fixtures/transform/toggle.json thr_t fixtures/transform/inputs/toggle-after-threshold.json
+transform-run-toggle-rollback | 0 | {"outputs":[{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"},{"error":"E_VALUE nonfinite"}]} | transform fixtures/transform/toggle.json t_huge fixtures/transform/inputs/toggle-rollback.json
+transform-run-toggle-rollback-toggled | 0 | @expected/transform/toggle-rollback-toggled.json | transform --toggled fixtures/transform/toggle.json t_huge fixtures/transform/inputs/toggle-rollback-toggled.json
+transform-run-toggle-noout-keeps-earlier-state | 0 | {"outputs":[{"type":"bool","value":true},null,null,{"type":"bool","value":false},{"type":"bool","value":true}]} | transform fixtures/transform/toggle.json rel_t fixtures/transform/inputs/toggle-noout-keeps-earlier-state.json
+
+# ---- transform: relative (UInt width 1..64 decoded to d, position = clamp(position + d * step, 0, 1))
+transform-run-relative-twos7 | 0 | @expected/transform/relative-twos7.json | transform --position 0.5 fixtures/transform/relative.json tc7 fixtures/transform/inputs/relative-twos7.json
+transform-run-relative-sign7 | 0 | @expected/transform/relative-sign7.json | transform --position 0.5 fixtures/transform/relative.json sm7 fixtures/transform/inputs/relative-sign7.json
+transform-run-relative-offset7 | 0 | @expected/transform/relative-offset7.json | transform --position 0.5 fixtures/transform/relative.json bo7 fixtures/transform/inputs/relative-offset7.json
+transform-run-relative-twos14 | 0 | @expected/transform/relative-twos14.json | transform --position 0.5 fixtures/transform/relative.json tc14 fixtures/transform/inputs/relative-twos14.json
+transform-run-relative-sign14 | 0 | @expected/transform/relative-sign14.json | transform --position 0.5 fixtures/transform/relative.json sm14 fixtures/transform/inputs/relative-sign14.json
+transform-run-relative-offset14 | 0 | @expected/transform/relative-offset14.json | transform --position 0.5 fixtures/transform/relative.json bo14 fixtures/transform/inputs/relative-offset14.json
+transform-run-relative-clamps | 0 | @expected/transform/relative-clamps.json | transform fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-clamps.json
+transform-run-relative-position-1 | 0 | @expected/transform/relative-position-1.json | transform --position 1 fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-position-1.json
+transform-run-relative-position-0 | 0 | @expected/transform/relative-position-0.json | transform --position 0 fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-position-0.json
+transform-run-relative-position-quarter | 0 | @expected/transform/relative-position-quarter.json | transform --position 0.25 fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-position-quarter.json
+transform-run-relative-step-tenth | 0 | @expected/transform/relative-step-tenth.json | transform fixtures/transform/relative.json tenth fixtures/transform/inputs/relative-step-tenth.json
+transform-run-relative-step-two | 0 | @expected/transform/relative-step-two.json | transform fixtures/transform/relative.json big fixtures/transform/inputs/relative-step-two.json
+transform-run-relative-step-tiny | 0 | @expected/transform/relative-step-tiny.json | transform fixtures/transform/relative.json tiny fixtures/transform/inputs/relative-step-tiny.json
+transform-run-relative-width-1-twos | 0 | @expected/transform/relative-width-1-twos.json | transform --position 0.5 fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-width-1-twos.json
+transform-run-relative-width-1-sign | 0 | @expected/transform/relative-width-1-sign.json | transform --position 0.5 fixtures/transform/relative.json q_sm fixtures/transform/inputs/relative-width-1-sign.json
+transform-run-relative-width-1-offset | 0 | @expected/transform/relative-width-1-offset.json | transform --position 0.5 fixtures/transform/relative.json q_bo fixtures/transform/inputs/relative-width-1-offset.json
+transform-run-relative-width-64-twos | 0 | @expected/transform/relative-width-64-twos.json | transform --position 0.5 fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-width-64-twos.json
+transform-run-relative-width-64-sign | 0 | @expected/transform/relative-width-64-sign.json | transform --position 0.5 fixtures/transform/relative.json q_sm fixtures/transform/inputs/relative-width-64-sign.json
+transform-run-relative-width-64-offset | 0 | @expected/transform/relative-width-64-offset.json | transform --position 0.5 fixtures/transform/relative.json q_bo fixtures/transform/inputs/relative-width-64-offset.json
+transform-run-relative-other-widths | 0 | @expected/transform/relative-other-widths.json | transform --position 0.5 fixtures/transform/relative.json q_tc fixtures/transform/inputs/relative-other-widths.json
+transform-run-relative-not-uint | 0 | @expected/transform/relative-not-uint.json | transform fixtures/transform/relative.json tc7 fixtures/transform/inputs/relative-not-uint.json
+transform-run-relative-rollback | 0 | @expected/transform/relative-rollback.json | transform fixtures/transform/relative.json rel_clip fixtures/transform/inputs/relative-rollback.json
+
+# ---- transform: join14 (Tuple of 2 UInt >= 7 bits with raw <= 127 -> UInt14 msb * 128 + lsb)
+transform-run-join14-valid | 0 | @expected/transform/join14-valid.json | transform fixtures/transform/join14.json j fixtures/transform/inputs/join14-valid.json
+transform-run-join14-range | 0 | {"outputs":[{"error":"E_VALUE range"},{"error":"E_VALUE range"},{"error":"E_VALUE range"},{"error":"E_VALUE range"},{"error":"E_VALUE range"}]} | transform fixtures/transform/join14.json j fixtures/transform/inputs/join14-range.json
+transform-run-join14-shape | 0 | {"outputs":[{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"}]} | transform fixtures/transform/join14.json j fixtures/transform/inputs/join14-shape.json
+transform-run-join14-not-tuple | 0 | {"outputs":[{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"}]} | transform fixtures/transform/join14.json j fixtures/transform/inputs/join14-not-tuple.json
+transform-run-join14-then-split14 | 0 | @expected/transform/join14-then-split14.json | transform fixtures/transform/join14.json j_split fixtures/transform/inputs/join14-then-split14.json
+transform-run-join14-then-scale | 0 | @expected/transform/join14-then-scale.json | transform fixtures/transform/join14.json j_norm fixtures/transform/inputs/join14-then-scale.json
+transform-run-join14-then-toggle | 0 | {"outputs":[null,{"type":"bool","value":true},null,{"type":"bool","value":false}]} | transform fixtures/transform/join14.json j_toggle fixtures/transform/inputs/join14-then-toggle.json
+
+# ---- transform: split14 (UInt14 -> Tuple of UInt7 raw >> 7, raw & 127)
+transform-run-split14-valid | 0 | @expected/transform/split14-valid.json | transform fixtures/transform/split14.json s fixtures/transform/inputs/split14-valid.json
+transform-run-split14-wrong-input | 0 | {"outputs":[{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"},{"error":"E_VALUE type"}]} | transform fixtures/transform/split14.json s fixtures/transform/inputs/split14-wrong-input.json
+transform-run-split14-after-number | 0 | {"outputs":[{"error":"E_VALUE type"},{"error":"E_VALUE type"}]} | transform fixtures/transform/split14.json scale_s fixtures/transform/inputs/split14-after-number.json
+transform-run-split14-after-relative | 0 | {"outputs":[{"error":"E_VALUE type"},{"error":"E_VALUE type"}]} | transform fixtures/transform/split14.json rel_s fixtures/transform/inputs/split14-after-relative.json
+
+# ---- transform: the empty pipeline returns the input unchanged and never errors
+transform-run-empty-identity | 0 | @expected/transform/empty-identity.json | transform fixtures/transform/empty.json e fixtures/transform/inputs/empty-identity.json
+transform-run-empty-no-transforms-member | 0 | @expected/transform/empty-no-transforms-member.json | transform fixtures/transform/empty.json none fixtures/transform/inputs/empty-no-transforms-member.json
+transform-run-empty-ignores-options | 0 | @expected/transform/empty-ignores-options.json | transform --toggled fixtures/transform/empty.json e fixtures/transform/inputs/empty-ignores-options.json
+transform-run-empty-nan-ieee64 | 0 | ~^{"outputs":.{("format":"ieee64"|"number":"-?nan[^"]*"|"type":"float"),("format":"ieee64"|"number":"-?nan[^"]*"|"type":"float"),("format":"ieee64"|"number":"-?nan[^"]*"|"type":"float")}.}$ | transform fixtures/transform/empty.json e fixtures/transform/inputs/empty-nan-ieee64.json
+transform-run-empty-nan-ieee32 | 0 | ~^{"outputs":.{("format":"ieee32"|"number":"-?nan[^"]*"|"type":"float"),("format":"ieee32"|"number":"-?nan[^"]*"|"type":"float"),("format":"ieee32"|"number":"-?nan[^"]*"|"type":"float")}.}$ | transform fixtures/transform/empty.json e fixtures/transform/inputs/empty-nan-ieee32.json
+
+# ---- transform: multi-stage pipelines
+transform-run-multi-fader | 0 | @expected/transform/multi-fader.json | transform fixtures/transform/multi.json fader fixtures/transform/inputs/multi-fader.json
+transform-run-multi-joystick | 0 | @expected/transform/multi-joystick.json | transform fixtures/transform/multi.json joystick fixtures/transform/inputs/multi-joystick.json
+transform-run-multi-exp-quantize-invert | 0 | @expected/transform/multi-exp-quantize-invert.json | transform fixtures/transform/multi.json exp_q_inv fixtures/transform/inputs/multi-exp-quantize-invert.json
+transform-run-multi-invert-threshold | 0 | {"outputs":[{"type":"bool","value":true},{"type":"bool","value":false},{"type":"bool","value":true}]} | transform fixtures/transform/multi.json inv_thr fixtures/transform/inputs/multi-invert-threshold.json
+transform-run-multi-threshold-threshold | 0 | {"outputs":[{"type":"bool","value":true},{"type":"bool","value":false}]} | transform fixtures/transform/multi.json thr_thr fixtures/transform/inputs/multi-threshold-threshold.json
+transform-run-multi-sixteen-stages | 0 | @expected/transform/multi-sixteen-stages.json | transform fixtures/transform/multi.json sixteen fixtures/transform/inputs/multi-sixteen-stages.json
+
+# ---- transform: enabled, guard and match.slot are ignored, options touch only their stage
+transform-run-ignores-enabled | 0 | @expected/transform/ignores-enabled.json | transform fixtures/transform/ignored.json off fixtures/transform/inputs/ignores-enabled.json
+transform-run-ignores-guard | 0 | @expected/transform/ignores-guard.json | transform fixtures/transform/ignored.json guarded fixtures/transform/inputs/ignores-guard.json
+transform-run-ignores-slot | 0 | @expected/transform/ignores-slot.json | transform fixtures/transform/ignored.json slotted fixtures/transform/inputs/ignores-slot.json
+transform-run-position-without-relative | 0 | @expected/transform/position-without-relative.json | transform --position 0.5 fixtures/transform/scale.json identity fixtures/transform/inputs/position-without-relative.json
+transform-run-toggled-without-toggle | 0 | {"outputs":[{"type":"bool","value":false},{"type":"bool","value":true}]} | transform --toggled fixtures/transform/momentary.json m fixtures/transform/inputs/toggled-without-toggle.json
+
+# ---- transform position rules (PR2): join14 or relative not first, split14 not last ->
+# E_SCHEMA transforms from ValidateMapping, so validate, compile, match and transform report it.
+# The first offending route in document order decides.
+transform-pos-relative-second-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/relative-second.json
+transform-pos-relative-second-compile | 1 | ERR E_SCHEMA transforms | compile fixtures/transform/position/relative-second.json
+transform-pos-relative-second-match | 1 | ERR E_SCHEMA transforms | match fixtures/transform/position/relative-second.json fixtures/match/events/main-mcu0.json
+transform-pos-relative-second-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/relative-second.json r1 fixtures/transform/inputs/one-trigger.json
+transform-pos-join14-second-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/join14-second.json
+transform-pos-join14-second-compile | 1 | ERR E_SCHEMA transforms | compile fixtures/transform/position/join14-second.json
+transform-pos-join14-second-match | 1 | ERR E_SCHEMA transforms | match fixtures/transform/position/join14-second.json fixtures/match/events/main-mcu0.json
+transform-pos-join14-second-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/join14-second.json r1 fixtures/transform/inputs/one-trigger.json
+transform-pos-split14-first-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/split14-first.json
+transform-pos-split14-first-compile | 1 | ERR E_SCHEMA transforms | compile fixtures/transform/position/split14-first.json
+transform-pos-split14-first-match | 1 | ERR E_SCHEMA transforms | match fixtures/transform/position/split14-first.json fixtures/match/events/main-mcu0.json
+transform-pos-split14-first-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/split14-first.json r1 fixtures/transform/inputs/one-trigger.json
+transform-pos-split14-middle-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/split14-middle.json
+transform-pos-relative-twice-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/relative-twice.json
+transform-pos-join14-twice-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/join14-twice.json
+transform-pos-split14-twice-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/split14-twice.json
+transform-pos-relative-last-of-16-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/relative-last-of-16.json
+transform-pos-join14-then-relative-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/join14-then-relative.json
+transform-pos-relative-then-join14-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/relative-then-join14.json
+transform-pos-disabled-route-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/disabled-route.json
+transform-pos-disabled-route-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/disabled-route.json r1 fixtures/transform/inputs/one-trigger.json
+transform-pos-second-route-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/second-route.json
+transform-pos-second-route-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/second-route.json r1 fixtures/transform/inputs/one-trigger.json
+# r1.2: a target error elsewhere in the file is reported before a position error
+transform-pos-before-target-error | 1 | ERR E_SCHEMA target | validate fixtures/transform/position/before-target-error.json
+transform-pos-after-target-error | 1 | ERR E_SCHEMA target | validate fixtures/transform/position/after-target-error.json
+transform-pos-before-unknown-op | 1 | ERR E_SCHEMA op | validate fixtures/transform/position/before-unknown-op.json
+transform-pos-after-unknown-op | 1 | ERR E_SCHEMA op | validate fixtures/transform/position/after-unknown-op.json
+transform-pos-after-denied-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/after-denied.json
+transform-pos-after-denied-compile | 1 | ERR E_SCHEMA transforms | compile fixtures/transform/position/after-denied.json
+transform-pos-after-slot-ref | 1 | ERR E_REF nope | validate fixtures/transform/position/after-slot-ref.json
+transform-pos-ok-validate | 0 | OK | validate fixtures/transform/position/ok.json
+transform-pos-ok-compile | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"rel_only",.*"id":"sixteen_js",.*$ | compile fixtures/transform/position/ok.json
+transform-pos-ok-match | 0 | {"matches":["rel_only","rel_first","join_only","join_first","split_only","split_last","join_split","rel_split","sixteen_js"]} | match fixtures/transform/position/ok.json fixtures/match/events/main-mcu0.json
+transform-pos-ok-transform | 0 | @expected/transform/pos-ok-transform.json | transform fixtures/transform/position/ok.json rel_first fixtures/transform/inputs/u7-one.json
+
+# ---- transform command line: usage (exit 2), E_REF route, E_SCHEMA inputs (1..1000 values)
+transform-run-inputs-1000 | 0 | @expected/transform/inputs-1000.json | transform fixtures/transform/toggle.json t fixtures/transform/inputs/inputs-1000.json
+transform-cli-usage-no-arguments | 2 | * | transform
+transform-cli-usage-file-only | 2 | * | transform fixtures/transform/scale.json
+transform-cli-usage-no-inputs | 2 | * | transform fixtures/transform/scale.json identity
+transform-cli-usage-position-alone | 2 | * | transform --position
+transform-cli-usage-position-no-inputs | 2 | * | transform --position 0.5 fixtures/transform/scale.json identity
+transform-cli-usage-position-not-a-number | 2 | * | transform --position abc fixtures/transform/scale.json identity fixtures/transform/inputs/one-trigger.json
+transform-cli-usage-position-hex-float | 2 | * | transform --position 0x1p-1 fixtures/transform/scale.json identity fixtures/transform/inputs/one-trigger.json
+transform-cli-usage-position-nan | 2 | * | transform --position nan fixtures/transform/scale.json identity fixtures/transform/inputs/one-trigger.json
+transform-cli-usage-toggled-no-inputs | 2 | * | transform --toggled fixtures/transform/toggle.json t
+transform-cli-unknown-route | 1 | ERR E_REF route | transform fixtures/transform/scale.json nope fixtures/transform/inputs/one-trigger.json
+transform-cli-unknown-route-case | 1 | ERR E_REF route | transform fixtures/transform/scale.json IDENTITY fixtures/transform/inputs/one-trigger.json
+transform-cli-unknown-route-slot-id | 1 | ERR E_REF route | transform fixtures/transform/scale.json surface fixtures/transform/inputs/one-trigger.json
+transform-cli-route-before-inputs | 1 | ERR E_REF route | transform fixtures/transform/scale.json nope fixtures/transform/inputs/bad-object.json
+transform-cli-mapping-before-route | 1 | ERR E_SCHEMA target | transform fixtures/schema/target-kind-unknown.json nope fixtures/transform/inputs/bad-object.json
+transform-cli-mapping-cycle | 1 | ERR E_CYCLE zb | transform fixtures/compile/cycle-two.json zb fixtures/transform/inputs/one-trigger.json
+transform-cli-mapping-denied | 1 | ERR E_DENIED r1 | transform fixtures/compile/denied-sp-password.json r1 fixtures/transform/inputs/one-trigger.json
+transform-cli-mapping-missing | 1 | ~^ERR E_IO( .+)?$ | transform fixtures/does-not-exist.json r1 fixtures/transform/inputs/one-trigger.json
+transform-cli-inputs-missing | 1 | ~^ERR E_(IO( .+)?|SCHEMA inputs)$ | transform fixtures/transform/scale.json identity fixtures/does-not-exist.json
+transform-cli-inputs-directory | 1 | ~^ERR E_(IO( .+)?|SCHEMA inputs)$ | transform fixtures/transform/scale.json identity fixtures
+transform-cli-inputs-0 | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/empty-array.json
+transform-cli-inputs-1001 | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/toggle.json t fixtures/transform/inputs/triggers-1001.json
+transform-cli-inputs-object | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-object.json
+transform-cli-inputs-null | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-null.json
+transform-cli-inputs-number-element | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-number-element.json
+transform-cli-inputs-nested-array | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-nested-array.json
+transform-cli-inputs-unknown-type | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-unknown-type.json
+transform-cli-inputs-second-element | 1 | ERR E_SCHEMA inputs | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-second-element.json
+transform-cli-inputs-uint-too-big | 1 | ~^ERR E_(SCHEMA inputs|LIMIT value)$ | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-uint-too-big.json
+transform-cli-inputs-syntax | 1 | ~^ERR E_(JSON( .+)?|SCHEMA inputs)$ | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-syntax.json
+transform-cli-inputs-duplicate-key | 1 | ~^ERR E_(DUPKEY( .+)?|SCHEMA inputs)$ | transform fixtures/transform/scale.json identity fixtures/transform/inputs/bad-duplicate-key.json

@@ -1,0 +1,14 @@
+[
+  {"type": "uint", "bits": 7, "value": "5"},
+  {"type": "uint", "bits": 13, "value": "5"},
+  {"type": "uint", "bits": 15, "value": "5"},
+  {"type": "uint", "bits": 16, "value": "5"},
+  {"type": "uint", "bits": 128, "value": "5"},
+  {"type": "int", "bits": 14, "value": "5"},
+  {"type": "float", "format": "ieee64", "bits_hex": "4014000000000000"},
+  {"type": "bool", "value": true},
+  {"type": "trigger"},
+  {"type": "text", "value": "5"},
+  {"type": "blob", "hex": "05"},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "uint", "bits": 7, "value": "2"}]}
+]

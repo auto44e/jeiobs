@@ -1,0 +1,6 @@
+[
+  {"type": "trigger"},
+  {"type": "bool", "value": false},
+  {"type": "trigger"},
+  {"type": "trigger"}
+]

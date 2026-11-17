@@ -1,0 +1,7 @@
+[
+  {"type": "trigger"},
+  {"type": "uint", "bits": 7, "value": "64"},
+  {"type": "float", "format": "ieee64", "bits_hex": "c004000000000000"},
+  {"type": "text", "value": "x"},
+  {"type": "float", "format": "ieee32", "bits_hex": "ff800000"}
+]

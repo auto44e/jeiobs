@@ -1,0 +1,10 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "main_surface", "requires": ["mcu.fader"]}],
+  "routes": [
+    {"id": "r1", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "transforms": [{"op": "invert"}, {"op": "join14"}], "target": {"kind": "scene", "id": "r1"}},
+    {"id": "r2", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "transforms": [{"op": "frobnicate"}], "target": {"kind": "scene", "id": "r2"}}
+  ]
+}

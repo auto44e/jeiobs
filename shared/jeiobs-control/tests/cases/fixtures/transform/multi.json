@@ -1,0 +1,14 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "fader", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 127], "out": [0, 1]}, {"op": "curve", "kind": "log"}, {"op": "quantize", "steps": 5}], "target": {"kind": "scene", "id": "fader"}},
+    {"id": "joystick", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "deadzone", "width": 0.1}, {"op": "scale", "in": [-1, 1], "out": [0, 1]}], "target": {"kind": "scene", "id": "joystick"}},
+    {"id": "exp_q_inv", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "curve", "kind": "exp"}, {"op": "quantize", "steps": 3}, {"op": "invert"}], "target": {"kind": "scene", "id": "exp_q_inv"}},
+    {"id": "inv_thr", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "invert"}, {"op": "threshold", "at": 0.5}], "target": {"kind": "scene", "id": "inv_thr"}},
+    {"id": "thr_thr", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "threshold", "at": 0.5}, {"op": "threshold", "at": 1}], "target": {"kind": "scene", "id": "thr_thr"}},
+    {"id": "sixteen", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.25}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "invert"}, {"op": "clamp", "min": 0, "max": 1}], "target": {"kind": "scene", "id": "sixteen"}}
+  ]
+}

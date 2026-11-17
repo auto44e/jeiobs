@@ -1,0 +1,6 @@
+[
+  {"type": "float", "format": "ieee64", "bits_hex": "0000000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "8000000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "8000000000000001"},
+  {"type": "float", "format": "ieee64", "bits_hex": "0000000000000001"}
+]
