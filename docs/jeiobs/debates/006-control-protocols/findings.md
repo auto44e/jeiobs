@@ -252,3 +252,31 @@ codex-3 | Major | accepted-fix | codex | review-pr33-02/04-r2-codex.reply.md (FI
 codex-4 | Major | accepted-fix | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-4) | contract r4 and the Windows fix
 codex-5 | Minor | open → fixed (awaiting finder) | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-5) | contract r4 and the Windows fix
 codex-6 | Minor | open → fixed (awaiting finder) | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-6) | contract r4 and the Windows fix
+
+## Review run 03 (pr33)
+
+Both peers approve; Minors (hash-flood fixed in 6f46b4775, docs and emit-slot notes carried to K1-PR2/PR3).
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-1) | -
+claude-2 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-2) | -
+claude-3 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-3) | -
+claude-4 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-4) | -
+claude-5 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-5) | -
+claude-6 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-6) | -
+claude-7 | Minor | open → fixed (awaiting finder) | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-7) | -
+claude-8 | Minor | open → fixed (awaiting finder) | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-8) | -
+claude-9 | Minor | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-9) | -
+claude-10 | Minor | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-10) | -
+claude-11 | Major | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-11) | -
+claude-12 | Minor | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-12) | -
+claude-13 | Minor | accepted-fix | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-13) | -
+claude-14 | Minor | open → fixed (awaiting finder) | claude | review-pr33-03/03-r2-claude.reply.md (FINDING claude-14) | -
+codex-1 | Major | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-1) | -
+codex-2 | Minor | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-2) | -
+codex-3 | Major | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-3) | -
+codex-4 | Major | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-4) | -
+codex-5 | Minor | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-5) | -
+codex-6 | Minor | accepted-fix | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-6) | -
+codex-7 | Minor | open → fixed (awaiting finder) | codex | review-pr33-03/04-r2-codex.reply.md (FINDING codex-7) | -
