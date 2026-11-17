@@ -34,7 +34,10 @@ any license; if it ever conflicts with a license, the license controls.
   directories (for example `deps/*`, `libobs/graphics/libnsgif`,
   `plugins/obs-outputs/librtmp`, `plugins/obs-filters/rnnoise`,
   `plugins/decklink`, `shared/media-playback`,
-  `shared/jeiobs-workspace/third_party/unicode`: Unicode License v3 for the generated Unicode tables). Any SDK added later gets a recorded
+  `shared/jeiobs-workspace/third_party/unicode`: Unicode License v3 for the generated Unicode tables).
+  The Unicode License requires its notice with copies of the data or in associated documentation:
+  once a shipped build links `jeiobs-workspace` (S1-PR4), the packaging must carry that license text
+  or list it in the bundled third-party notices. Any SDK added later gets a recorded
   provenance and license review first (see [task 001](tasks/001-vst3.md)).
 - [COMMITMENT](../../COMMITMENT) is the GPL Cooperation Commitment made by upstream
   contributors. It is retained unchanged. Keeping it does not make any additional

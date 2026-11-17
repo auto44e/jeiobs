@@ -63,5 +63,6 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   `shared/jeiobs-workspace/third_party/unicode/`). Non-ASCII paths are now checked: `OK unchecked`
   and the `unchecked-paths` flag are gone, and the manifest and planner collisions use
   `NFD(casefold(NFD(path)))`.
-- Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host). S2
+- Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host; it
+  must also ship the Unicode License text with any build that links the library). S2
   includes a purge for local history (decision 2).

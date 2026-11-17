@@ -13,6 +13,8 @@
  *   - NormalizationTest.txt: ToNfd gives column 3 for columns 1 to 3 and column 5 for columns 4 and 5.
  *   - Every code point that NormalizationTest.txt part 1 does not list is unchanged by ToNfd, except
  *     the Hangul syllables, which are checked against the algorithm of Unicode section 3.12.
+ *   - UnicodeData.txt: the combining class of every code point without a decomposition, by pairwise
+ *     reordering against one mark of each class.
  *   - CaseFolding.txt: ToCaseFold gives each C and F mapping and leaves every other code point alone.
  *   - CollisionKey is NFD(fold(NFD(x))) for every single code point.
  */
@@ -169,6 +171,60 @@ void CheckHangul()
 	}
 }
 
+// Canonical combining classes, from UnicodeData.txt: for every code point without a decomposition and
+// every class that occurs, "a" + code point + a mark of that class is reordered exactly when the code
+// point's class is greater than the mark's (a starter never moves). This tests each class value of the
+// table against an independent reading of UnicodeData.txt, which single-code-point checks cannot.
+void CheckCombiningClasses(const std::string &dir)
+{
+	std::ifstream file(dir + "/UnicodeData.txt");
+	if (!file) {
+		Fail("cannot open UnicodeData.txt");
+		return;
+	}
+	struct Row {
+		std::uint32_t code;
+		unsigned value;
+	};
+	std::vector<Row> rows;
+	std::map<unsigned, std::uint32_t> representative;
+	std::string line;
+	while (std::getline(file, line)) {
+		std::vector<std::string> fields;
+		std::istringstream stream(line);
+		std::string field;
+		while (std::getline(stream, field, ';')) {
+			fields.push_back(field);
+		}
+		// Range markers (Hangul syllables decompose algorithmically) are not single characters.
+		if (fields.size() < 6U || !fields[5].empty() || fields[1].find(", First>") != std::string::npos ||
+		    fields[1].find(", Last>") != std::string::npos) {
+			continue;
+		}
+		const std::uint32_t code = static_cast<std::uint32_t>(std::stoul(fields[0], nullptr, 16));
+		const unsigned value = static_cast<unsigned>(std::stoul(fields[3]));
+		rows.push_back({code, value});
+		if (value != 0U && representative.count(value) == 0U) {
+			representative[value] = code;
+		}
+	}
+	std::size_t checks = 0U;
+	for (const Row &row : rows) {
+		for (const auto &[value, mark] : representative) {
+			if (row.code == mark) {
+				continue;
+			}
+			const bool swapped = row.value > value;
+			const std::string expected = swapped ? Utf8({'a', mark, row.code})
+							     : Utf8({'a', row.code, mark});
+			ExpectNfd("class U+" + std::to_string(row.code) + " vs " + std::to_string(value),
+				  Utf8({'a', row.code, mark}), expected);
+			++checks;
+		}
+	}
+	std::printf("UnicodeData.txt: %zu combining class checks, %zu classes\n", checks, representative.size());
+}
+
 void CheckUnlisted(const std::set<std::uint32_t> &listed)
 {
 	for (std::uint32_t code = 0U; code <= 0x10FFFFU; ++code) {
@@ -242,6 +298,7 @@ int main(int argc, char **argv)
 	std::set<std::uint32_t> part1_singles;
 	CheckNormalizationTest(argv[1], part1_singles);
 	CheckHangul();
+	CheckCombiningClasses(argv[1]);
 	CheckUnlisted(part1_singles);
 	CheckCaseFolding(argv[1]);
 	if (g_failures != 0) {

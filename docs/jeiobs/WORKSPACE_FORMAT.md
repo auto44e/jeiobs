@@ -572,7 +572,7 @@ Omitted entries are never written.
   name, in any case (so `CON .txt` and `nul  .json` are rejected): `CON`,
   `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, their superscript-digit forms, `CONIN$`,
   `CONOUT$`;
-- no two paths in one manifest equal under Unicode canonical caseless matching,
+- no two paths in one root of a manifest equal under Unicode canonical caseless matching,
   `NFD(toCasefold(NFD(p)))` (Unicode D145; owner decision 3);
 - no symlinks: capture never follows one, and S2 and S3 never create one.
 
@@ -580,7 +580,10 @@ The key uses the tables of the pinned Unicode version (18.0.0): canonical decomp
 canonical ordering (Hangul computed), then full case folding (`CaseFolding.txt` statuses C and F,
 no Turkic mappings), then decomposition again. Unassigned code points pass through unchanged, so a
 later Unicode version can make two paths collide that did not before, and so reject a manifest an
-older build accepted; moving the pinned version is therefore a reviewed change. The staging check
+older build accepted. Unicode's stability policy keeps the decomposition, class and folding of
+assigned characters fixed, so only paths with characters assigned since the previous pin can change;
+moving the pinned version is still a reviewed change, and recovery (section 11) quarantines, never
+deletes, a manifest that a newer build rejects. The staging check
 below catches collisions that only the destination filesystem has. Compatibility mappings (NFKD) are not applied,
 and neither is any filesystem-specific rule (8.3 names, HFS+ legacy tables).
 
@@ -713,7 +716,8 @@ The options and costs as they were put to the owner. The "Decided:" labels were 
   instead of through `config_t` or `SaveService()`.
 - Live OBS states that PathRules rejects are handled by the planner: names that are not UTF-8 or
   break a rule become one omitted `kind: "names"` entry per folder with a count and no names;
-  case-only clashes (profiles `Main` and `main` on Linux, `OBSBasic_Profiles.cpp:146-160`) are
-  planned with `collision: true` and a warning, and capture (PR4) blocks restore onto a
-  case-insensitive filesystem instead of rejecting the manifest. Still open: 8.3 short names, HFS+
-  normalization and file-versus-folder clashes.
+  case-only and normalization-only clashes (profiles `Main` and `main` on Linux,
+  `OBSBasic_Profiles.cpp:146-160`; `e` + U+0301 and U+00E9) are planned with `collision: true` and a
+  `case-collision` warning, and capture (PR4) blocks restore onto a
+  case-insensitive filesystem instead of rejecting the manifest. Still open: 8.3 short names, HFS+'s
+  own (older) normalization table and file-versus-folder clashes.

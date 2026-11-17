@@ -269,3 +269,19 @@ codex-3 | Major | accepted-fix | codex | review-pr32-04/04-r2-codex.reply.md (FI
 codex-4 | Minor | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-4) | -
 codex-5 | Major | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-5) | -
 codex-6 | Minor | open (Minor, S1-PR4) | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-6) | -
+
+## PR #36 (Unicode collision tables), review `review-pr36-01` on `804e22766`: both peers approve
+
+Run 01 (lead authored; Claude first): both approve with Minors only. The lead fixed all of them in the
+PR (each is "fixed, awaiting finder": the two peers do not re-review Minors). Evidence: Linux
+(GCC, also ASan and UBSan), Ubuntu and Windows CI, macOS on `macos-15-intel` (probe branch, the arm64
+pool had no runner).
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Minor | fixed (awaiting finder) | claude | review-pr36-01/03-r2-claude.reply.md (FINDING claude-1) | CI regenerates the tables and `cmp`s them; conformance now checks every combining class against UnicodeData.txt
+claude-2 | Minor | fixed (awaiting finder) | claude | review-pr36-01/03-r2-claude.reply.md (FINDING claude-2) | section 12 states the stability policy and that recovery quarantines, never deletes
+claude-3 | Minor | fixed (awaiting finder) | claude | review-pr36-01/03-r2-claude.reply.md (FINDING claude-3) | "one root of a manifest"; section 15 names normalization-only clashes
+claude-4 | Minor | fixed (awaiting finder) | claude | review-pr36-01/03-r2-claude.reply.md (FINDING claude-4) | NOTICE.md and task 002 record the license-text obligation for PR4
+codex-1 | Minor | withdrawn | codex | review-pr36-01/04-r2-codex.reply.md (FINDING codex-1) | -
+codex-2 | Minor | fixed (awaiting finder) | codex | review-pr36-01/04-r2-codex.reply.md (FINDING codex-2) | pairwise class-reordering test (1.94 million checks); a changed class value fails it
