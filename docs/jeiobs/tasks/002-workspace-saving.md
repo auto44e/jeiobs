@@ -48,7 +48,7 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   `input` credentials kept when `is_local_file` was not literally false, quadratic memory in the
   scanners, `modules.json` written as an array. Each is fixed and has cases; libobs's parser
   (`config_open_string`) served as the oracle for INI sections. Linux (GCC): `jw-unit`,
-  `jw-fuzz-smoke` and `jw-cases` (968 case lines) pass, also under ASan and UBSan. Windows and
+  `jw-fuzz-smoke` and `jw-cases` (994 case lines) pass, also under ASan and UBSan. Windows and
   macOS CI run these through `jeiobs-workspace.yaml`.
 - Next: PR3 (CapturePlanner, identity, review rules for the first-party source list) and PR4
   (`config_lock`, approved: WORKSPACE_FORMAT section 14). Also owed: an owner-merged PR that pins

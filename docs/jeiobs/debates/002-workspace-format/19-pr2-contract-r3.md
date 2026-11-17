@@ -70,3 +70,23 @@ Source: the findings of `/tmp/jeiobs-s2/review/01-run/` (read `01-r1-claude.repl
   `Token`/`RefreshToken` in ANY section is redacted (so `[General] Token=S` is redacted) and the file is
   opaque-unreviewed with count +1.
 - `versioned_id` is used only when it is a non-empty string; otherwise `id` (as OBS does).
+
+## r3.2 (review run 02 of PR #28; read `/tmp/jeiobs-s2/review/02-run/*.reply.md`)
+1. (claude-3, MAJOR) INI pointers must not copy a huge section name per redaction: if a section name is
+   longer than 1,024 bytes the pointer uses `/~section-<n>/<key>` where `<n>` is the 0-based section
+   ordinal (this cannot collide with an RFC 6901-escaped name) and the file is opaque-unreviewed
+   (count +1). Total report size must stay bounded. Also remove every per-URL scan to the document
+   end (`find('\\')` and similar): all URL scanning is linear in the value length.
+2. (claude-12) FAIL CLOSED: if applying the edits fails for any reason, the outcome is
+   `omitted/unparseable` for roles with secrets (never `stored` with the unredacted input). Tighten
+   `jw_fuzz_smoke.cpp`: a `stored` result must have report offsets valid and, when redactions exist,
+   OUTFILE shorter than or different from INFILE exactly as the report says.
+3. (claude-15, codex-4, MAJOR) The 1b fallback applies to the WHOLE file, including Token/RefreshToken
+   lines BEFORE the first header: it triggers on any `[` line that is not exactly `[name]` plus trailing
+   blanks, including an empty `[`, a lone `[`, `[]`, and `[ ]`. Then every `Token`/`RefreshToken` key at
+   any position is redacted (pointer `/<section or empty>/<key>`).
+4. (claude-6) Source rules also apply to: top-level objects named `DesktopAudioDevice1`,
+   `DesktopAudioDevice2`, `AuxAudioDevice1`..`AuxAudioDevice4` that are objects with an `id` string,
+   and to items of a top-level `groups` array that are objects with `id` (check
+   `frontend/.../OBSBasic_SceneCollections.cpp` around lines 1259-1274 for what OBS loads; follow
+   the code, and write what you found in your final reply).

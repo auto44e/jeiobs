@@ -68,3 +68,30 @@ claude-11 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03
 codex-1 | Major | open → fixed (awaiting finder) | codex | review-pr2-01/02-r1-codex.reply.md (FINDING codex-1) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
 codex-2 | Major | open → fixed (awaiting finder) | codex | review-pr2-01/02-r1-codex.reply.md (FINDING codex-2) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
 codex-3 | Minor | open → fixed (awaiting finder) | codex | review-pr2-01/02-r1-codex.reply.md (FINDING codex-3) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+
+## PR #28 (S1-PR2), review `review-pr2-02` on `e9de5fb28`
+
+Fixes: `13a23baba` (library), cases `581f3a812`, spec edits (INI rules, URL rule, INI limits, `input`).
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-1) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-2 | Major | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-2) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-3 | Major | open → fixed (awaiting finder) | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-3) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-4 | Major | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-4) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-5 | Minor | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-5) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-6 | Minor | open → fixed (awaiting finder) | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-6) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-7 | Minor | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-7) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-8 | Minor | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-8) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-9 | Major | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-9) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-10 | Minor | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-10) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-11 | Minor | accepted-fix | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-11) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-12 | Minor | open → fixed (awaiting finder) | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-12) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-13 | Major | open → fixed (awaiting finder) | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-13) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-14 | Minor | open → fixed (awaiting finder) | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-14) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+claude-15 | Minor | open → fixed (awaiting finder) | claude | review-pr2-02/03-r2-claude.reply.md (FINDING claude-15) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+codex-1 | Major | accepted-fix | codex | review-pr2-02/04-r2-codex.reply.md (FINDING codex-1) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+codex-2 | Major | accepted-fix | codex | review-pr2-02/04-r2-codex.reply.md (FINDING codex-2) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+codex-3 | Minor | accepted-fix | codex | review-pr2-02/04-r2-codex.reply.md (FINDING codex-3) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+codex-4 | Major | open → fixed (awaiting finder) | codex | review-pr2-02/04-r2-codex.reply.md (FINDING codex-4) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated
+codex-5 | Minor | open → fixed (awaiting finder) | codex | review-pr2-02/04-r2-codex.reply.md (FINDING codex-5) | fixed per contract r3.2 (29-pr2-fix3-codex.md); spec updated

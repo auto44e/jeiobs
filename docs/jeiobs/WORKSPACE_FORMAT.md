@@ -345,13 +345,22 @@ plaintext websocket password, and nothing restores it as a file.
 | `service.json`, `.bak` | `/settings/username`, `/settings/password` (`rtmp-custom.c:28-29`) | `rtmp_auth` | `""` |
 | `basic.ini` | `Token`, `RefreshToken` in `[Twitch]`, `[Restream]`, `[YouTube]` (`OAuth.cpp:52-53`, `YoutubeAuth.cpp:84-85`; sections: `TwitchAuth.cpp:31`, `RestreamAuth.cpp:29`, `YoutubeAuth.cpp:23`) | `oauth_token` | `""` |
 | `obs-websocket/config.json` | `/server_password` (`Config.cpp:43`) | `ws_password` | 32 random characters (below) |
-| `user.ini` `[BasicWindow] ExtraBrowserDocks` (dock URLs, `OBSBasic_Browser.cpp:73-90`: not redacted, a non-empty value makes the entry `opaque-unreviewed`); `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` when `is_local_file` is false (`obs-ffmpeg-source.c:182,396-422`) and `/settings/ffmpeg_options` (`:211`); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
+| `user.ini` `[BasicWindow] ExtraBrowserDocks` (dock URLs, `OBSBasic_Browser.cpp:73-90`: not redacted, a non-empty value makes the entry `opaque-unreviewed`); `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` always (OBS opens it for any `is_local_file` that is not a true boolean, `obs-ffmpeg-source.c:182,396-422`; a local path has no `scheme://`) and `/settings/ffmpeg_options` (`:211`, the URL rule runs over the whole string); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
 | `global.ini` | `[OBSWebSocket] ServerPassword` (`Config.cpp:29,35`) | `ws_password` | never read; `global.ini` is not captured |
 | `plugin_config/obs-browser/` | the CEF profile | session | never captured |
 
 - Every occurrence of a registry key is redacted, duplicates included. An edit covers only the
   value: the bytes between the quotes of a JSON string, or from after the first `=` to the end of
   an INI line.
+- **URL rule.** For every `scheme://` in the value: the userinfo (the bytes up to the last `@` of the
+  authority, the `@` stays) and, after the FIRST `?` anywhere in the string (a `#` does not end the
+  query, because OBS's SRT code reads `streamid` and `passphrase` up to `&` or the end), the value
+  of each listed parameter up to the next `&`. Overlapping ranges are merged.
+- **INI files follow libobs's parser** (`config-file.c`, `lexer.c`: CR, LF, CRLF and LFCR are line
+  breaks, a header ends at the first `]` or line break, a malformed header is ignored and the rest of
+  the line is read as keys). Where the scanner is not certain (a CR not followed by LF, a `[` line that is not
+  `[name]` plus trailing blanks, a section name over 1,024 bytes) it redacts `Token` and
+  `RefreshToken` in EVERY section and position, and the file becomes `opaque-unreviewed`.
 - **Placeholders fail closed.** An empty key, token or password makes the output or the login fail
   and opens nothing.
 - **obs-websocket is the exception.** Its auth secret is derived from whatever password is stored
@@ -522,6 +531,7 @@ larger input, which is the safe failure.
 | JSON string | 16 MiB in documents, 64 KiB in manifests | 8 MiB of plugin state as hex |
 | JSON values | 1,000,000 per document, 250,000 per manifest | bounds parser memory |
 | INI line | 1 MiB | the longest real values are base64 `DockState` and `ExtraBrowserDocks` |
+| INI keys, sections | 1,000,000 keys, 100,000 sections | bounds scanner memory; OBS writes a few hundred keys |
 | Path | 512 bytes, 8 components, 255 bytes per component | OBS builds its paths in 512-byte buffers (`OBSApp.cpp:418,548`); its layout is at most 4 components deep |
 | Parent chain | 10,000 revisions | recovery walks the chain; nothing is pruned before S2 |
 
