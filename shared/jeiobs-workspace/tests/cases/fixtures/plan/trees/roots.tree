@@ -1,0 +1,4 @@
+# A default scenes root and another scenes directory for --roots.
+file user/obs-studio/user.ini 300
+copy scenes/obs-studio/basic/scenes/Default.json fixtures/plan/files/small.json
+copy alt-scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json

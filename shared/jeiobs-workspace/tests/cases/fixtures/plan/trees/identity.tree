@@ -1,0 +1,14 @@
+# Collections and profiles for the identity rules (see fixtures/plan/parent-identity.json).
+copy scenes/obs-studio/basic/scenes/Broken.json fixtures/plan/files/truncated.json
+copy scenes/obs-studio/basic/scenes/Changed.json fixtures/plan/files/id-changed.json
+copy scenes/obs-studio/basic/scenes/Copy.json fixtures/plan/files/id-copy.json
+copy scenes/obs-studio/basic/scenes/Dup1.json fixtures/plan/files/id-dup1.json
+copy scenes/obs-studio/basic/scenes/Dup2.json fixtures/plan/files/id-dup2.json
+copy scenes/obs-studio/basic/scenes/Empty.json fixtures/plan/files/id-empty.json
+copy scenes/obs-studio/basic/scenes/Fresh.json fixtures/plan/files/id-fresh.json
+copy scenes/obs-studio/basic/scenes/Garbage.json fixtures/plan/files/truncated.json
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/id-main.json
+copy scenes/obs-studio/basic/scenes/Renamed.json fixtures/plan/files/id-renamed.json
+copy scenes/obs-studio/basic/scenes/Tie.json fixtures/plan/files/id-tie.json
+file profiles/obs-studio/basic/profiles/Main/basic.ini 400
+file profiles/obs-studio/basic/profiles/Renamed/basic.ini 401

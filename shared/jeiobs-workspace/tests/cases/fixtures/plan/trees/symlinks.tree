@@ -1,0 +1,21 @@
+# Symlinks to a file, to a directory, to their own folder and dangling ones, in each walked place.
+# Targets under outside/ exist and are never listed.
+needs symlinks
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json
+link scenes/obs-studio/basic/scenes/Linked.json Main.json
+link scenes/obs-studio/basic/scenes/Gone.json Missing.json
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+link profiles/obs-studio/basic/profiles/Main/service.json ../../../../../outside/service.json
+link profiles/obs-studio/basic/profiles/Main/loop .
+link profiles/obs-studio/basic/profiles/Linked Main
+link config/obs-studio/plugin_config/obs-websocket ../../../outside/ws
+link config/obs-studio/plugin_config/foo-plugin ../../../outside/foo
+link config/obs-studio/logs ../../outside/logs
+link user/obs-studio/user.ini ../../outside/user.ini
+link plugin_manager/obs-studio/plugin_manager ../../outside/pm
+file outside/service.json 118
+file outside/ws/config.json 160
+file outside/foo/a.json 10
+file outside/logs/a.txt 10
+file outside/user.ini 3120
+file outside/pm/modules.json 256

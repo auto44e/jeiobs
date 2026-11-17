@@ -1,0 +1,4 @@
+# Two roots missing, one without its app dir, one with an empty app dir.
+file user/obs-studio/user.ini 300
+dir scenes
+dir profiles/obs-studio

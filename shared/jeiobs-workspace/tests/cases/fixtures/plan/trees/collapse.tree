@@ -1,0 +1,4 @@
+# Folders whose files are listed one by one, with 99, 100 and 101 unknown files (file k has k bytes).
+many config/obs-studio/plugin_config/obs-websocket 99 u
+many config/obs-studio/plugin_config/decklink-output-ui 100 u
+many config/obs-studio/plugin_config/aja-output-ui 101 u

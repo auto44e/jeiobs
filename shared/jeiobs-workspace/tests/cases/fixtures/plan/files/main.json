@@ -1,0 +1,77 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        },
+        {
+            "name": "BRB"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "sources": [
+        {
+            "id": "scene",
+            "versioned_id": "scene",
+            "name": "Scene",
+            "uuid": "f4d873ee-b372-4854-bb7f-9555a92f5514",
+            "settings": {
+                "id_counter": 2,
+                "custom_size": false,
+                "items": [
+                    {
+                        "name": "Camera",
+                        "source_uuid": "bf9f7b2c-ccd3-4eac-bb67-0f635b136c22",
+                        "id": 1
+                    },
+                    {
+                        "name": "Alerts",
+                        "source_uuid": "521d9644-88b1-480a-a414-0cd1d911e9f3",
+                        "id": 2
+                    }
+                ]
+            }
+        },
+        {
+            "id": "scene",
+            "versioned_id": "scene",
+            "name": "BRB",
+            "uuid": "7f2ea3d8-651b-47b7-8440-e237fe70f6be",
+            "settings": {
+                "items": []
+            }
+        },
+        {
+            "id": "group",
+            "versioned_id": "group",
+            "name": "Lower third",
+            "uuid": "7078ce42-2b0d-41d5-8ca5-87782f9d4243",
+            "settings": {
+                "items": []
+            }
+        },
+        {
+            "id": "v4l2_input",
+            "versioned_id": "v4l2_input",
+            "name": "Camera",
+            "uuid": "bf9f7b2c-ccd3-4eac-bb67-0f635b136c22",
+            "settings": {
+                "device_id": "/dev/video0"
+            }
+        },
+        {
+            "id": "browser_source",
+            "versioned_id": "browser_source",
+            "name": "Alerts",
+            "uuid": "521d9644-88b1-480a-a414-0cd1d911e9f3",
+            "settings": {
+                "url": "https://example.com/alerts"
+            }
+        }
+    ],
+    "transitions": [],
+    "current_transition": "Fade",
+    "transition_duration": 300
+}

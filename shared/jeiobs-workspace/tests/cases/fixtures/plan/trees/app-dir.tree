@@ -1,0 +1,5 @@
+# Two app dirs, obs-studio and jeiobs.
+file user/obs-studio/user.ini 300
+file user/jeiobs/user.ini 301
+copy scenes/jeiobs/basic/scenes/J.json fixtures/plan/files/small.json
+copy scenes/obs-studio/basic/scenes/O.json fixtures/plan/files/small.json

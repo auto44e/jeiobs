@@ -1,5 +1,5 @@
-# Black-box cases for jw-check (jeiobs-workspace, S1-PR1 and S1-PR2), run by run-cases.cmake.
-# Expected values come from docs/jeiobs/WORKSPACE_FORMAT.md and the S1-PR1 and S1-PR2 CLI contracts.
+# Black-box cases for jw-check (jeiobs-workspace, S1-PR1 to S1-PR3), run by run-cases.cmake.
+# Expected values come from docs/jeiobs/WORKSPACE_FORMAT.md and the S1-PR1, S1-PR2 and S1-PR3 CLI contracts.
 #
 # One case per line:   NAME | EXIT | EXPECTED | ARGS
 #   NAME      letters, digits, ".", "_", "-". A name ending in "@posix" is skipped on Windows
@@ -43,6 +43,35 @@
 #       out=FILE (made together by run-cases.cmake) instead of range by range.
 #     - Without --ws-placeholder, each placeholder is 32 characters of A-Z, a-z, 0-9, and a second
 #       run gives the same REPORT and another placeholder.
+#
+# plan cases (ARGS start with "plan"): plan TREE_DIR, then any of --roots F, --parent F, --uid-seed N
+#   and --app-dir D. EXPECTED may start with these tokens:
+#     tree=NAME     run-cases.cmake builds fixtures/plan/trees/NAME.tree into ${WORK}/plan/NAME (from
+#                   scratch, once per run), which ${TREE} names
+#     uids=random   (with @FILE) every uid is a distinct lowercase UUIDv4. Each is replaced, collections
+#                   first, by uid-random-0001, uid-random-0002, ... before the comparison, and a second run
+#                   must give other uids
+#   followed by TEXT, ~REGEX or * as above, or by
+#     @FILE,FILE,...  stdout is one JSON object equal to one of the FILEs (several only where the contract
+#                     allows more than one reading), both in canonical form: inside each run of consecutive
+#                     stored entries of one profile, of one collection or of the module configs (role
+#                     module.*) the entries are sorted by path, then ids are renumbered and every bak
+#                     follows its entry. A profiles dir "basic/profiles/<d>" counts as "<d>", and warnings
+#                     are sorted. Before that, the ids of stdout must be e1, e2, ... in entry order and
+#                     every bak must name an entry.
+#     entries=N       stdout is one JSON object with N entries (an output too big to compare)
+#   A tree file has one item per line, blank lines and # comments aside. PATH is relative to the tree, %XX
+#   is the byte 0xXX and {N*C} the character C repeated N times. No semicolon, square bracket or backslash
+#   (use %XX).
+#     needs F ...         the tree needs symlinks, case-sensitive, non-utf8-names, reserved-names or
+#                         long-names. Where the filesystem lacks one (probed in ${WORK}/plan-probe), its
+#                         cases are skipped
+#     dir PATH            a directory
+#     file PATH SIZE      a file of SIZE bytes "x", every byte of its name kept, backslashes included
+#     copy PATH FILE      a copy of FILE (relative to this directory)
+#     link PATH TARGET    a symbolic link to TARGET (relative to the link's directory)
+#     many DIR N PREFIX   N files DIR/PREFIX0001.txt, ..., where file k has k bytes
+#     profiles DIR N M    N folders DIR/p000, ..., each with basic.ini and M files u001.txt, ... of 1 byte
 
 # ---- usage (exit 2, stdout not checked)
 usage-no-arguments | 2 | *
@@ -1266,3 +1295,195 @@ redact-usage-without-report | 2 | * | redact profile.service fixtures/redact/ser
 redact-usage-extra-argument | 2 | * | redact profile.service fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT} extra
 redact-usage-placeholder-without-value | 2 | * | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder
 redact-usage-unknown-option | 2 | * | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --placeholder Ph0ldr4WebSocketPasswordTest0032
+
+# ---- plan TREE_DIR (S1-PR3): the capture planner on synthetic config trees built by run-cases.cmake
+# (fixtures/plan/trees, format above). The roots are TREE_DIR/config, user, scenes, profiles and
+# plugin_manager, each holding obs-studio/. Expected outputs follow the contract's plan order: user.ini,
+# modules.json, collections by name, profiles by folder name, module configs, then omitted entries by path
+# (bytes, across roots). Readings where the contract is silent, pinned here: a whole-folder dir entry
+# (module, secret-store, cache, runtime) has no count, only a collapse has one, cache is the three module
+# folders and runtime the five top-level folders, a symlink entry has size 0, load_rule comes only with a
+# bak, only new uids take the next number, and global.ini, themes/ and files that belong to no rule of a
+# root are not listed.
+#
+# a realistic tree: two collections and two profiles with .bak pairs (bak-fallback for collections and
+# service.json, mixed for encoders, none without a .bak), the module configs, and every omitted reason
+# that needs no special filesystem: unknown files and module folder, out-of-process-writer, secret-store,
+# cache, runtime, not-loaded, transient. global.ini and themes/ are not listed.
+plan-full | 0 | tree=full @expected/plan/full.json | plan ${TREE} --uid-seed 7
+plan-full-random-uids | 0 | tree=full uids=random @expected/plan/full-random.json | plan ${TREE}
+# --app-dir picks the app dir under each root. There is no jeiobs/ in this tree, so nothing is planned
+plan-full-other-app-dir | 0 | tree=full @expected/plan/empty.json | plan ${TREE} --app-dir jeiobs --uid-seed 7
+plan-app-dir-default | 0 | tree=app-dir @expected/plan/app-dir-default.json | plan ${TREE} --uid-seed 7
+plan-app-dir-jeiobs | 0 | tree=app-dir @expected/plan/app-dir-jeiobs.json | plan ${TREE} --app-dir jeiobs --uid-seed 7
+# both sides of the allowlist and of the omit patterns: names that differ from an allowlisted name in case
+# or suffix are unknown, *.json.v1 and *.json.invalid are not-loaded but *.v1 and *.invalid unknown, *.tmp is
+# transient, an AJA file name in the decklink folder (and the reverse) is unknown, a listed module name in
+# other case is one unknown dir, as are obs-browser2 and rtmp-services2. notes .txt (a space before the dot)
+# passes PathRules, .json and Trail..json name no collection (the collection name must pass PathRules),
+# and a non-ASCII collection name is stored
+plan-near-misses | 0 | tree=near-misses @expected/plan/near-misses.json | plan ${TREE} --uid-seed 7
+# 99 and 100 unknown files stay single entries. 101 collapse into one kind dir entry, count 101, size 5151
+# (file k has k bytes)
+plan-collapse-99-100-101 | 0 | tree=collapse @expected/plan/collapse.json | plan ${TREE} --uid-seed 7
+# folders that also hold stored files: only unknown files count toward the 100 (100 unknown files beside
+# basic.ini stay single). either: the dir entry's size and count cover its unknown files, or all its files
+plan-collapse-with-stored-files | 0 | tree=collapse-mixed @expected/plan/collapse-mixed.json,expected/plan/collapse-mixed-alt2.json | plan ${TREE} --uid-seed 7
+# a .bak without its main is stored alone, with no bak link. either: a lone collection .bak gets no
+# collection uid, or it gets one whose collections item has the .bak path or the main path
+plan-bak-without-main | 0 | tree=bak-alone @expected/plan/bak-alone.json,expected/plan/bak-alone-alt2.json,expected/plan/bak-alone-alt3.json | plan ${TREE} --uid-seed 7
+# symlinks to a file, to a directory, to their own folder and dangling ones, at every walked place (in
+# basic/scenes, in a profile folder and as one, as a listed and an unlisted module folder, as logs,
+# user.ini and plugin_manager): one symlink entry each, never followed. The targets under outside/ hold
+# a profile service.json, a websocket config.json, modules.json and user.ini, and none is planned
+plan-symlinks@posix | 0 | tree=symlinks @expected/plan/symlinks.json | plan ${TREE} --uid-seed 7
+# either: a symlink inside a folder excluded as a whole only stays out of the folder's size, or it also
+# gets its own symlink entry
+plan-symlink-inside-excluded-dir@posix | 0 | tree=symlink-in-excluded-dir @expected/plan/symlink-in-excluded-dir.json,expected/plan/symlink-in-excluded-dir-alt2.json | plan ${TREE} --uid-seed 7
+# names that PathRules rejects (reserved characters, colon, backslash, a trailing dot or space, device
+# names, control characters and DEL): one omitted entry per containing folder, kind names, with their
+# count and size and no names. A profile folder and a module folder with such names count in their parent
+# folder (here What? holds basic.ini, aux is empty). either: such a folder adds its files' size, or 0
+plan-names-reserved@posix | 0 | tree=names-reserved @expected/plan/names-reserved.json,expected/plan/names-reserved-alt2.json | plan ${TREE} --uid-seed 7
+# names that are not UTF-8 (0xFF, a truncated sequence, a surrogate, an overlong form), in basic/scenes, in
+# a profile folder and as an empty profile folder
+plan-names-not-utf8@posix | 0 | tree=names-not-utf8 @expected/plan/names-not-utf8.json | plan ${TREE} --uid-seed 7
+# path limits: a 255-byte profile folder name is a profile. In it a file at 512 bytes of path is unknown,
+# one at 513 bytes unrepresentable. A collection name of 250 bytes (file name 255 bytes) is stored
+plan-names-long@posix | 0 | tree=names-long @expected/plan/names-long.json | plan ${TREE} --uid-seed 7
+# ASCII case collisions in one root (profiles Main and main, collections Scene and scene, files Notes.txt
+# and notes.txt): all planned, collision true on both entries of each pair, and a case-collision warning
+# per pair with both paths joined by a vertical bar, in plan order. Two names that differ beyond ASCII case
+# (an accented capital and small letter) give none. either: the profile warning names the two basic.ini
+# paths or the two folders
+plan-case-collision@posix | 0 | tree=case-collision @expected/plan/case-collision.json,expected/plan/case-collision-alt2.json | plan ${TREE} --uid-seed 7
+# roots: --roots maps a root to a directory of TREE_DIR and records it custom, and the default scenes
+# directory is then not read. All five roots in one directory, as OBS lays them out by default: nothing is
+# listed twice. Each root reads only its own files. Missing roots and app dirs are skipped
+plan-roots-default | 0 | tree=roots @expected/plan/roots-default.json | plan ${TREE} --uid-seed 7
+plan-roots-custom-scenes | 0 | tree=roots @expected/plan/roots-custom.json | plan ${TREE} --roots fixtures/plan/roots/scenes-alt.json --uid-seed 12
+plan-roots-all-in-one-directory | 0 | tree=shared-dir @expected/plan/shared-dir.json | plan ${TREE} --roots fixtures/plan/roots/shared.json --uid-seed 7
+plan-roots-files-of-other-roots | 0 | tree=wrong-roots @expected/plan/empty.json | plan ${TREE} --uid-seed 7
+plan-roots-missing | 0 | tree=missing-roots @expected/plan/missing-roots.json | plan ${TREE} --uid-seed 7
+# scene_uuids: the sorted unique uuid strings of top-level sources items whose id is scene (an item whose
+# versioned_id alone says scene, groups items, nested items, a number uuid and no uuid do not count). A BOM
+# is skipped. A duplicate key, a truncated file and an empty file do not parse: scene_uuids is empty, the
+# file is still stored and a collection-unparseable warning names it. {} and a sources object parse
+plan-scene-uuids | 0 | tree=scene-uuids @expected/plan/scene-uuids.json | plan ${TREE} --uid-seed 7
+# identity against fixtures/plan/parent-identity.json. The same path keeps its uid: Main, Changed (its
+# scenes changed) and Broken (it does not parse, the parent entry is omitted). Renamed has the scene set of
+# exactly one parent collection (Old Name) and keeps its uid. Copy has Main's set, but Main is claimed by
+# its path. Dup1 and Dup2 both claim Original. Tie matches TieA and TieB. Empty and EmptyOld have empty
+# sets. Profile Main keeps its uid, Renamed is new. New uids are numbered in plan order, collections first
+plan-identity-no-parent | 0 | tree=identity @expected/plan/identity-no-parent.json | plan ${TREE} --uid-seed 7
+plan-identity-parent | 0 | tree=identity @expected/plan/identity-parent.json | plan ${TREE} --parent fixtures/plan/parent-identity.json --uid-seed 7
+# the same parent without scene_uuids: only paths match
+plan-identity-parent-without-scene-uuids | 0 | tree=identity @expected/plan/identity-parent-legacy.json | plan ${TREE} --parent fixtures/plan/parent-identity-legacy.json --uid-seed 7
+# the parent is read and validated as a local manifest (its ERR line may carry a detail)
+plan-parent-missing | 1 | tree=identity ~^ERR E_IO( .+)?$ | plan ${TREE} --parent fixtures/plan/does-not-exist.json --uid-seed 7
+plan-parent-directory | 1 | tree=identity ~^ERR E_IO( .+)?$ | plan ${TREE} --parent fixtures --uid-seed 7
+plan-parent-invalid | 1 | tree=identity ~^ERR E_SCHEMA format( .+)?$ | plan ${TREE} --parent fixtures/manifest/schema-missing-format.json --uid-seed 7
+plan-parent-scene-uuids-unsorted | 1 | tree=identity ~^ERR E_SCHEMA scene_uuids( .+)?$ | plan ${TREE} --parent fixtures/manifest/scene-uuids-unsorted.json --uid-seed 7
+plan-parent-export-manifest | 1 | tree=identity ~^ERR E_SCHEMA .+$ | plan ${TREE} --parent fixtures/export-example.json --uid-seed 7
+# at most 10,000 planned entries: 100 profiles of 100 entries, then one more user.ini
+plan-limit-entries-10000 | 0 | tree=limit entries=10000 | plan ${TREE} --uid-seed 7
+plan-limit-entries-10001 | 1 | tree=limit ERR E_LIMIT entries | plan ${TREE} --roots fixtures/plan/roots/limit-user.json --uid-seed 7
+# --roots files that are not one JSON object of strings (the contract names no code), and a missing one
+plan-roots-file-not-json | 1 | tree=roots ~^ERR E_.+$ | plan ${TREE} --roots fixtures/plan/roots/not-json.json --uid-seed 7
+plan-roots-file-not-object | 1 | tree=roots ~^ERR E_.+$ | plan ${TREE} --roots fixtures/plan/roots/not-object.json --uid-seed 7
+plan-roots-value-not-string | 1 | tree=roots ~^ERR E_.+$ | plan ${TREE} --roots fixtures/plan/roots/value-number.json --uid-seed 7
+plan-roots-file-missing | 1 | tree=roots ~^ERR E_IO( .+)?$ | plan ${TREE} --roots fixtures/plan/roots/does-not-exist.json --uid-seed 7
+# either: a TREE_DIR that does not exist has only missing roots (an empty plan), or is ERR E_IO
+plan-tree-dir-missing | 0,1 | ~^(ERR E_IO( .+)?|.*"entries".*)$ | plan ${WORK}/plan/does-not-exist --uid-seed 7
+plan-usage-no-tree | 2 | * | plan
+plan-usage-unknown-option | 2 | * | plan ${WORK} --frobnicate
+plan-usage-extra-argument | 2 | * | plan ${WORK} ${WORK}
+plan-usage-roots-without-value | 2 | * | plan ${WORK} --roots
+plan-usage-parent-without-value | 2 | * | plan ${WORK} --parent
+plan-usage-uid-seed-without-value | 2 | * | plan ${WORK} --uid-seed
+plan-usage-app-dir-without-value | 2 | * | plan ${WORK} --app-dir
+
+# ---- manifest: scene_uuids (S1-PR3), an optional entry field: an array of strings sorted by bytes and
+# unique, each at most 256 bytes, at most 100,000 items, only on entries with role collection. Anything
+# else is E_SCHEMA scene_uuids. Export drops it (local identity data) and does not list it in dropped_ext.
+scene-uuids-ok | 0 | OK | manifest fixtures/manifest/scene-uuids-ok.json
+scene-uuids-empty-ok | 0 | OK | manifest fixtures/manifest/scene-uuids-empty.json
+scene-uuids-byte-order-ok | 0 | OK | manifest fixtures/manifest/scene-uuids-byte-order.json
+scene-uuids-256-bytes-ok | 0 | OK | manifest fixtures/manifest/scene-uuids-256-bytes.json
+scene-uuids-256-bytes-multibyte-ok | 0 | OK | manifest fixtures/manifest/scene-uuids-256-bytes-multibyte.json
+scene-uuids-100000-items-ok | 0 | OK | manifest ${WORK}/scene-uuids-100000.json
+scene-uuids-unsorted | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-unsorted.json
+scene-uuids-case-order-unsorted | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-case-order-unsorted.json
+scene-uuids-duplicate | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-duplicate.json
+scene-uuids-number-item | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-number-item.json
+scene-uuids-null-item | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-null-item.json
+scene-uuids-not-an-array | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-not-array.json
+scene-uuids-object | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-object.json
+scene-uuids-257-bytes | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-257-bytes.json
+scene-uuids-257-bytes-multibyte | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-257-bytes-multibyte.json
+scene-uuids-100001-items | 1 | ERR E_SCHEMA scene_uuids | manifest ${WORK}/scene-uuids-100001.json
+scene-uuids-on-collection-bak | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-on-collection-bak.json
+scene-uuids-on-profile-basic | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-on-profile-basic.json
+scene-uuids-on-app-user | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-on-app-user.json
+scene-uuids-on-omitted-entry | 1 | ERR E_SCHEMA scene_uuids | manifest fixtures/manifest/scene-uuids-on-omitted-entry.json
+# the spec example with scene_uuids on its collection: the export equals the spec export but for the
+# revision id of these bytes
+scene-uuids-export-dropped | 0 | @expected/export-scene-uuids.json | export fixtures/export/scene-uuids.json fixtures/export/decisions-example.json --now 2026-11-16T19:10:42Z
+scene-uuids-export-output-validates | 0 | OK | manifest expected/export-scene-uuids.json --export
+
+# ---- redact collection: ReviewRules u1 (S1-PR3). A source type (versioned_id if it is a non-empty string,
+# else id) in the reviewed table, scene and group only, needs no count. Every other type counts 1 and the
+# count is max(1, N), so a collection stays opaque-unreviewed. Counting by id alone would give 3, not 4,
+# for the first fixture and 2, not 1, for the second
+redact-review-types-by-versioned-id | 0 | OK report=expected/redact/redact-review-types-by-versioned-id.json | redact collection fixtures/redact/collection/pr3-review-versioned-types.json ${OUT} ${REPORT}
+redact-review-bak-types-by-versioned-id | 0 | OK report=expected/redact/redact-review-types-by-versioned-id.json | redact collection.bak fixtures/redact/collection/pr3-review-versioned-types.json ${OUT} ${REPORT}
+redact-review-scene-and-group-types-only | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/pr3-review-scene-group-types.json ${OUT} ${REPORT}
+redact-review-other-first-party-types | 0 | OK report=expected/redact/redact-review-other-first-party-types.json | redact collection fixtures/redact/collection/pr3-review-other-types.json ${OUT} ${REPORT}
+
+# ---- redact: JSON numbers (S1-PR3 Part B item 1). A number token over 4,096 bytes makes the document
+# invalid. An exponent of more than 6 digits is clamped: an overflow (invalid) when positive, an underflow
+# (valid, as jansson reads it) when negative. Near the double limits the conversion decides: what rounds to
+# infinity is invalid. Encoder files: valid is exact, invalid is stored with parse invalid. Inputs under
+# ${WORK} are generated by run-cases.cmake.
+redact-number-4096-bytes | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream ${WORK}/redact/num-4096-bytes-encoder.json ${OUT} ${REPORT}
+redact-number-4097-bytes | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/num-4097-bytes-encoder.json ${OUT} ${REPORT}
+# the minus sign is part of the token
+redact-number-4096-bytes-negative | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream ${WORK}/redact/num-4096-bytes-negative-encoder.json ${OUT} ${REPORT}
+redact-number-4097-bytes-negative | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/num-4097-bytes-negative-encoder.json ${OUT} ${REPORT}
+redact-number-5000-digits | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/num-5000-digits-encoder.json ${OUT} ${REPORT}
+redact-number-5000-digits-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/num-5000-digits-service.json ${OUT} ${REPORT}
+redact-number-claude17-overflow | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/num-claude17-overflow-encoder.json ${OUT} ${REPORT}
+redact-number-claude17-underflow | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/num-claude17-underflow-encoder.json ${OUT} ${REPORT}
+redact-number-exponent-7-digits | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp7.json ${OUT} ${REPORT}
+redact-number-exponent-7-digits-plus-sign | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp7-plus-sign.json ${OUT} ${REPORT}
+redact-number-exponent-7-digits-negative-number | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp7-negative-number.json ${OUT} ${REPORT}
+redact-number-exponent-minus-7-digits | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp7-negative.json ${OUT} ${REPORT}
+# exponents past 2^63 and 2^64 (a parser that wraps the exponent would read 1e1 or an underflow)
+redact-number-exponent-2-pow-63 | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp-2pow63.json ${OUT} ${REPORT}
+redact-number-exponent-2-pow-64-plus-1 | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp-2pow64-plus-1.json ${OUT} ${REPORT}
+redact-number-exponent-minus-2-pow-64-plus-1 | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp-minus-2pow64-plus-1.json ${OUT} ${REPORT}
+redact-number-exponent-6-digits | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp6.json ${OUT} ${REPORT}
+redact-number-exponent-minus-6-digits | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp-minus6.json ${OUT} ${REPORT}
+redact-number-1.5e300 | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-1.5e300.json ${OUT} ${REPORT}
+redact-number-minus-1.5e300 | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-minus-1.5e300.json ${OUT} ${REPORT}
+redact-number-dbl-max | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-dbl-max.json ${OUT} ${REPORT}
+redact-number-rounds-down-to-dbl-max | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-rounds-down-to-dbl-max.json ${OUT} ${REPORT}
+redact-number-rounds-up-to-infinity | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-rounds-up-to-infinity.json ${OUT} ${REPORT}
+redact-number-1.8e308 | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-1.8e308.json ${OUT} ${REPORT}
+redact-number-underflow-1e-400 | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-underflow-1e-400.json ${OUT} ${REPORT}
+redact-number-min-subnormal | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-min-subnormal.json ${OUT} ${REPORT}
+redact-number-below-min-subnormal | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-below-min-subnormal.json ${OUT} ${REPORT}
+# either: an exponent of 7 digits with leading zeros (1e0000001 is 10) and a zero with a 7-digit exponent
+# (0e1000000 is 0) are finite, but "more than 6 digits is clamped" can also be read as an overflow
+redact-number-exponent-7-digits-leading-zeros | 0 | OK report=expected/redact/exact.json,expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-exp7-leading-zeros.json ${OUT} ${REPORT}
+redact-number-zero-exponent-7-digits | 0 | OK report=expected/redact/exact.json,expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/encoder/pr3-num-zero-exp7.json ${OUT} ${REPORT}
+# a role with secrets: a valid number keeps the key's redaction, an invalid one omits the file
+redact-number-1.5e300-service | 0 | OK report=expected/redact/redact-number-1.5e300-service.json | redact profile.service fixtures/redact/service/pr3-num-1.5e300.json ${OUT} ${REPORT}
+redact-number-exponent-7-digits-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/service/pr3-num-exp7.json ${OUT} ${REPORT}
+
+# ---- redact profile.basic (S1-PR3 Part B item 2): a section name over 1,024 bytes, with nothing else
+# uncertain in the file, trips the 1b fallback, so the Token in General is redacted. Count 2 (the fallback
+# and the unknown section) or 3 (the long name also counts 1). A name of exactly 1,024 bytes trips nothing:
+# the Token in General stays (opaque-unreviewed for the unknown section only)
+redact-basic-pr3-long-section-only | 0 | OK report=expected/redact/redact-basic-pr3-long-section-only.json,expected/redact/redact-basic-pr3-long-section-only-alt2.json | redact profile.basic fixtures/redact/basic/pr3-long-section-only.ini ${OUT} ${REPORT}
+redact-basic-pr3-section-1024-bytes | 0 | OK report=expected/redact/opaque-1.json | redact profile.basic fixtures/redact/basic/pr3-section-1024-bytes.ini ${OUT} ${REPORT}

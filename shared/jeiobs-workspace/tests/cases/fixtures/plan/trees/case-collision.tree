@@ -1,0 +1,10 @@
+# Names that differ only in ASCII case (a case-sensitive filesystem), and a non-ASCII case pair.
+needs case-sensitive
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+file profiles/obs-studio/basic/profiles/main/basic.ini 200
+file profiles/obs-studio/basic/profiles/Main/Notes.txt 5
+file profiles/obs-studio/basic/profiles/Main/notes.txt 6
+copy scenes/obs-studio/basic/scenes/Scene.json fixtures/plan/files/small.json
+copy scenes/obs-studio/basic/scenes/scene.json fixtures/plan/files/small.json
+copy scenes/obs-studio/basic/scenes/Caf%C3%A9.json fixtures/plan/files/small.json
+copy scenes/obs-studio/basic/scenes/CAF%C3%89.json fixtures/plan/files/small.json

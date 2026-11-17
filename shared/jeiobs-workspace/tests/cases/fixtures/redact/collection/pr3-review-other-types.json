@@ -1,0 +1,1 @@
+{"current_scene":"S","name":"Review","groups":[],"sources":[{"id":"scene","name":"S"},{"id":"ffmpeg_source","versioned_id":"ffmpeg_source","name":"media"},{"id":"vlc_source","versioned_id":"vlc_source","name":"vlc"},{"id":"image_source","versioned_id":"image_source","name":"image"},{"id":"wasapi_input_capture","versioned_id":"wasapi_input_capture","name":"mic"}]}

@@ -1,0 +1,39 @@
+# Both sides of the allowlist and of the omit rules: names next to an allowlisted name (case,
+# suffix, folder), and the not-loaded and transient patterns next to names that only look like them.
+# No two names differ only in case, so the tree is the same on a case-insensitive filesystem.
+file profiles/obs-studio/basic/profiles/Near/basic.ini 10
+file profiles/obs-studio/basic/profiles/Near/service.JSON 11
+file profiles/obs-studio/basic/profiles/Near/StreamEncoder.json 12
+file profiles/obs-studio/basic/profiles/Near/recordencoder.json 13
+file profiles/obs-studio/basic/profiles/Near/basic.ini.bak 14
+file profiles/obs-studio/basic/profiles/Near/service.json.v1 15
+file profiles/obs-studio/basic/profiles/Near/streamEncoder.json.invalid 16
+file profiles/obs-studio/basic/profiles/Near/recordEncoder.json.tmp 17
+file profiles/obs-studio/basic/profiles/Near/notes.v1 18
+file profiles/obs-studio/basic/profiles/Near/notes.invalid 19
+file profiles/obs-studio/basic/profiles/Near/notes.tmp.txt 20
+file profiles/obs-studio/basic/profiles/Near/notes%20.txt 21
+file profiles/obs-studio/basic/profiles/Near/.hidden 22
+copy scenes/obs-studio/basic/scenes/A.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/A.json.BAK 34
+file scenes/obs-studio/basic/scenes/A.json.bak.bak 33
+file scenes/obs-studio/basic/scenes/Near.JSON 31
+file scenes/obs-studio/basic/scenes/.json 32
+file scenes/obs-studio/basic/scenes/Trail..json 30
+file scenes/obs-studio/basic/scenes/B.json.v1 35
+file scenes/obs-studio/basic/scenes/B.v1 36
+file scenes/obs-studio/basic/scenes/C.json.invalid 37
+file scenes/obs-studio/basic/scenes/D.json.tmp 38
+file scenes/obs-studio/basic/scenes/D.tmp 39
+copy scenes/obs-studio/basic/scenes/Caf%C3%A9.json fixtures/plan/files/small.json
+file config/obs-studio/plugin_config/OBS-Browser/Cookies 41
+file config/obs-studio/plugin_config/obs-websocket/config.json.bak 42
+file config/obs-studio/plugin_config/obs-websocket/config.json.tmp 43
+file config/obs-studio/plugin_config/obs-websocket/other.json 44
+file config/obs-studio/plugin_config/decklink-output-ui/decklinkPreviewOutputProps.json.bak 45
+file config/obs-studio/plugin_config/decklink-output-ui/ajaOutputProps.json 46
+file config/obs-studio/plugin_config/aja-output-ui/ajaPreviewOutputProps.json 47
+file config/obs-studio/plugin_config/aja-output-ui/ajaPreviewOutputProps.json.bak 48
+file config/obs-studio/plugin_config/aja-output-ui/decklinkOutputProps.json 49
+file config/obs-studio/plugin_config/obs-browser2/x 50
+file config/obs-studio/plugin_config/rtmp-services2/x 51

@@ -1,0 +1,9 @@
+# Collections for the scene UUID rules: edge cases, a BOM, a duplicate key, no sources, sources
+# not an array, a truncated file and an empty file.
+copy scenes/obs-studio/basic/scenes/Edges.json fixtures/plan/files/uuids-edges.json
+copy scenes/obs-studio/basic/scenes/Bom.json fixtures/plan/files/uuids-bom.json
+copy scenes/obs-studio/basic/scenes/DupKey.json fixtures/plan/files/uuids-dupkey.json
+copy scenes/obs-studio/basic/scenes/Empty.json fixtures/plan/files/uuids-empty-object.json
+copy scenes/obs-studio/basic/scenes/NotArray.json fixtures/plan/files/uuids-sources-object.json
+copy scenes/obs-studio/basic/scenes/Truncated.json fixtures/plan/files/truncated.json
+copy scenes/obs-studio/basic/scenes/Zero.json fixtures/plan/files/empty.bin

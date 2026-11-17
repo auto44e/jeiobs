@@ -1,0 +1,4 @@
+# 100 profiles with basic.ini and 99 unknown files each: 10,000 entries. user-extra/ adds one
+# (fixtures/plan/roots/limit-user.json).
+profiles profiles/obs-studio/basic/profiles 100 99
+file user-extra/obs-studio/user.ini 1

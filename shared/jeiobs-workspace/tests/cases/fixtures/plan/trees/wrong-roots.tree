@@ -1,0 +1,17 @@
+# Each root holds only files that belong to other roots.
+file config/obs-studio/user.ini 1
+copy config/obs-studio/basic/scenes/X.json fixtures/plan/files/small.json
+file config/obs-studio/basic/profiles/P/basic.ini 1
+file config/obs-studio/plugin_manager/modules.json 1
+file user/obs-studio/plugin_config/obs-websocket/config.json 1
+file user/obs-studio/logs/a.txt 1
+copy user/obs-studio/basic/scenes/Y.json fixtures/plan/files/small.json
+file scenes/obs-studio/user.ini 1
+file scenes/obs-studio/plugin_config/obs-browser/x 1
+file scenes/obs-studio/basic/profiles/Q/basic.ini 1
+file profiles/obs-studio/plugin_manager/modules.json 1
+copy profiles/obs-studio/basic/scenes/Z.json fixtures/plan/files/small.json
+file profiles/obs-studio/logs/a.txt 1
+file plugin_manager/obs-studio/basic/profiles/R/basic.ini 1
+file plugin_manager/obs-studio/user.ini 1
+file plugin_manager/obs-studio/plugin_config/obs-vst3/vst3list.json 1

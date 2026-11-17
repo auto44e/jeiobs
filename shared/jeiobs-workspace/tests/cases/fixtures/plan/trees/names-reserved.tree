@@ -1,0 +1,30 @@
+# Names that PathRules rejects (valid UTF-8): reserved characters, colon, backslash, trailing dot
+# or space, device names, control characters, next to names that pass.
+needs reserved-names
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/notes%20.txt 5
+file scenes/obs-studio/basic/scenes/What?.json 10
+file scenes/obs-studio/basic/scenes/CON.json 20
+file scenes/obs-studio/basic/scenes/notes.txt%20 30
+file scenes/obs-studio/basic/scenes/draft. 40
+file scenes/obs-studio/basic/scenes/tab%09name.json 50
+file scenes/obs-studio/basic/scenes/a:b.json 60
+file scenes/obs-studio/basic/scenes/nul%20.json 70
+file scenes/obs-studio/basic/scenes/COM%C2%B9.json 80
+file scenes/obs-studio/basic/scenes/x<y>.json 90
+file scenes/obs-studio/basic/scenes/pipe|.json 100
+file scenes/obs-studio/basic/scenes/star*.json 110
+file scenes/obs-studio/basic/scenes/quote".json 120
+file scenes/obs-studio/basic/scenes/back%5Cslash.json 130
+file scenes/obs-studio/basic/scenes/CONIN$.json 140
+file scenes/obs-studio/basic/scenes/ctl%01.json 150
+file scenes/obs-studio/basic/scenes/del%7F.json 160
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+file profiles/obs-studio/basic/profiles/Main/x|y.txt 5
+file profiles/obs-studio/basic/profiles/Main/a*b 6
+file profiles/obs-studio/basic/profiles/What?/basic.ini 100
+file profiles/obs-studio/basic/profiles/What?/service.json 23
+dir profiles/obs-studio/basic/profiles/aux
+file config/obs-studio/plugin_config/obs-websocket/config.json 160
+file config/obs-studio/plugin_config/obs-websocket/What?.json 7
+file config/obs-studio/plugin_config/bad|plugin/data.json 33

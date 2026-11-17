@@ -1,0 +1,8 @@
+# .bak files without their main file, and one pair.
+copy scenes/obs-studio/basic/scenes/A.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/Lone.json.bak 100
+file profiles/obs-studio/basic/profiles/P/basic.ini 200
+file profiles/obs-studio/basic/profiles/P/service.json.bak 30
+file profiles/obs-studio/basic/profiles/P/streamEncoder.json.bak 40
+file profiles/obs-studio/basic/profiles/P/recordEncoder.json 50
+file profiles/obs-studio/basic/profiles/P/recordEncoder.json.bak 49
