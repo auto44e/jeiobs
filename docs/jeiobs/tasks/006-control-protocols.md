@@ -334,4 +334,14 @@ preallocation for VST3 is sized (A7); the policy table defaults beyond the ones 
   10,000-route chain (now iterative). Linux (GCC): `jc-unit` and `jc-cases` (1128 case lines) pass,
   also under ASan and UBSan. Not yet in CI: the library needs its own workflow job (owner-merged
   `.github` change).
-- Next: K1-PR2 (transform execution with property tests), then PR3 (headless runtime).
+- **K1-PR2** (2026-11-17): transform execution in `shared/jeiobs-control/`: `TransformPipeline` and a
+  caller-owned `TransformState` (toggle flag, relative position), all twelve ops of the schema (scale,
+  curve, invert, clamp, deadzone, quantize, threshold, momentary, toggle, relative, join14, split14),
+  all-or-nothing state on error, `jc-check transform`, and the position rules (`join14` and `relative`
+  first, `split14` last) in the validator. Property tests with a fixed-seed generator (monotonicity,
+  curve round trip, quantize levels and idempotence, all 16384 join/split codes, toggle parity, relative
+  encodings agreeing). Codex wrote the library, Claude the 164 black-box case lines blind; the cases decided
+  three readings (contract r1: literal `scale` formula, position rules run after parsing, `--position`
+  misuse is a usage error). The position rules tighten the v1.0 format: the one existing fixture that broke
+  the order (`valid/full.json`) was fixed.
+- Next: PR3 (headless runtime).

@@ -1,0 +1,5 @@
+[
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "64"}, {"type": "uint", "bits": 7, "value": "0"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "127"}, {"type": "uint", "bits": 7, "value": "127"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "0"}, {"type": "uint", "bits": 7, "value": "0"}]}
+]

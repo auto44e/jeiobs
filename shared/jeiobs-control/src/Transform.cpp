@@ -339,16 +339,10 @@ Result<Signal> ApplyStage(const TransformSpec &stage, std::size_t index, std::si
 
 		double output = input;
 		if (stage.op == "scale") {
-			if (input == stage.numbers[0]) {
-				output = stage.numbers[2];
-			} else if (input == stage.numbers[1]) {
-				output = stage.numbers[3];
-			} else {
-				output -= stage.numbers[0];
-				output *= stage.numbers[3] - stage.numbers[2];
-				output /= stage.numbers[1] - stage.numbers[0];
-				output += stage.numbers[2];
-			}
+			output -= stage.numbers[0];
+			output *= stage.numbers[3] - stage.numbers[2];
+			output /= stage.numbers[1] - stage.numbers[0];
+			output += stage.numbers[2];
 		} else if (stage.op == "curve") {
 			const double normalized = std::clamp(input, 0.0, 1.0);
 			if (normalized == 0.0 || normalized == 1.0 || stage.text == "linear") {

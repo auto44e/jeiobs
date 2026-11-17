@@ -991,8 +991,8 @@ int Run(int argc, char **argv)
 				if (option == "--position" && argument + 1 < argc) {
 					if (!ParseDoubleArgument(argv[argument + 1], position) ||
 					    !std::isfinite(position) || position < 0.0 || position > 1.0) {
-						PrintError({ErrorCode::Value, {}});
-						return 1;
+						PrintUsage();
+						return 2;
 					}
 					has_position = true;
 					argument += 2;

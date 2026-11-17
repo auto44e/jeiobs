@@ -1,0 +1,1 @@
+{"outputs":[{"type":"trigger"},{"bits":7,"type":"uint","value":"64"},{"format":"ieee64","number":"-2.5","type":"float"},{"type":"text","value":"x"},{"format":"ieee32","number":"-inf","type":"float"}]}

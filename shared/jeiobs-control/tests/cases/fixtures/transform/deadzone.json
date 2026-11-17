@@ -1,0 +1,11 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "w25", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "deadzone", "width": 0.25}], "target": {"kind": "scene", "id": "w25"}},
+    {"id": "w0", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "deadzone", "width": 0}], "target": {"kind": "scene", "id": "w0"}},
+    {"id": "w999", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "deadzone", "width": 0.999}], "target": {"kind": "scene", "id": "w999"}}
+  ]
+}

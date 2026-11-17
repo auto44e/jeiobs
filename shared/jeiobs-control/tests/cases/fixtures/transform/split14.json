@@ -1,0 +1,11 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "s", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "split14"}], "target": {"kind": "scene", "id": "s"}},
+    {"id": "scale_s", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1], "out": [0, 1]}, {"op": "split14"}], "target": {"kind": "scene", "id": "scale_s"}},
+    {"id": "rel_s", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 1}, {"op": "split14"}], "target": {"kind": "scene", "id": "rel_s"}}
+  ]
+}

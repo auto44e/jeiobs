@@ -1,0 +1,1 @@
+{"outputs":[{"format":"ieee64","number":"0","type":"float"},{"error":"E_VALUE nonfinite"},{"format":"ieee64","number":"1e+300","type":"float"},{"error":"E_VALUE nonfinite"}]}

@@ -476,7 +476,9 @@ void TestTransformProperties()
 		JC_CHECK(first_output);
 		JC_CHECK(second_output);
 		JC_CHECK_EQ(first_value, output_min);
-		JC_CHECK_EQ(second_value, output_max);
+		// The literal formula maps b to d to within rounding of the span (contract r1).
+		JC_CHECK(std::abs(second_value - output_max) <=
+			 4.0 * std::numeric_limits<double>::epsilon() * (std::abs(output_min) + std::abs(output_max)));
 		const double x1 = input_min + (input_max - input_min) * random.unit();
 		const double x2 = input_min + (input_max - input_min) * random.unit();
 		const double low = std::min(x1, x2);
