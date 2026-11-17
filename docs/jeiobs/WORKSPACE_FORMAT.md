@@ -84,7 +84,9 @@ One UTF-8 JSON object, no BOM. Writers choose key order and whitespace; nothing 
 
 - Every entry has `id` (unique), `status`, `root` and `path`. It also has `profile` or
   `collection` (a UID, section 9) when the file belongs to one. Pointers are RFC 6901 JSON
-  Pointers; in INI files they are `/<section>/<key>`, with the same escaping.
+  Pointers; in INI files they are `/<section>/<key>`, with the same escaping, except that a section
+  name over 1,024 bytes is written `/~section-<n>/<key>` (`n` the 0-based section ordinal; `~s`
+  cannot occur in an escaped name).
 - `"status": "stored"` adds `role`, `size`, `hash` and `fidelity`. Optional fields: `redactions`
   (`[{pointer, kind, ref}]`), `unreviewed` (`{rules, count}`), `parse` (`"invalid"` when the
   jeiobs parser rejects the file), `bak` (the id of the `<path>.bak` entry) and `load_rule`
@@ -357,10 +359,12 @@ plaintext websocket password, and nothing restores it as a file.
   query, because OBS's SRT code reads `streamid` and `passphrase` up to `&` or the end), the value
   of each listed parameter up to the next `&`. Overlapping ranges are merged.
 - **INI files follow libobs's parser** (`config-file.c`, `lexer.c`: CR, LF, CRLF and LFCR are line
-  breaks, a header ends at the first `]` or line break, a malformed header is ignored and the rest of
-  the line is read as keys). Where the scanner is not certain (a CR not followed by LF, a `[` line that is not
+  breaks; a header runs to the first `]` or line break, so `[Twitch` and `[Twitch]]` both name
+  section `Twitch`, and the rest of the line after a `]` is read as keys). Where the scanner is not certain (a CR not followed by LF, a `[` line that is not
   `[name]` plus trailing blanks, a section name over 1,024 bytes) it redacts `Token` and
-  `RefreshToken` in EVERY section and position, and the file becomes `opaque-unreviewed`.
+  `RefreshToken` in EVERY section and position, and the file becomes `opaque-unreviewed`
+  (count +1). A redaction report that would exceed 4 MiB (64 bytes per item plus its pointer, kind
+  and placeholder) makes the file `omitted` with reason `unparseable`.
 - **Placeholders fail closed.** An empty key, token or password makes the output or the login fail
   and opens nothing.
 - **obs-websocket is the exception.** Its auth secret is derived from whatever password is stored

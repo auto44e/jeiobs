@@ -43,7 +43,9 @@ struct ReportBudget {
 		if (pointer.size() > Limits::kStringBytes) {
 			return false;
 		}
-		const std::size_t item_bytes = sizeof(Edit) + pointer.size() + kind.size() + replacement_size;
+		// A fixed 64-byte overhead per item (not sizeof(Edit)) keeps the budget the same on every
+		// platform; a report that would exceed 4 MiB makes the file omitted as unparseable.
+		const std::size_t item_bytes = 64U + pointer.size() + kind.size() + replacement_size;
 		if (item_bytes > Limits::kManifestBytes - bytes) {
 			return false;
 		}

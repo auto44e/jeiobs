@@ -228,7 +228,8 @@ IniScanResult IniScan::Scan(std::string_view bytes)
 						break;
 					}
 				}
-				if (!exact_header) {
+				if (!exact_header || name_end - name_start > 1024U) {
+					// A malformed header, or a section name too long to copy into pointers.
 					result.uncertain = true;
 				}
 
