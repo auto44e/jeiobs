@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -640,6 +641,245 @@ Jeiobs::Workspace::Roots TestRoots(std::string_view prefix)
 	return roots;
 }
 
+class PartialListingFs final : public Jeiobs::Workspace::Fs {
+public:
+	Jeiobs::Workspace::MemFs storage;
+	std::string failing_directory;
+
+	[[nodiscard]] Jeiobs::Workspace::FsListResult List(std::string_view directory) const override
+	{
+		if (directory == failing_directory) {
+			Jeiobs::Workspace::FsListResult result = storage.List(directory);
+			result.error = {Jeiobs::Workspace::ErrorCode::Io, "listing"};
+			return result;
+		}
+		return storage.List(directory);
+	}
+
+	[[nodiscard]] Jeiobs::Workspace::BytesResult ReadBounded(std::string_view path,
+								 std::size_t max_bytes) const override
+	{
+		return storage.ReadBounded(path, max_bytes);
+	}
+
+	[[nodiscard]] Jeiobs::Workspace::Error
+	ListEach(std::string_view directory, const Jeiobs::Workspace::FsListCallback &callback) const override
+	{
+		if (directory != failing_directory) {
+			return storage.ListEach(directory, callback);
+		}
+		const auto listed = storage.List(directory);
+		if (!listed.ok()) {
+			return listed.error;
+		}
+		for (const auto &entry : listed.entries) {
+			if (!callback(entry)) {
+				return {};
+			}
+		}
+		return {Jeiobs::Workspace::ErrorCode::Io, "listing"};
+	}
+};
+
+class SizedFs final : public Jeiobs::Workspace::Fs {
+	struct Node {
+		Jeiobs::Workspace::FsEntryKind kind = Jeiobs::Workspace::FsEntryKind::Directory;
+		std::uint64_t size = 0U;
+		std::string bytes;
+	};
+
+	std::map<std::string, Node> nodes_;
+
+	void AddParents(std::string_view path)
+	{
+		std::size_t slash = path.find('/');
+		while (slash != std::string_view::npos) {
+			nodes_.try_emplace(std::string(path.substr(0U, slash)), Node{});
+			slash = path.find('/', slash + 1U);
+		}
+		nodes_.try_emplace("", Node{});
+	}
+
+public:
+	SizedFs() { nodes_.emplace("", Node{}); }
+
+	void AddDirectory(std::string_view path)
+	{
+		AddParents(path);
+		nodes_[std::string(path)] = Node{};
+	}
+
+	void AddFile(std::string_view path, std::uint64_t size)
+	{
+		AddParents(path);
+		nodes_[std::string(path)] = {Jeiobs::Workspace::FsEntryKind::File, size, {}};
+	}
+
+	[[nodiscard]] Jeiobs::Workspace::FsListResult List(std::string_view directory) const override
+	{
+		const auto directory_iterator = nodes_.find(std::string(directory));
+		if (directory_iterator == nodes_.end()) {
+			return {{}, {Jeiobs::Workspace::ErrorCode::Io, "missing"}};
+		}
+		if (directory_iterator->second.kind != Jeiobs::Workspace::FsEntryKind::Directory) {
+			return {{}, {Jeiobs::Workspace::ErrorCode::Io, "not-directory"}};
+		}
+
+		const std::string prefix = directory.empty() ? std::string{} : std::string(directory) + '/';
+		std::map<std::string, Jeiobs::Workspace::FsEntry> children;
+		for (const auto &[path, node] : nodes_) {
+			if (path.size() <= prefix.size() || path.compare(0U, prefix.size(), prefix) != 0) {
+				continue;
+			}
+			const std::string_view remainder(path.data() + prefix.size(), path.size() - prefix.size());
+			const std::size_t slash = remainder.find('/');
+			if (slash != std::string_view::npos) {
+				continue;
+			}
+			children.emplace(std::string(remainder),
+					 Jeiobs::Workspace::FsEntry{std::string(remainder), node.kind, node.size,
+								    true});
+		}
+
+		Jeiobs::Workspace::FsListResult result;
+		for (const auto &[name, entry] : children) {
+			(void)name;
+			result.entries.push_back(entry);
+		}
+		return result;
+	}
+
+	[[nodiscard]] Jeiobs::Workspace::BytesResult ReadBounded(std::string_view path,
+								 std::size_t max_bytes) const override
+	{
+		const auto iterator = nodes_.find(std::string(path));
+		if (iterator == nodes_.end() || iterator->second.kind != Jeiobs::Workspace::FsEntryKind::File) {
+			return {{}, {Jeiobs::Workspace::ErrorCode::Io, {}}};
+		}
+		if (iterator->second.size > max_bytes) {
+			return {{}, {Jeiobs::Workspace::ErrorCode::Limit, "blob"}};
+		}
+		return {iterator->second.bytes, {}};
+	}
+
+	[[nodiscard]] Jeiobs::Workspace::Error
+	ListEach(std::string_view directory, const Jeiobs::Workspace::FsListCallback &callback) const override
+	{
+		const auto listed = List(directory);
+		if (!listed.ok()) {
+			return listed.error;
+		}
+		for (const auto &entry : listed.entries) {
+			if (!callback(entry)) {
+				break;
+			}
+		}
+		return {};
+	}
+};
+
+void TestPlannerR4()
+{
+	using Jeiobs::Workspace::CapturePlanner;
+	using Jeiobs::Workspace::SeededUidSource;
+
+	const auto roots = TestRoots("");
+
+	PartialListingFs partial;
+	partial.failing_directory = "scenes/obs-studio/basic/scenes/bad?";
+	const std::string partial_relative = "basic/scenes/bad?";
+	JW_CHECK(partial.storage.AddFile(partial.failing_directory + "/partial.txt", "partial").ok());
+	SeededUidSource partial_uid("partial");
+	const auto partial_result = CapturePlanner::Plan(partial, roots, nullptr, partial_uid);
+	JW_CHECK(partial_result.ok());
+	if (partial_result.ok()) {
+		const auto names = FindPlanEntry(*partial_result.value, "scenes", "basic/scenes");
+		const auto unreadable = FindPlanEntry(*partial_result.value, "scenes", partial_relative);
+		JW_CHECK(names != nullptr);
+		JW_CHECK(unreadable != nullptr);
+		if (names != nullptr) {
+			JW_CHECK_EQ(names->reason, "unrepresentable");
+			JW_CHECK_EQ(names->count, 1U);
+			JW_CHECK_EQ(names->size, 0U);
+		}
+		if (unreadable != nullptr) {
+			JW_CHECK_EQ(unreadable->reason, "unreadable");
+			JW_CHECK_EQ(unreadable->kind, "dir");
+		}
+		JW_CHECK(std::any_of(partial_result.value->warnings.begin(), partial_result.value->warnings.end(),
+				     [](const auto &warning) {
+					     return warning.code == "listing-error" &&
+						    warning.path == "basic/scenes/bad?";
+				     }));
+	}
+
+	Jeiobs::Workspace::MemFs owned;
+	JW_CHECK(owned.AddFile("user/obs-studio/notes?.txt", "ignored").ok());
+	JW_CHECK(owned.AddFile("scenes/obs-studio/basic/odd?/ignored.txt", "ignored").ok());
+	SeededUidSource owned_uid("owned");
+	const auto owned_result = CapturePlanner::Plan(owned, roots, nullptr, owned_uid);
+	JW_CHECK(owned_result.ok());
+	if (owned_result.ok()) {
+		JW_CHECK(FindPlanEntry(*owned_result.value, "user", "obs-studio") == nullptr);
+		JW_CHECK(FindPlanEntry(*owned_result.value, "scenes", "obs-studio") == nullptr);
+		JW_CHECK(FindPlanEntry(*owned_result.value, "scenes", "basic") == nullptr);
+	}
+
+	Jeiobs::Workspace::MemFs empty_directories;
+	for (std::size_t index = 0U; index < 150U; ++index) {
+		JW_CHECK(empty_directories.AddDirectory("scenes/obs-studio/basic/scenes/empty" + std::to_string(index))
+				 .ok());
+	}
+	SeededUidSource empty_uid("empty");
+	const auto empty_result = CapturePlanner::Plan(empty_directories, roots, nullptr, empty_uid);
+	JW_CHECK(empty_result.ok());
+	if (empty_result.ok()) {
+		std::size_t unknown_directories = 0U;
+		for (const auto &entry : empty_result.value->entries) {
+			if (entry.root == "scenes" && entry.reason == "unknown" && entry.kind == "dir") {
+				++unknown_directories;
+			}
+		}
+		JW_CHECK_EQ(unknown_directories, 150U);
+	}
+
+	SizedFs sized;
+	const std::uint64_t sixty_four_mib = Jeiobs::Workspace::Limits::kBlobBytes;
+	for (const char name : {'A', 'B', 'C', 'D', 'E'}) {
+		sized.AddFile(std::string("scenes/obs-studio/basic/scenes/") + name + ".json", sixty_four_mib);
+	}
+	sized.AddFile("config/obs-studio/plugin_config/obs-websocket/config.json", 1U);
+	SeededUidSource sized_uid("sized");
+	const auto sized_result = CapturePlanner::Plan(sized, roots, nullptr, sized_uid);
+	JW_CHECK(sized_result.ok());
+	if (sized_result.ok()) {
+		for (const char name : {'A', 'B', 'C', 'D'}) {
+			const auto entry = FindPlanEntry(*sized_result.value, "scenes",
+							 std::string("basic/scenes/") + name + ".json");
+			JW_CHECK(entry != nullptr);
+			if (entry != nullptr) {
+				JW_CHECK_EQ(entry->status, "stored");
+			}
+		}
+		const auto e_entry = FindPlanEntry(*sized_result.value, "scenes", "basic/scenes/E.json");
+		const auto module_entry =
+			FindPlanEntry(*sized_result.value, "config", "plugin_config/obs-websocket/config.json");
+		JW_CHECK(e_entry != nullptr);
+		JW_CHECK(module_entry != nullptr);
+		if (e_entry != nullptr) {
+			JW_CHECK_EQ(e_entry->reason, "too-large");
+		}
+		if (module_entry != nullptr) {
+			JW_CHECK_EQ(module_entry->reason, "too-large");
+		}
+		JW_CHECK(sized_result.value->entries.size() >= 4U);
+		for (std::size_t index = 0U; index < 4U && index < sized_result.value->entries.size(); ++index) {
+			JW_CHECK_EQ(sized_result.value->entries[index].path,
+				    std::string("basic/scenes/") + static_cast<char>('A' + index) + ".json");
+		}
+	}
+}
+
 void TestPlannerR2()
 {
 	using Jeiobs::Workspace::CapturePlanner;
@@ -953,6 +1193,7 @@ int main()
 	TestPartBNumbers();
 	TestSceneUuidValidationAndExport();
 	TestReviewRules();
+	TestPlannerR4();
 	TestMemFsAndPlanner();
 	TestPlannerR2();
 #if !defined(_WIN32)

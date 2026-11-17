@@ -162,6 +162,7 @@ class PlannerImpl {
 	Error error_;
 	std::uint64_t stored_bytes_ = 0U;
 	std::map<std::string, std::size_t> collection_indices_;
+	std::map<std::string, std::size_t> omitted_indices_;
 
 	struct StateSizes {
 		std::size_t stored = 0U;
@@ -189,6 +190,10 @@ class PlannerImpl {
 		collection_indices_.clear();
 		for (std::size_t index = 0U; index < collections_.size(); ++index) {
 			collection_indices_[collections_[index].root + '\0' + collections_[index].main_path] = index;
+		}
+		omitted_indices_.clear();
+		for (std::size_t index = 0U; index < omitted_.size(); ++index) {
+			omitted_indices_[omitted_[index].root + '\0' + omitted_[index].path] = index;
 		}
 	}
 
@@ -228,11 +233,7 @@ class PlannerImpl {
 		return true;
 	}
 
-	[[nodiscard]] bool CanStore(std::uint64_t size) const
-	{
-		return size <= Limits::kBlobBytes && stored_bytes_ <= Limits::kRevisionBytes &&
-		       size <= Limits::kRevisionBytes - stored_bytes_;
-	}
+	[[nodiscard]] bool CanStore(std::uint64_t size) const { return size <= Limits::kBlobBytes; }
 
 	[[nodiscard]] bool AddStoredRaw(RawEntry entry) { return AddStored(std::move(entry)); }
 
@@ -242,10 +243,12 @@ class PlannerImpl {
 		if (!error_.ok()) {
 			return false;
 		}
+		const std::string key = root + '\0' + path;
 		if (reason == "unrepresentable" && kind == "names") {
-			for (PlannedEntry &existing : omitted_) {
-				if (existing.root == root && existing.path == path && existing.reason == "unknown" &&
-				    existing.kind == "dir") {
+			const auto existing_index = omitted_indices_.find(key);
+			if (existing_index != omitted_indices_.end()) {
+				PlannedEntry &existing = omitted_[existing_index->second];
+				if (existing.reason == "unknown" && existing.kind == "dir") {
 					existing.size = SaturatingAdd(existing.size, size);
 					existing.count = SaturatingAdd(existing.count, count);
 					return true;
@@ -253,9 +256,10 @@ class PlannerImpl {
 			}
 		}
 		if (reason == "unknown" && kind == "dir") {
-			for (PlannedEntry &existing : omitted_) {
-				if (existing.root == root && existing.path == path &&
-				    existing.reason == "unrepresentable" && existing.kind == "names") {
+			const auto existing_index = omitted_indices_.find(key);
+			if (existing_index != omitted_indices_.end()) {
+				PlannedEntry &existing = omitted_[existing_index->second];
+				if (existing.reason == "unrepresentable" && existing.kind == "names") {
 					existing.reason = "unknown";
 					existing.kind = "dir";
 					existing.size = SaturatingAdd(existing.size, size);
@@ -277,6 +281,7 @@ class PlannerImpl {
 		entry.kind = std::move(kind);
 		entry.count = count;
 		omitted_.push_back(std::move(entry));
+		omitted_indices_[key] = omitted_.size() - 1U;
 		return true;
 	}
 
@@ -309,7 +314,11 @@ class PlannerImpl {
 		++count;
 		if (child.kind == FsEntryKind::Directory && !child.path.empty() && !child.name.empty()) {
 			const Summary summary = Summarize(child.path);
-			size = SaturatingAdd(size, summary.size);
+			if (!summary.error.ok()) {
+				AddListingFailure(root, child.relative_path, summary.error, false);
+			} else {
+				size = SaturatingAdd(size, summary.size);
+			}
 		} else if (child.kind == FsEntryKind::File) {
 			size = SaturatingAdd(size, child.size);
 		}
@@ -388,7 +397,6 @@ class PlannerImpl {
 		entry.identity_uid = std::move(identity_uid);
 		entry.pair_key = std::move(pair_key);
 		entry.pair_main = pair_main;
-		stored_bytes_ = SaturatingAdd(stored_bytes_, size);
 		return AddStoredRaw(std::move(entry));
 	}
 
@@ -414,6 +422,7 @@ class PlannerImpl {
 	void AssignProfileUids();
 	void BuildCollectionEntries();
 	void BuildProfileEntryIdentities();
+	void ApplyStoredBudget();
 	void MarkCollisions(Plan &plan);
 
 public:
@@ -484,12 +493,14 @@ bool UnknownAccumulator::Add(const Fs &fs, const Child &child)
 	}
 	file_count = SaturatingAdd(file_count, summary.files);
 	size = SaturatingAdd(size, summary.size);
-	if (sample.size() <= kUnknownCollapseCount) {
+	if (file_count <= kUnknownCollapseCount) {
 		Child sample_child = child;
 		if (child.kind == FsEntryKind::Directory) {
 			sample_child.size = summary.size;
 		}
 		sample.push_back(std::move(sample_child));
+	} else {
+		sample.clear();
 	}
 	return true;
 }
@@ -562,14 +573,11 @@ void PlannerImpl::ProcessOwnedRoot(const std::string &fs_directory, const std::s
 				   const std::string &relative, const ChildHandler &handler)
 {
 	const StateSizes state = SaveState();
-	std::uint64_t unrepresentable_count = 0U;
-	std::uint64_t unrepresentable_size = 0U;
 	const Error list_error = fs_.ListEach(fs_directory, [&](const FsEntry &entry) {
 		const Child child{entry.name, JoinPath(fs_directory, entry.name),
 				  entry.name, entry.kind,
 				  entry.size, entry.name_representable};
 		if (!entry.name_representable || !IsRepresentablePath(entry.name)) {
-			AddUnrepresentable(root, relative, child, unrepresentable_count, unrepresentable_size);
 			return error_.ok();
 		}
 		(void)handler(child);
@@ -580,7 +588,6 @@ void PlannerImpl::ProcessOwnedRoot(const std::string &fs_directory, const std::s
 		AddListingFailure(root, relative, list_error, true);
 		return;
 	}
-	FinishUnrepresentable(root, relative, unrepresentable_count, unrepresentable_size);
 }
 
 void PlannerImpl::ProcessConfigModule(const std::string &fs_directory, const std::string &root,
@@ -685,7 +692,6 @@ void PlannerImpl::AddCollectionFile(const std::string &root, const std::string &
 		AddOmitted(root, relative, child.size, "too-large");
 		return;
 	}
-	stored_bytes_ = SaturatingAdd(stored_bytes_, child.size);
 	const std::string main_path = JoinRelative(relative.substr(0U, relative.size() - child.name.size()), main_name);
 	const std::string collection_key = root + '\0' + main_path;
 	auto index_iterator = collection_indices_.find(collection_key);
@@ -1267,6 +1273,30 @@ void PlannerImpl::BuildCollectionEntries()
 	}
 }
 
+void PlannerImpl::ApplyStoredBudget()
+{
+	std::vector<RawEntry> accepted;
+	std::vector<RawEntry> too_large;
+	accepted.reserve(stored_.size());
+	too_large.reserve(stored_.size());
+
+	std::uint64_t stored_bytes = 0U;
+	for (RawEntry &entry : stored_) {
+		if (stored_bytes <= Limits::kRevisionBytes && entry.size <= Limits::kRevisionBytes - stored_bytes) {
+			stored_bytes = SaturatingAdd(stored_bytes, entry.size);
+			accepted.push_back(std::move(entry));
+		} else {
+			too_large.push_back(std::move(entry));
+		}
+	}
+	stored_ = std::move(accepted);
+	stored_bytes_ = stored_bytes;
+
+	for (const RawEntry &entry : too_large) {
+		AddOmitted(entry.root, entry.path, entry.size, "too-large");
+	}
+}
+
 void PlannerImpl::MarkCollisions(Plan &plan)
 {
 	std::map<std::string, std::vector<std::size_t>> groups;
@@ -1347,6 +1377,7 @@ PlanResult PlannerImpl::Run()
 		}
 		return left.path < right.path;
 	});
+	ApplyStoredBudget();
 	std::sort(omitted_.begin(), omitted_.end(), [](const PlannedEntry &left, const PlannedEntry &right) {
 		if (left.path != right.path) {
 			return left.path < right.path;
