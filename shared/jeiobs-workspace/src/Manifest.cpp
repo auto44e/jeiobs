@@ -850,6 +850,11 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 				return Schema(field);
 			}
 		}
+		if (entry.contains("count") && (status != "omitted" || !entry.contains("kind") ||
+						(entry.at("kind") != "dir" && entry.at("kind") != "names") ||
+						!IsPositiveInteger(entry.at("count")))) {
+			return Schema("count");
+		}
 		if (entry.contains("bak") && !entry.at("bak").is_string()) {
 			return Schema("bak");
 		}
@@ -1120,10 +1125,10 @@ bool IsKnownTopLevel(std::string_view key)
 
 bool IsKnownEntry(std::string_view key)
 {
-	static constexpr std::array<std::string_view, 18U> fields = {
-		"id",         "status", "root",      "path",     "role",       "profile",
-		"collection", "size",   "hash",      "fidelity", "redactions", "unreviewed",
-		"parse",      "bak",    "load_rule", "kind",     "reason",     "scene_uuids",
+	static constexpr std::array<std::string_view, 19U> fields = {
+		"id",        "status", "root",     "path",       "role",        "profile", "collection",
+		"size",      "hash",   "fidelity", "redactions", "unreviewed",  "parse",   "bak",
+		"load_rule", "kind",   "reason",   "count",      "scene_uuids",
 	};
 	return std::find(fields.begin(), fields.end(), key) != fields.end();
 }
@@ -1251,7 +1256,7 @@ Json CopyKnownEntry(const Json &entry)
 {
 	Json result = Json::object();
 	for (const char *field : {"id", "status", "root", "path", "role", "profile", "collection", "size", "hash",
-				  "fidelity", "parse", "bak", "load_rule", "kind", "reason"}) {
+				  "fidelity", "parse", "bak", "load_rule", "kind", "reason", "count"}) {
 		if (entry.contains(field)) {
 			result[field] = entry.at(field);
 		}

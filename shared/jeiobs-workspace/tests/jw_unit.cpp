@@ -23,12 +23,20 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <clocale>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#if !defined(_WIN32)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -140,6 +148,29 @@ void TestEntryRules()
 	document = Json::parse(kLocalManifest);
 	document["entries"][0]["parse"] = "invalid";
 	CheckLocalSchema(document, Jeiobs::Workspace::ErrorCode::Schema, "parse");
+
+	document = Json::parse(kLocalManifest);
+	document["entries"][0]["status"] = "omitted";
+	document["entries"][0].erase("role");
+	document["entries"][0]["reason"] = "unknown";
+	document["entries"][0].erase("hash");
+	document["entries"][0].erase("fidelity");
+	document["entries"][0]["kind"] = "dir";
+	document["entries"][0]["count"] = 1;
+	JW_CHECK(Jeiobs::Workspace::ParseManifest(document.dump(), ManifestMode::Local).ok());
+
+	document["entries"][0]["count"] = 0;
+	CheckLocalSchema(document, Jeiobs::Workspace::ErrorCode::Schema, "count");
+	document["entries"][0]["count"] = 1;
+	document["entries"][0]["kind"] = "other";
+	CheckLocalSchema(document, Jeiobs::Workspace::ErrorCode::Schema, "count");
+	document["entries"][0]["kind"] = "dir";
+	document["entries"][0]["count"] = "1";
+	CheckLocalSchema(document, Jeiobs::Workspace::ErrorCode::Schema, "count");
+
+	document = Json::parse(kLocalManifest);
+	document["entries"][0]["count"] = 1;
+	CheckLocalSchema(document, Jeiobs::Workspace::ErrorCode::Schema, "count");
 
 	document = Json::parse(kLocalManifest);
 	document["entries"][0]["status"] = "omitted";
@@ -581,10 +612,195 @@ void TestReviewRules()
 	JW_CHECK(scene_and_group.ok());
 	JW_CHECK_EQ(scene_and_group.unreviewed_count, 1U);
 	const auto opaque = Jeiobs::Workspace::ReviewRules::AnalyzeCollection(
-		R"json({"sources":[{"id":"scene"},{"id":"third-party"}]})json");
+		R"json({"sources":[{"id":"scene"},{"id":"third-party"},{"id":"another-third-party"}]})json");
 	JW_CHECK(opaque.ok());
-	JW_CHECK_EQ(opaque.unreviewed_count, 1U);
+	JW_CHECK_EQ(opaque.unreviewed_count, 2U);
 }
+
+const Jeiobs::Workspace::PlannedEntry *FindPlanEntry(const Jeiobs::Workspace::Plan &plan, std::string_view root,
+						     std::string_view path)
+{
+	for (const auto &entry : plan.entries) {
+		if (entry.root == root && entry.path == path) {
+			return &entry;
+		}
+	}
+	return nullptr;
+}
+
+Jeiobs::Workspace::Roots TestRoots(std::string_view prefix)
+{
+	Jeiobs::Workspace::Roots roots;
+	const std::string root = prefix.empty() ? std::string{} : std::string(prefix) + "/";
+	roots.config.path = root + "config";
+	roots.user.path = root + "user";
+	roots.scenes.path = root + "scenes";
+	roots.profiles.path = root + "profiles";
+	roots.plugin_manager.path = root + "plugin_manager";
+	return roots;
+}
+
+void TestPlannerR2()
+{
+	using Jeiobs::Workspace::CapturePlanner;
+	using Jeiobs::Workspace::MemFs;
+	using Jeiobs::Workspace::SeededUidSource;
+
+	MemFs fs;
+	JW_CHECK(fs.AddFile("scenes/obs-studio/basic/scenes/Changed.json",
+			    R"json({"sources":[{"id":"scene","uuid":"new"}]})json")
+			 .ok());
+	JW_CHECK(fs.AddFile("scenes/obs-studio/basic/scenes/Archive.json",
+			    R"json({"sources":[{"id":"scene","uuid":"old"}]})json")
+			 .ok());
+	JW_CHECK(fs.AddFile("scenes/obs-studio/basic/scenes/themes.json", "{}").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/themes/basic.ini", "x=y\n").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/NoBasic/service.json", "{}").ok());
+	JW_CHECK(fs.AddSymlink("config/obs-studio").ok());
+
+	Json parent_document = Json::parse(kLocalManifest);
+	parent_document["entries"] = {{{"id", "old-collection"},
+				       {"status", "stored"},
+				       {"root", "scenes"},
+				       {"path", "basic/scenes/Changed.json"},
+				       {"role", "collection"},
+				       {"collection", "collection-old"},
+				       {"size", 1},
+				       {"hash", std::string(64, 'a')},
+				       {"fidelity", "exact"},
+				       {"scene_uuids", {"old"}}}};
+	const auto parent = Jeiobs::Workspace::ParseManifest(parent_document.dump(), ManifestMode::Local);
+	JW_CHECK(parent.ok());
+	if (!parent.ok()) {
+		return;
+	}
+
+	const auto roots = TestRoots("");
+	SeededUidSource uid_source("r2");
+	const auto result = CapturePlanner::Plan(fs, roots, &*parent.value, uid_source);
+	JW_CHECK(result.ok());
+	if (!result.ok()) {
+		return;
+	}
+	JW_CHECK_EQ(result.value->collections.size(), 3U);
+	const auto changed = FindPlanEntry(*result.value, "scenes", "basic/scenes/Changed.json");
+	const auto archive = FindPlanEntry(*result.value, "scenes", "basic/scenes/Archive.json");
+	JW_CHECK(changed != nullptr);
+	JW_CHECK(archive != nullptr);
+	if (changed != nullptr && archive != nullptr) {
+		JW_CHECK_EQ(changed->collection.value(), "collection-old");
+		JW_CHECK_EQ(archive->collection.value(), "uid-r2-0001");
+	}
+	JW_CHECK(FindPlanEntry(*result.value, "scenes", "basic/scenes/themes.json") != nullptr);
+	JW_CHECK(FindPlanEntry(*result.value, "profiles", "basic/profiles/themes/basic.ini") != nullptr);
+	JW_CHECK(result.value->profiles.size() == 1U);
+	const auto no_basic = FindPlanEntry(*result.value, "profiles", "basic/profiles/NoBasic");
+	JW_CHECK(no_basic != nullptr);
+	if (no_basic != nullptr) {
+		JW_CHECK_EQ(no_basic->reason, "unknown");
+		JW_CHECK_EQ(no_basic->kind, "dir");
+	}
+	const auto app_symlink = FindPlanEntry(*result.value, "config", "obs-studio");
+	JW_CHECK(app_symlink != nullptr);
+	if (app_symlink != nullptr) {
+		JW_CHECK_EQ(app_symlink->reason, "symlink");
+	}
+	JW_CHECK(std::any_of(result.value->warnings.begin(), result.value->warnings.end(), [](const auto &warning) {
+		return warning.code == "root-symlink" && warning.path == "obs-studio";
+	}));
+
+	MemFs scene_limit;
+	std::string scene_document = R"json({"sources":[)json";
+	for (std::size_t index = 0U; index < 100001U; ++index) {
+		if (index != 0U) {
+			scene_document.push_back(',');
+		}
+		scene_document += "{\"id\":\"scene\",\"uuid\":\"u" + std::to_string(index) + "\"}";
+	}
+	scene_document += "]}";
+	JW_CHECK(scene_limit.AddFile("scenes/obs-studio/basic/scenes/Limited.json", scene_document).ok());
+	SeededUidSource scene_uid("scene");
+	const auto scene_result = CapturePlanner::Plan(scene_limit, roots, nullptr, scene_uid);
+	JW_CHECK(scene_result.ok());
+	if (scene_result.ok()) {
+		JW_CHECK(scene_result.value->collections.size() == 1U);
+		if (scene_result.value->collections.size() == 1U) {
+			JW_CHECK(scene_result.value->collections[0].scene_uuids.empty());
+		}
+		JW_CHECK(std::any_of(scene_result.value->warnings.begin(), scene_result.value->warnings.end(),
+				     [](const auto &warning) { return warning.code == "scene-uuids-limit"; }));
+	}
+
+	MemFs too_large;
+	const std::string large(Jeiobs::Workspace::Limits::kBlobBytes + 1U, 'x');
+	JW_CHECK(too_large.AddFile("scenes/obs-studio/basic/scenes/Large.json", large).ok());
+	SeededUidSource large_uid("large");
+	const auto large_result = CapturePlanner::Plan(too_large, roots, nullptr, large_uid);
+	JW_CHECK(large_result.ok());
+	if (large_result.ok()) {
+		const auto omitted = FindPlanEntry(*large_result.value, "scenes", "basic/scenes/Large.json");
+		JW_CHECK(omitted != nullptr);
+		if (omitted != nullptr) {
+			JW_CHECK_EQ(omitted->reason, "too-large");
+		}
+		JW_CHECK(large_result.value->collections.empty());
+	}
+}
+
+#if !defined(_WIN32)
+void TestRealFsR2Failures()
+{
+	char directory_template[] = "/tmp/jeiobs-workspace-r2-XXXXXX";
+	char *directory_name = mkdtemp(directory_template);
+	JW_CHECK(directory_name != nullptr);
+	if (directory_name == nullptr) {
+		return;
+	}
+	const std::filesystem::path root(directory_name);
+	std::error_code filesystem_error;
+	std::filesystem::create_directories(root / "config" / "obs-studio" / "plugin_config", filesystem_error);
+	std::filesystem::create_directories(root / "user", filesystem_error);
+	std::filesystem::create_directories(root / "outside", filesystem_error);
+	std::filesystem::create_symlink("../outside", root / "user" / "obs-studio", filesystem_error);
+	JW_CHECK(!filesystem_error);
+
+	Jeiobs::Workspace::RealFs fs;
+	const auto roots = TestRoots(root.string());
+	Jeiobs::Workspace::SeededUidSource source("real");
+	const auto symlink_result = Jeiobs::Workspace::CapturePlanner::Plan(fs, roots, nullptr, source);
+	JW_CHECK(symlink_result.ok());
+	if (symlink_result.ok()) {
+		const auto entry = FindPlanEntry(*symlink_result.value, "user", "obs-studio");
+		JW_CHECK(entry != nullptr);
+		if (entry != nullptr) {
+			JW_CHECK_EQ(entry->reason, "symlink");
+		}
+	}
+
+	if (geteuid() != 0) {
+		const std::filesystem::path protected_directory = root / "config" / "obs-studio" / "plugin_config";
+		JW_CHECK(chmod(protected_directory.c_str(), 0) == 0);
+		Jeiobs::Workspace::SeededUidSource protected_source("protected");
+		const auto protected_result =
+			Jeiobs::Workspace::CapturePlanner::Plan(fs, roots, nullptr, protected_source);
+		JW_CHECK(protected_result.ok());
+		if (protected_result.ok()) {
+			const auto entry = FindPlanEntry(*protected_result.value, "config", "plugin_config");
+			JW_CHECK(entry != nullptr);
+			if (entry != nullptr) {
+				JW_CHECK_EQ(entry->reason, "unreadable");
+			}
+			JW_CHECK(std::any_of(protected_result.value->warnings.begin(),
+					     protected_result.value->warnings.end(), [](const auto &warning) {
+						     return warning.code == "listing-error" &&
+							    warning.path == "plugin_config";
+					     }));
+		}
+		JW_CHECK(chmod(protected_directory.c_str(), 0700) == 0);
+	}
+	std::filesystem::remove_all(root, filesystem_error);
+}
+#endif
 
 void TestMemFsAndPlanner()
 {
@@ -738,6 +954,10 @@ int main()
 	TestSceneUuidValidationAndExport();
 	TestReviewRules();
 	TestMemFsAndPlanner();
+	TestPlannerR2();
+#if !defined(_WIN32)
+	TestRealFsR2Failures();
+#endif
 	TestBoundedWorstCases();
 	return JwTest::failures == 0 ? 0 : 1;
 }

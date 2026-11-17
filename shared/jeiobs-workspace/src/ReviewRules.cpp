@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <string_view>
+#include <unordered_map>
 
 namespace Jeiobs::Workspace {
 namespace {
@@ -30,18 +31,44 @@ const JsonMemberOccurrence *FindMember(const JsonScanResult &scan, std::size_t p
 	return nullptr;
 }
 
-std::string_view SourceType(const JsonScanResult &scan, std::size_t source_index)
+struct SourceFields {
+	std::size_t id = kJsonNoIndex;
+	std::size_t versioned_id = kJsonNoIndex;
+};
+
+std::unordered_map<std::size_t, SourceFields> IndexSourceFields(const JsonScanResult &scan)
 {
-	const JsonMemberOccurrence *versioned = FindMember(scan, source_index, "versioned_id");
-	if (versioned != nullptr && versioned->value_index < scan.values.size()) {
-		const JsonValueOccurrence &value = scan.values[versioned->value_index];
+	std::unordered_map<std::size_t, SourceFields> fields;
+	for (const JsonMemberOccurrence &member : scan.members) {
+		if (member.key != "id" && member.key != "versioned_id") {
+			continue;
+		}
+		SourceFields &source = fields[member.parent_index];
+		if (member.key == "id") {
+			source.id = member.value_index;
+		} else {
+			source.versioned_id = member.value_index;
+		}
+	}
+	return fields;
+}
+
+std::string_view SourceType(const JsonScanResult &scan, const std::unordered_map<std::size_t, SourceFields> &fields,
+			    std::size_t source_index)
+{
+	const auto fields_iterator = fields.find(source_index);
+	if (fields_iterator == fields.end()) {
+		return {};
+	}
+	const SourceFields &source = fields_iterator->second;
+	if (source.versioned_id < scan.values.size()) {
+		const JsonValueOccurrence &value = scan.values[source.versioned_id];
 		if (value.kind == JsonValueKind::String && !value.string_value.empty()) {
 			return value.string_value;
 		}
 	}
-	const JsonMemberOccurrence *id = FindMember(scan, source_index, "id");
-	if (id != nullptr && id->value_index < scan.values.size()) {
-		const JsonValueOccurrence &value = scan.values[id->value_index];
+	if (source.id < scan.values.size()) {
+		const JsonValueOccurrence &value = scan.values[source.id];
 		if (value.kind == JsonValueKind::String) {
 			return value.string_value;
 		}
@@ -49,7 +76,8 @@ std::string_view SourceType(const JsonScanResult &scan, std::size_t source_index
 	return {};
 }
 
-std::size_t CountArray(const JsonScanResult &scan, const JsonMemberOccurrence *member)
+std::size_t CountArray(const JsonScanResult &scan, const std::unordered_map<std::size_t, SourceFields> &fields,
+		       const JsonMemberOccurrence *member)
 {
 	if (member == nullptr) {
 		return 0U;
@@ -66,24 +94,25 @@ std::size_t CountArray(const JsonScanResult &scan, const JsonMemberOccurrence *m
 			continue;
 		}
 		if (value.kind != JsonValueKind::Object ||
-		    !IsFirstPartySourceType(SourceType(scan, &value - scan.values.data()))) {
+		    !IsFirstPartySourceType(SourceType(scan, fields, &value - scan.values.data()))) {
 			++unknown;
 		}
 	}
 	return unknown;
 }
 
-std::size_t CountAudioDevice(const JsonScanResult &scan, std::string_view key)
+std::size_t CountAudioDevice(const JsonScanResult &scan, const std::unordered_map<std::size_t, SourceFields> &fields,
+			     std::string_view key)
 {
 	const JsonMemberOccurrence *member = FindMember(scan, 0U, key);
 	if (member == nullptr || member->value_index >= scan.values.size()) {
 		return 0U;
 	}
 	const JsonValueOccurrence &value = scan.values[member->value_index];
-	if (value.kind != JsonValueKind::Object || SourceType(scan, member->value_index).empty()) {
+	if (value.kind != JsonValueKind::Object || SourceType(scan, fields, member->value_index).empty()) {
 		return 1U;
 	}
-	return IsFirstPartySourceType(SourceType(scan, member->value_index)) ? 0U : 1U;
+	return IsFirstPartySourceType(SourceType(scan, fields, member->value_index)) ? 0U : 1U;
 }
 
 } // namespace
@@ -109,11 +138,12 @@ ReviewResult ReviewRules::AnalyzeCollection(std::string_view bytes)
 		return {1U, {}};
 	}
 
-	std::size_t unknown = CountArray(scan, FindMember(scan, 0U, "sources"));
-	unknown += CountArray(scan, FindMember(scan, 0U, "groups"));
+	const std::unordered_map<std::size_t, SourceFields> fields = IndexSourceFields(scan);
+	std::size_t unknown = CountArray(scan, fields, FindMember(scan, 0U, "sources"));
+	unknown += CountArray(scan, fields, FindMember(scan, 0U, "groups"));
 	for (const std::string_view key : {"DesktopAudioDevice1", "DesktopAudioDevice2", "AuxAudioDevice1",
 					   "AuxAudioDevice2", "AuxAudioDevice3", "AuxAudioDevice4"}) {
-		unknown += CountAudioDevice(scan, key);
+		unknown += CountAudioDevice(scan, fields, key);
 	}
 	return {std::max<std::size_t>(1U, unknown), {}};
 }

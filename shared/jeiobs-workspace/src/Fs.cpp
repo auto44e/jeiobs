@@ -12,11 +12,16 @@
 #include "Utf8Path.hpp"
 #include "jeiobs/workspace/Limits.hpp"
 
+#include <limits>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace Jeiobs::Workspace {
 namespace {
@@ -44,9 +49,20 @@ bool IsRegular(const std::filesystem::file_status &status)
 	return std::filesystem::is_regular_file(status);
 }
 
-FsEntryKind EntryKind(const std::filesystem::file_status &status)
+bool IsReparsePoint(const std::filesystem::path &path)
 {
-	if (std::filesystem::is_symlink(status)) {
+#ifdef _WIN32
+	const DWORD attributes = GetFileAttributesW(path.c_str());
+	return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0U;
+#else
+	(void)path;
+	return false;
+#endif
+}
+
+FsEntryKind EntryKind(const std::filesystem::path &path, const std::filesystem::file_status &status)
+{
+	if (std::filesystem::is_symlink(status) || IsReparsePoint(path)) {
 		return FsEntryKind::Symlink;
 	}
 	if (std::filesystem::is_regular_file(status)) {
@@ -144,6 +160,9 @@ FsListResult ListMemNode(const MemFs::Node *node)
 	if (node == nullptr) {
 		return {{}, {ErrorCode::Io, "missing"}};
 	}
+	if (node->kind == FsEntryKind::Symlink) {
+		return {{}, {ErrorCode::Io, "symlink"}};
+	}
 	if (node->kind != FsEntryKind::Directory) {
 		return {{}, {ErrorCode::Io, "not-directory"}};
 	}
@@ -185,6 +204,9 @@ Error MemFs::ListEach(std::string_view directory, const FsListCallback &callback
 	const Node *node = FindNode(root_.get(), directory);
 	if (node == nullptr) {
 		return {ErrorCode::Io, "missing"};
+	}
+	if (node->kind == FsEntryKind::Symlink) {
+		return {ErrorCode::Io, "symlink"};
 	}
 	if (node->kind != FsEntryKind::Directory) {
 		return {ErrorCode::Io, "not-directory"};
@@ -232,35 +254,43 @@ Error RealFs::ListEach(std::string_view directory, const FsListCallback &callbac
 		std::error_code status_error;
 		const std::filesystem::file_status directory_status =
 			std::filesystem::symlink_status(path, status_error);
-		if (status_error || !std::filesystem::is_directory(directory_status)) {
-			return {ErrorCode::Io, status_error ? "missing" : "not-directory"};
+		if (status_error) {
+			return {ErrorCode::Io, "missing"};
+		}
+		if (EntryKind(path, directory_status) == FsEntryKind::Symlink) {
+			return {ErrorCode::Io, "symlink"};
+		}
+		if (!std::filesystem::is_directory(directory_status)) {
+			return {ErrorCode::Io, "not-directory"};
 		}
 
 		std::error_code iterator_error;
-		std::filesystem::directory_iterator iterator(
-			path, std::filesystem::directory_options::skip_permission_denied, iterator_error);
+		std::filesystem::directory_iterator iterator(path, iterator_error);
 		if (iterator_error) {
-			return {ErrorCode::Io, {}};
+			return {ErrorCode::Io, "listing"};
 		}
 		while (iterator != std::filesystem::directory_iterator{}) {
 			const std::filesystem::directory_entry entry = *iterator;
 			std::error_code entry_error;
 			const std::filesystem::file_status status = entry.symlink_status(entry_error);
 			if (entry_error) {
-				iterator.increment(iterator_error);
-				if (iterator_error) {
-					return {ErrorCode::Io, {}};
-				}
-				continue;
+				return {ErrorCode::Io, "listing"};
 			}
-			const std::string name = entry.path().filename().u8string();
-			const FsEntry item{name, EntryKind(status), FileSize(entry.path(), status)};
+			std::string name;
+			bool name_representable = true;
+			try {
+				name = entry.path().filename().u8string();
+			} catch (...) {
+				name_representable = false;
+			}
+			const FsEntry item{name, EntryKind(entry.path(), status), FileSize(entry.path(), status),
+					   name_representable};
 			if (!callback(item)) {
 				break;
 			}
 			iterator.increment(iterator_error);
 			if (iterator_error) {
-				return {ErrorCode::Io, {}};
+				return {ErrorCode::Io, "listing"};
 			}
 		}
 		return {};

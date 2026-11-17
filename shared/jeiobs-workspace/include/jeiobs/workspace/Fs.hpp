@@ -34,6 +34,7 @@ struct FsEntry {
 	std::string name;
 	FsEntryKind kind = FsEntryKind::Other;
 	std::uint64_t size = 0U;
+	bool name_representable = true;
 };
 
 struct FsListResult {

@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <limits>
 #include <map>
@@ -24,6 +25,8 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -85,6 +88,7 @@ std::uint64_t SaturatingAdd(std::uint64_t left, std::uint64_t right)
 struct Summary {
 	std::uint64_t size = 0U;
 	std::uint64_t files = 0U;
+	Error error;
 };
 
 struct Child {
@@ -93,6 +97,7 @@ struct Child {
 	std::string relative_path;
 	FsEntryKind kind = FsEntryKind::Other;
 	std::uint64_t size = 0U;
+	bool name_representable = true;
 };
 
 struct RawEntry {
@@ -124,6 +129,7 @@ struct CollectionInfo {
 	std::uint64_t bak_size = 0U;
 	bool has_main = false;
 	bool has_bak = false;
+	std::string uid;
 	std::vector<std::string> scene_uuids;
 };
 
@@ -138,8 +144,9 @@ struct UnknownAccumulator {
 	std::vector<Child> sample;
 	std::uint64_t file_count = 0U;
 	std::uint64_t size = 0U;
+	Error error;
 
-	void Add(const Fs &fs, const Child &child);
+	[[nodiscard]] bool Add(const Fs &fs, const Child &child);
 };
 
 class PlannerImpl {
@@ -153,6 +160,37 @@ class PlannerImpl {
 	std::vector<ProfileInfo> profiles_;
 	std::vector<PlanWarning> warnings_;
 	Error error_;
+	std::uint64_t stored_bytes_ = 0U;
+	std::map<std::string, std::size_t> collection_indices_;
+
+	struct StateSizes {
+		std::size_t stored = 0U;
+		std::size_t omitted = 0U;
+		std::size_t collections = 0U;
+		std::size_t profiles = 0U;
+		std::size_t warnings = 0U;
+		std::uint64_t stored_bytes = 0U;
+	};
+
+	[[nodiscard]] StateSizes SaveState() const
+	{
+		return {stored_.size(),   omitted_.size(),  collections_.size(),
+			profiles_.size(), warnings_.size(), stored_bytes_};
+	}
+
+	void RestoreState(const StateSizes &state)
+	{
+		stored_.resize(state.stored);
+		omitted_.resize(state.omitted);
+		collections_.resize(state.collections);
+		profiles_.resize(state.profiles);
+		warnings_.resize(state.warnings);
+		stored_bytes_ = state.stored_bytes;
+		collection_indices_.clear();
+		for (std::size_t index = 0U; index < collections_.size(); ++index) {
+			collection_indices_[collections_[index].root + '\0' + collections_[index].main_path] = index;
+		}
+	}
 
 	void Fail(Error error)
 	{
@@ -174,11 +212,57 @@ class PlannerImpl {
 		return true;
 	}
 
+	[[nodiscard]] bool HasEntryCapacity() const { return stored_.size() + omitted_.size() < Limits::kEntries; }
+
+	[[nodiscard]] bool HasMetadataCapacity() const
+	{
+		return collections_.size() + profiles_.size() < Limits::kEntries;
+	}
+
+	[[nodiscard]] bool ReserveMetadata()
+	{
+		if (!HasMetadataCapacity()) {
+			Fail(MakeError(ErrorCode::Limit, "entries"));
+			return false;
+		}
+		return true;
+	}
+
+	[[nodiscard]] bool CanStore(std::uint64_t size) const
+	{
+		return size <= Limits::kBlobBytes && stored_bytes_ <= Limits::kRevisionBytes &&
+		       size <= Limits::kRevisionBytes - stored_bytes_;
+	}
+
+	[[nodiscard]] bool AddStoredRaw(RawEntry entry) { return AddStored(std::move(entry)); }
+
 	bool AddOmitted(std::string root, std::string path, std::uint64_t size, std::string reason,
 			std::string kind = {}, std::uint64_t count = 0U)
 	{
 		if (!error_.ok()) {
 			return false;
+		}
+		if (reason == "unrepresentable" && kind == "names") {
+			for (PlannedEntry &existing : omitted_) {
+				if (existing.root == root && existing.path == path && existing.reason == "unknown" &&
+				    existing.kind == "dir") {
+					existing.size = SaturatingAdd(existing.size, size);
+					existing.count = SaturatingAdd(existing.count, count);
+					return true;
+				}
+			}
+		}
+		if (reason == "unknown" && kind == "dir") {
+			for (PlannedEntry &existing : omitted_) {
+				if (existing.root == root && existing.path == path &&
+				    existing.reason == "unrepresentable" && existing.kind == "names") {
+					existing.reason = "unknown";
+					existing.kind = "dir";
+					existing.size = SaturatingAdd(existing.size, size);
+					existing.count = SaturatingAdd(existing.count, count);
+					return true;
+				}
+			}
 		}
 		if (stored_.size() + omitted_.size() >= Limits::kEntries) {
 			Fail(MakeError(ErrorCode::Limit, "entries"));
@@ -201,8 +285,9 @@ class PlannerImpl {
 	void AddUnknown(const std::string &root, const std::string &container, const Child &child,
 			UnknownAccumulator &unknown)
 	{
-		unknown.Add(fs_, child);
-		(void)root;
+		if (!unknown.Add(fs_, child)) {
+			AddListingFailure(root, child.relative_path, unknown.error, false);
+		}
 		(void)container;
 	}
 
@@ -222,8 +307,9 @@ class PlannerImpl {
 				std::uint64_t &count, std::uint64_t &size)
 	{
 		++count;
-		if (child.kind == FsEntryKind::Directory) {
-			size = SaturatingAdd(size, Summarize(child.path).size);
+		if (child.kind == FsEntryKind::Directory && !child.path.empty() && !child.name.empty()) {
+			const Summary summary = Summarize(child.path);
+			size = SaturatingAdd(size, summary.size);
 		} else if (child.kind == FsEntryKind::File) {
 			size = SaturatingAdd(size, child.size);
 		}
@@ -242,20 +328,57 @@ class PlannerImpl {
 	using ChildHandler = std::function<bool(const Child &)>;
 	void ProcessDirectory(const std::string &fs_directory, const std::string &root, const std::string &relative,
 			      const ChildHandler &handler);
-	void ProcessOwnedRoot(const std::string &fs_directory, const ChildHandler &handler);
+	void ProcessOwnedRoot(const std::string &fs_directory, const std::string &root, const std::string &relative,
+			      const ChildHandler &handler);
+
+	void AddListingFailure(const std::string &root, const std::string &path, const Error &error,
+			       bool missing_is_absent)
+	{
+		if (!error_.ok() || (missing_is_absent && error.detail == "missing")) {
+			return;
+		}
+		if (error.detail == "symlink") {
+			AddOmitted(root, path, 0U, "symlink");
+			warnings_.push_back({"root-symlink", path});
+		} else {
+			AddOmitted(root, path, 0U, "unreadable", "dir");
+			warnings_.push_back({"listing-error", path});
+		}
+	}
+
+	void AddRootSymlink(const std::string &root, const std::string &path)
+	{
+		AddOmitted(root, path, 0U, "symlink");
+		warnings_.push_back({"root-symlink", path});
+	}
 
 	void AddSpecial(const std::string &root, const Child &child, std::string_view reason)
 	{
-		const std::uint64_t size = child.kind == FsEntryKind::Directory ? Summarize(child.path).size
-										: child.size;
+		std::uint64_t size = child.size;
+		if (child.kind == FsEntryKind::Directory) {
+			const Summary summary = Summarize(child.path);
+			if (!summary.error.ok()) {
+				AddListingFailure(root, child.relative_path, summary.error, false);
+				return;
+			}
+			size = summary.size;
+		}
 		AddOmitted(root, child.relative_path, size, std::string(reason),
 			   child.kind == FsEntryKind::Directory ? "dir" : std::string{});
 	}
 
-	void AddStoredFile(const std::string &root, const std::string &path, std::string_view role, std::uint64_t size,
-			   RawEntry::Category category, std::string identity_uid = {}, std::string pair_key = {},
-			   bool pair_main = false)
+	[[nodiscard]] bool AddStoredFile(const std::string &root, const std::string &path, std::string_view role,
+					 std::uint64_t size, RawEntry::Category category, std::string identity_uid = {},
+					 std::string pair_key = {}, bool pair_main = false)
 	{
+		if (!HasEntryCapacity()) {
+			Fail(MakeError(ErrorCode::Limit, "entries"));
+			return false;
+		}
+		if (!CanStore(size)) {
+			AddOmitted(root, path, size, "too-large");
+			return false;
+		}
 		RawEntry entry;
 		entry.root = root;
 		entry.path = path;
@@ -265,7 +388,8 @@ class PlannerImpl {
 		entry.identity_uid = std::move(identity_uid);
 		entry.pair_key = std::move(pair_key);
 		entry.pair_main = pair_main;
-		AddStored(std::move(entry));
+		stored_bytes_ = SaturatingAdd(stored_bytes_, size);
+		return AddStoredRaw(std::move(entry));
 	}
 
 	void ProcessConfigModule(const std::string &fs_directory, const std::string &root, const std::string &relative,
@@ -312,7 +436,7 @@ Summary PlannerImpl::Summarize(std::string_view directory) const
 	while (!pending.empty()) {
 		std::string current = std::move(pending.back());
 		pending.pop_back();
-		fs_.ListEach(current, [&](const FsEntry &entry) {
+		const Error list_error = fs_.ListEach(current, [&](const FsEntry &entry) {
 			const std::string child_path = JoinPath(current, entry.name);
 			if (entry.kind == FsEntryKind::File) {
 				++result.files;
@@ -322,11 +446,15 @@ Summary PlannerImpl::Summarize(std::string_view directory) const
 			}
 			return true;
 		});
+		if (!list_error.ok()) {
+			result.error = list_error;
+			return result;
+		}
 	}
 	return result;
 }
 
-void UnknownAccumulator::Add(const Fs &fs, const Child &child)
+bool UnknownAccumulator::Add(const Fs &fs, const Child &child)
 {
 	Summary summary;
 	if (child.kind == FsEntryKind::File) {
@@ -338,7 +466,7 @@ void UnknownAccumulator::Add(const Fs &fs, const Child &child)
 		while (!pending.empty()) {
 			std::string current = std::move(pending.back());
 			pending.pop_back();
-			fs.ListEach(current, [&](const FsEntry &entry) {
+			const Error list_error = fs.ListEach(current, [&](const FsEntry &entry) {
 				const std::string child_path = JoinPath(current, entry.name);
 				if (entry.kind == FsEntryKind::File) {
 					++summary.files;
@@ -348,6 +476,10 @@ void UnknownAccumulator::Add(const Fs &fs, const Child &child)
 				}
 				return true;
 			});
+			if (!list_error.ok()) {
+				error = list_error;
+				return false;
+			}
 		}
 	}
 	file_count = SaturatingAdd(file_count, summary.files);
@@ -359,28 +491,31 @@ void UnknownAccumulator::Add(const Fs &fs, const Child &child)
 		}
 		sample.push_back(std::move(sample_child));
 	}
+	return true;
 }
 
 void PlannerImpl::ProcessDirectory(const std::string &fs_directory, const std::string &root,
 				   const std::string &relative, const ChildHandler &handler)
 {
+	const StateSizes state = SaveState();
 	UnknownAccumulator unknown;
 	std::uint64_t unrepresentable_count = 0U;
 	std::uint64_t unrepresentable_size = 0U;
 	const Error list_error = fs_.ListEach(fs_directory, [&](const FsEntry &entry) {
-		const Child child{entry.name, JoinPath(fs_directory, entry.name), JoinPath(relative, entry.name),
-				  entry.kind, entry.size};
+		const Child child{entry.name,
+				  JoinPath(fs_directory, entry.name),
+				  JoinPath(relative, entry.name),
+				  entry.kind,
+				  entry.size,
+				  entry.name_representable};
 		const std::string child_relative = JoinRelative(relative, entry.name);
 		Child relative_child = child;
-		if (!IsRepresentablePath(child_relative)) {
+		if (!entry.name_representable || !IsRepresentablePath(child_relative)) {
 			AddUnrepresentable(root, relative, relative_child, unrepresentable_count, unrepresentable_size);
 			return error_.ok();
 		}
 		if (entry.kind == FsEntryKind::Symlink) {
 			AddOmitted(root, child_relative, entry.size, "symlink");
-			return error_.ok();
-		}
-		if (entry.kind == FsEntryKind::Directory && entry.name == "themes") {
 			return error_.ok();
 		}
 		if (entry.kind == FsEntryKind::File &&
@@ -398,19 +533,38 @@ void PlannerImpl::ProcessDirectory(const std::string &fs_directory, const std::s
 		AddUnknown(root, relative, child, unknown);
 		return error_.ok();
 	});
-	(void)list_error;
+	if (!list_error.ok()) {
+		RestoreState(state);
+		AddListingFailure(root, relative, list_error, false);
+		return;
+	}
 	FinishUnrepresentable(root, relative, unrepresentable_count, unrepresentable_size);
 	FinishUnknown(root, relative, unknown);
 }
 
-void PlannerImpl::ProcessOwnedRoot(const std::string &fs_directory, const ChildHandler &handler)
+void PlannerImpl::ProcessOwnedRoot(const std::string &fs_directory, const std::string &root,
+				   const std::string &relative, const ChildHandler &handler)
 {
+	const StateSizes state = SaveState();
+	std::uint64_t unrepresentable_count = 0U;
+	std::uint64_t unrepresentable_size = 0U;
 	const Error list_error = fs_.ListEach(fs_directory, [&](const FsEntry &entry) {
-		const Child child{entry.name, JoinPath(fs_directory, entry.name), entry.name, entry.kind, entry.size};
+		const Child child{entry.name, JoinPath(fs_directory, entry.name),
+				  entry.name, entry.kind,
+				  entry.size, entry.name_representable};
+		if (!entry.name_representable || !IsRepresentablePath(entry.name)) {
+			AddUnrepresentable(root, relative, child, unrepresentable_count, unrepresentable_size);
+			return error_.ok();
+		}
 		(void)handler(child);
 		return error_.ok();
 	});
-	(void)list_error;
+	if (!list_error.ok()) {
+		RestoreState(state);
+		AddListingFailure(root, relative, list_error, true);
+		return;
+	}
+	FinishUnrepresentable(root, relative, unrepresentable_count, unrepresentable_size);
 }
 
 void PlannerImpl::ProcessConfigModule(const std::string &fs_directory, const std::string &root,
@@ -439,7 +593,7 @@ void PlannerImpl::ProcessConfigModule(const std::string &fs_directory, const std
 		if (role.empty() || child.kind != FsEntryKind::File) {
 			return false;
 		}
-		AddStoredFile(root, child.relative_path, role, child.size, RawEntry::Category::Module);
+		(void)AddStoredFile(root, child.relative_path, role, child.size, RawEntry::Category::Module);
 		return true;
 	});
 }
@@ -464,9 +618,6 @@ void PlannerImpl::ProcessPluginConfig(const std::string &fs_directory, const std
 			ProcessConfigModule(child.path, root, JoinRelative(relative, child.name), child.name);
 			return true;
 		}
-		if (child.name == "themes") {
-			return true;
-		}
 		AddSpecial(root, child, "unknown");
 		return true;
 	});
@@ -474,10 +625,10 @@ void PlannerImpl::ProcessPluginConfig(const std::string &fs_directory, const std
 
 void PlannerImpl::ProcessConfigRoot(const std::string &fs_directory)
 {
-	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+	ProcessOwnedRoot(fs_directory, "config", roots_.app_dir, [&](const Child &child) {
 		if (child.name == "plugin_config") {
 			if (child.kind == FsEntryKind::Symlink) {
-				AddOmitted("config", "plugin_config", 0U, "symlink");
+				AddRootSymlink("config", "plugin_config");
 			} else if (child.kind == FsEntryKind::Directory) {
 				ProcessPluginConfig(child.path, "config", "plugin_config");
 			}
@@ -510,11 +661,22 @@ void PlannerImpl::AddCollectionFile(const std::string &root, const std::string &
 	if (collection_name.empty() || !IsRepresentablePath(collection_name)) {
 		return;
 	}
+	if (!HasEntryCapacity()) {
+		Fail(MakeError(ErrorCode::Limit, "entries"));
+		return;
+	}
+	if (!CanStore(child.size)) {
+		AddOmitted(root, relative, child.size, "too-large");
+		return;
+	}
+	stored_bytes_ = SaturatingAdd(stored_bytes_, child.size);
 	const std::string main_path = JoinRelative(relative.substr(0U, relative.size() - child.name.size()), main_name);
-	auto iterator = std::find_if(collections_.begin(), collections_.end(), [&](const CollectionInfo &info) {
-		return info.root == root && info.main_path == main_path;
-	});
-	if (iterator == collections_.end()) {
+	const std::string collection_key = root + '\0' + main_path;
+	auto index_iterator = collection_indices_.find(collection_key);
+	if (index_iterator == collection_indices_.end()) {
+		if (!ReserveMetadata()) {
+			return;
+		}
 		CollectionInfo info;
 		info.root = root;
 		info.main_path = is_main ? relative : main_path;
@@ -526,17 +688,21 @@ void PlannerImpl::AddCollectionFile(const std::string &root, const std::string &
 		info.has_main = is_main;
 		info.has_bak = is_bak;
 		collections_.push_back(std::move(info));
-		iterator = std::prev(collections_.end());
+		const std::size_t index = collections_.size() - 1U;
+		collection_indices_[collection_key] = index;
+		index_iterator = collection_indices_.find(collection_key);
 	} else if (is_main) {
-		iterator->main_path = relative;
-		iterator->main_fs_path = child.path;
-		iterator->main_size = child.size;
-		iterator->has_main = true;
+		CollectionInfo &collection = collections_[index_iterator->second];
+		collection.main_path = relative;
+		collection.main_fs_path = child.path;
+		collection.main_size = child.size;
+		collection.has_main = true;
 	} else {
-		iterator->bak_path = relative;
-		iterator->bak_fs_path = child.path;
-		iterator->bak_size = child.size;
-		iterator->has_bak = true;
+		CollectionInfo &collection = collections_[index_iterator->second];
+		collection.bak_path = relative;
+		collection.bak_fs_path = child.path;
+		collection.bak_size = child.size;
+		collection.has_bak = true;
 	}
 
 	if (is_main) {
@@ -546,50 +712,80 @@ void PlannerImpl::AddCollectionFile(const std::string &root, const std::string &
 		    scan.values.front().kind != JsonValueKind::Object) {
 			warnings_.push_back({"collection-unparseable", relative});
 		} else {
-			std::vector<std::string> scene_uuids;
-			for (const JsonMemberOccurrence &sources_member : scan.members) {
-				if (sources_member.parent_index != 0U || sources_member.key != "sources" ||
-				    sources_member.value_index >= scan.values.size() ||
-				    scan.values[sources_member.value_index].kind != JsonValueKind::Array) {
-					continue;
+			struct SourceFields {
+				std::size_t id = kNoIndex;
+				std::size_t uuid = kNoIndex;
+			};
+			std::size_t sources_array_index = kNoIndex;
+			for (const JsonMemberOccurrence &member : scan.members) {
+				if (member.parent_index == 0U && member.key == "sources" &&
+				    member.value_index < scan.values.size() &&
+				    scan.values[member.value_index].kind == JsonValueKind::Array) {
+					sources_array_index = member.value_index;
+					break;
 				}
-				const std::size_t array_index = sources_member.value_index;
-				for (const JsonValueOccurrence &source : scan.values) {
-					if (source.parent_index != array_index ||
-					    source.kind != JsonValueKind::Object) {
-						continue;
-					}
-					const JsonMemberOccurrence *id = nullptr;
-					const JsonMemberOccurrence *uuid = nullptr;
-					const std::size_t source_index =
-						static_cast<std::size_t>(&source - scan.values.data());
-					for (const JsonMemberOccurrence &member : scan.members) {
-						if (member.parent_index != source_index) {
-							continue;
-						}
-						if (member.key == "id") {
-							id = &member;
-						} else if (member.key == "uuid") {
-							uuid = &member;
-						}
-					}
-					if (id == nullptr || uuid == nullptr || id->value_index >= scan.values.size() ||
-					    uuid->value_index >= scan.values.size()) {
-						continue;
-					}
-					const JsonValueOccurrence &id_value = scan.values[id->value_index];
-					const JsonValueOccurrence &uuid_value = scan.values[uuid->value_index];
-					if (id_value.kind == JsonValueKind::String &&
-					    id_value.string_value == "scene" &&
-					    uuid_value.kind == JsonValueKind::String &&
-					    uuid_value.string_value.size() <= 256U) {
-						scene_uuids.push_back(uuid_value.string_value);
+			}
+			std::vector<std::size_t> source_indices;
+			std::unordered_set<std::size_t> source_index_set;
+			if (sources_array_index != kNoIndex) {
+				for (std::size_t index = 0U; index < scan.values.size(); ++index) {
+					const JsonValueOccurrence &value = scan.values[index];
+					if (value.parent_index == sources_array_index &&
+					    value.array_index != kJsonNoIndex && value.kind == JsonValueKind::Object) {
+						source_indices.push_back(index);
+						source_index_set.insert(index);
 					}
 				}
 			}
-			std::sort(scene_uuids.begin(), scene_uuids.end());
-			scene_uuids.erase(std::unique(scene_uuids.begin(), scene_uuids.end()), scene_uuids.end());
-			iterator->scene_uuids = std::move(scene_uuids);
+
+			std::unordered_map<std::size_t, SourceFields> fields;
+			fields.reserve(source_indices.size());
+			for (const JsonMemberOccurrence &member : scan.members) {
+				if (!source_index_set.count(member.parent_index)) {
+					continue;
+				}
+				SourceFields &source = fields[member.parent_index];
+				if (member.key == "id") {
+					source.id = member.value_index;
+				} else if (member.key == "uuid") {
+					source.uuid = member.value_index;
+				}
+			}
+
+			std::vector<std::string> scene_uuids;
+			std::unordered_set<std::string> seen;
+			seen.reserve(std::min<std::size_t>(source_indices.size(), 100000U));
+			bool scene_uuid_limit = false;
+			for (const std::size_t source_index : source_indices) {
+				const auto fields_iterator = fields.find(source_index);
+				if (fields_iterator == fields.end() ||
+				    fields_iterator->second.id >= scan.values.size() ||
+				    fields_iterator->second.uuid >= scan.values.size()) {
+					continue;
+				}
+				const JsonValueOccurrence &id_value = scan.values[fields_iterator->second.id];
+				const JsonValueOccurrence &uuid_value = scan.values[fields_iterator->second.uuid];
+				if (id_value.kind != JsonValueKind::String || id_value.string_value != "scene" ||
+				    uuid_value.kind != JsonValueKind::String || uuid_value.string_value.size() > 256U) {
+					continue;
+				}
+				if (!seen.insert(uuid_value.string_value).second) {
+					continue;
+				}
+				if (scene_uuids.size() >= 100000U) {
+					scene_uuid_limit = true;
+					break;
+				}
+				scene_uuids.push_back(uuid_value.string_value);
+			}
+			CollectionInfo &collection = collections_[index_iterator->second];
+			if (scene_uuid_limit) {
+				collection.scene_uuids.clear();
+				warnings_.push_back({"scene-uuids-limit", relative});
+			} else {
+				std::sort(scene_uuids.begin(), scene_uuids.end());
+				collection.scene_uuids = std::move(scene_uuids);
+			}
 		}
 	}
 }
@@ -628,19 +824,19 @@ void PlannerImpl::ProcessCollectionDirectory(const std::string &fs_directory, co
 
 void PlannerImpl::ProcessScenesRoot(const std::string &fs_directory)
 {
-	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+	ProcessOwnedRoot(fs_directory, "scenes", roots_.app_dir, [&](const Child &child) {
 		if (child.name != "basic") {
 			return false;
 		}
 		if (child.kind == FsEntryKind::Symlink) {
-			AddOmitted("scenes", "basic", 0U, "symlink");
+			AddRootSymlink("scenes", "basic");
 		} else if (child.kind == FsEntryKind::Directory) {
-			ProcessOwnedRoot(child.path, [&](const Child &basic_child) {
+			ProcessOwnedRoot(child.path, "scenes", "basic", [&](const Child &basic_child) {
 				if (basic_child.name != "scenes") {
 					return true;
 				}
 				if (basic_child.kind == FsEntryKind::Symlink) {
-					AddOmitted("scenes", "basic/scenes", 0U, "symlink");
+					AddRootSymlink("scenes", "basic/scenes");
 				} else if (basic_child.kind == FsEntryKind::Directory) {
 					ProcessCollectionDirectory(basic_child.path, "scenes", "basic/scenes");
 				}
@@ -683,9 +879,9 @@ void PlannerImpl::AddProfileFile(std::size_t profile_index, const Child &child)
 	}
 	const std::string path = profile_prefix + child.name;
 	const std::string pair_key = profile_prefix + main_name;
-	AddStoredFile(root, path, role, child.size, RawEntry::Category::Profile, profile.uid, pair_key,
-		      main && child.name != "basic.ini");
-	if (main && profile.identity_path.empty()) {
+	const bool stored = AddStoredFile(root, path, role, child.size, RawEntry::Category::Profile, profile.uid,
+					  pair_key, main && child.name != "basic.ini");
+	if (stored && main && profile.identity_path.empty()) {
 		profile.identity_path = path;
 	}
 }
@@ -716,25 +912,48 @@ void PlannerImpl::ProcessProfileDirectory(std::size_t profile_index, const std::
 
 void PlannerImpl::ProcessProfilesRoot(const std::string &fs_directory)
 {
-	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+	ProcessOwnedRoot(fs_directory, "profiles", roots_.app_dir, [&](const Child &child) {
 		if (child.name != "basic") {
 			return false;
 		}
 		if (child.kind == FsEntryKind::Symlink) {
-			AddOmitted("profiles", "basic", 0U, "symlink");
+			AddRootSymlink("profiles", "basic");
 		} else if (child.kind == FsEntryKind::Directory) {
-			ProcessOwnedRoot(child.path, [&](const Child &basic_child) {
+			ProcessOwnedRoot(child.path, "profiles", "basic", [&](const Child &basic_child) {
 				if (basic_child.name != "profiles") {
 					return true;
 				}
 				if (basic_child.kind == FsEntryKind::Symlink) {
-					AddOmitted("profiles", "basic/profiles", 0U, "symlink");
+					AddRootSymlink("profiles", "basic/profiles");
 				} else if (basic_child.kind == FsEntryKind::Directory) {
 					ProcessDirectory(
 						basic_child.path, "profiles", "basic/profiles",
 						[&](const Child &profile_child) {
 							if (profile_child.kind != FsEntryKind::Directory) {
 								return false;
+							}
+							const FsListResult profile_listing =
+								fs_.List(profile_child.path);
+							if (!profile_listing.ok()) {
+								AddListingFailure("profiles",
+										  profile_child.relative_path,
+										  profile_listing.error, false);
+								return true;
+							}
+							const bool has_basic_ini = std::any_of(
+								profile_listing.entries.begin(),
+								profile_listing.entries.end(),
+								[](const FsEntry &entry) {
+									return entry.name_representable &&
+									       entry.kind == FsEntryKind::File &&
+									       entry.name == "basic.ini";
+								});
+							if (!has_basic_ini) {
+								AddSpecial("profiles", profile_child, "unknown");
+								return true;
+							}
+							if (!ReserveMetadata()) {
+								return true;
 							}
 							ProfileInfo profile;
 							profile.root = "profiles";
@@ -756,14 +975,14 @@ void PlannerImpl::ProcessProfilesRoot(const std::string &fs_directory)
 
 void PlannerImpl::ProcessUserRoot(const std::string &fs_directory)
 {
-	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+	ProcessOwnedRoot(fs_directory, "user", roots_.app_dir, [&](const Child &child) {
 		if (child.name != "user.ini") {
 			return true;
 		}
 		if (child.kind == FsEntryKind::Symlink) {
 			AddOmitted("user", "user.ini", 0U, "symlink");
 		} else if (child.kind == FsEntryKind::File) {
-			AddStoredFile("user", "user.ini", "app.user", child.size, RawEntry::Category::User);
+			(void)AddStoredFile("user", "user.ini", "app.user", child.size, RawEntry::Category::User);
 		}
 		return true;
 	});
@@ -771,17 +990,18 @@ void PlannerImpl::ProcessUserRoot(const std::string &fs_directory)
 
 void PlannerImpl::ProcessPluginManagerRoot(const std::string &fs_directory)
 {
-	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+	ProcessOwnedRoot(fs_directory, "plugin_manager", roots_.app_dir, [&](const Child &child) {
 		if (child.name != "plugin_manager") {
 			return false;
 		}
 		if (child.kind == FsEntryKind::Symlink) {
-			AddOmitted("plugin_manager", "plugin_manager", 0U, "symlink");
+			AddRootSymlink("plugin_manager", "plugin_manager");
 		} else if (child.kind == FsEntryKind::Directory) {
 			ProcessDirectory(child.path, "plugin_manager", "plugin_manager", [&](const Child &nested) {
 				if (nested.kind == FsEntryKind::File && nested.name == "modules.json") {
-					AddStoredFile("plugin_manager", "plugin_manager/modules.json", "app.modules",
-						      nested.size, RawEntry::Category::PluginManager);
+					(void)AddStoredFile("plugin_manager", "plugin_manager/modules.json",
+							    "app.modules", nested.size,
+							    RawEntry::Category::PluginManager);
 					return true;
 				}
 				if (IsTransient(nested.name)) {
@@ -797,15 +1017,21 @@ void PlannerImpl::ProcessPluginManagerRoot(const std::string &fs_directory)
 
 void PlannerImpl::BuildProfileEntryIdentities()
 {
+	std::map<std::string, std::string> uid_by_profile_path;
+	for (const ProfileInfo &profile : profiles_) {
+		uid_by_profile_path[profile.root + '\0' + "basic/profiles/" + profile.dir + "/"] = profile.uid;
+	}
 	for (RawEntry &entry : stored_) {
 		if (entry.category != RawEntry::Category::Profile) {
 			continue;
 		}
-		for (ProfileInfo &profile : profiles_) {
-			if (entry.path.rfind("basic/profiles/" + profile.dir + "/", 0U) == 0U) {
-				entry.identity_uid = profile.uid;
-				break;
-			}
+		const std::size_t prefix_end = entry.path.find('/', std::string("basic/profiles/").size());
+		if (prefix_end == std::string::npos) {
+			continue;
+		}
+		const auto uid = uid_by_profile_path.find(entry.root + '\0' + entry.path.substr(0U, prefix_end + 1U));
+		if (uid != uid_by_profile_path.end()) {
+			entry.identity_uid = uid->second;
 		}
 	}
 }
@@ -886,9 +1112,19 @@ void PlannerImpl::AssignCollectionUids()
 		}
 	}
 
+	for (CollectionInfo &collection : collections_) {
+		if (!collection.has_main) {
+			continue;
+		}
+		const auto path_match = parent_by_path.find(collection.root + '\0' + collection.main_path);
+		if (path_match != parent_by_path.end() && claimed.insert(path_match->second).second) {
+			collection.uid = path_match->second;
+		}
+	}
+
 	std::map<std::string, std::size_t> current_set_count;
 	for (const CollectionInfo &collection : collections_) {
-		if (!collection.has_main) {
+		if (!collection.has_main || !collection.uid.empty()) {
 			continue;
 		}
 		if (!collection.scene_uuids.empty()) {
@@ -896,26 +1132,30 @@ void PlannerImpl::AssignCollectionUids()
 		}
 	}
 	for (CollectionInfo &collection : collections_) {
-		if (!collection.has_main) {
+		if (!collection.has_main || !collection.uid.empty()) {
 			continue;
 		}
-		const std::string &identity_path = collection.main_path;
-		const std::string path_key = collection.root + '\0' + identity_path;
-		const auto path_match = parent_by_path.find(path_key);
-		if (path_match != parent_by_path.end() && claimed.insert(path_match->second).second) {
-			// The UID is stored temporarily in the path-indexed side table below.
-			collection.bak_fs_path = path_match->second;
+		if (collection.scene_uuids.empty() || current_set_count[SceneKey(collection.scene_uuids)] != 1U) {
 			continue;
 		}
-		if (!collection.scene_uuids.empty() && current_set_count[SceneKey(collection.scene_uuids)] == 1U) {
-			const auto scene_match = parent_by_scene_set.find(SceneKey(collection.scene_uuids));
-			if (scene_match != parent_by_scene_set.end() && scene_match->second.size() == 1U &&
-			    claimed.insert(scene_match->second.front()).second) {
-				collection.bak_fs_path = scene_match->second.front();
-				continue;
+		std::vector<std::string> candidates;
+		const auto scene_match = parent_by_scene_set.find(SceneKey(collection.scene_uuids));
+		if (scene_match != parent_by_scene_set.end()) {
+			for (const std::string &candidate : scene_match->second) {
+				if (!claimed.count(candidate)) {
+					candidates.push_back(candidate);
+				}
 			}
 		}
-		collection.bak_fs_path = uid_source_.NextUid();
+		if (candidates.size() == 1U) {
+			collection.uid = candidates.front();
+			claimed.insert(collection.uid);
+		}
+	}
+	for (CollectionInfo &collection : collections_) {
+		if (collection.has_main && collection.uid.empty()) {
+			collection.uid = uid_source_.NextUid();
+		}
 	}
 }
 
@@ -935,20 +1175,28 @@ void PlannerImpl::AssignProfileUids()
 			}
 		}
 	}
-	for (ProfileInfo &profile : profiles_) {
-		std::set<std::string> candidates;
-		const std::string prefix = "basic/profiles/" + profile.dir + "/";
-		for (const RawEntry &entry : stored_) {
-			if (entry.category != RawEntry::Category::Profile || entry.path.rfind(prefix, 0U) != 0U) {
-				continue;
-			}
-			const auto match = parent_by_path.find(profile.root + '\0' + entry.path);
-			if (match != parent_by_path.end()) {
-				candidates.insert(match->second);
-			}
+
+	std::map<std::string, std::set<std::string>> candidates_by_profile;
+	for (const RawEntry &entry : stored_) {
+		if (entry.category != RawEntry::Category::Profile) {
+			continue;
 		}
-		if (candidates.size() == 1U && claimed.insert(*candidates.begin()).second) {
-			profile.uid = *candidates.begin();
+		const std::size_t prefix_end = entry.path.find('/', std::string("basic/profiles/").size());
+		if (prefix_end == std::string::npos) {
+			continue;
+		}
+		const std::string prefix = entry.path.substr(0U, prefix_end + 1U);
+		const auto match = parent_by_path.find(entry.root + '\0' + entry.path);
+		if (match != parent_by_path.end()) {
+			candidates_by_profile[entry.root + '\0' + prefix].insert(match->second);
+		}
+	}
+	for (ProfileInfo &profile : profiles_) {
+		const std::string prefix = "basic/profiles/" + profile.dir + "/";
+		const auto candidates = candidates_by_profile.find(profile.root + '\0' + prefix);
+		if (candidates != candidates_by_profile.end() && candidates->second.size() == 1U &&
+		    claimed.insert(*candidates->second.begin()).second) {
+			profile.uid = *candidates->second.begin();
 			continue;
 		}
 		profile.uid = uid_source_.NextUid();
@@ -959,7 +1207,7 @@ void PlannerImpl::BuildCollectionEntries()
 {
 	std::vector<RawEntry> collection_entries;
 	for (CollectionInfo &collection : collections_) {
-		const std::string uid = collection.bak_fs_path;
+		const std::string &uid = collection.uid;
 		if (collection.has_main) {
 			RawEntry entry;
 			entry.root = collection.root;
@@ -993,8 +1241,11 @@ void PlannerImpl::BuildCollectionEntries()
 			collection_entries.push_back(std::move(entry));
 		}
 	}
-	stored_.insert(stored_.end(), std::make_move_iterator(collection_entries.begin()),
-		       std::make_move_iterator(collection_entries.end()));
+	for (RawEntry &entry : collection_entries) {
+		if (!AddStoredRaw(std::move(entry))) {
+			return;
+		}
+	}
 }
 
 void PlannerImpl::MarkCollisions(Plan &plan)
@@ -1049,6 +1300,9 @@ PlanResult PlannerImpl::Run()
 	AssignCollectionUids();
 	AssignProfileUids();
 	BuildCollectionEntries();
+	if (!error_.ok()) {
+		return {std::nullopt, error_};
+	}
 	BuildProfileEntryIdentities();
 	if (stored_.size() + omitted_.size() > Limits::kEntries) {
 		return {std::nullopt, MakeError(ErrorCode::Limit, "entries")};
@@ -1086,8 +1340,7 @@ PlanResult PlannerImpl::Run()
 	for (std::size_t index = 0U; index < collections_.size(); ++index) {
 		const CollectionInfo &collection = collections_[index];
 		if (collection.has_main) {
-			plan.collections.push_back(
-				{collection.bak_fs_path, collection.main_path, collection.scene_uuids});
+			plan.collections.push_back({collection.uid, collection.main_path, collection.scene_uuids});
 		}
 	}
 	for (const ProfileInfo &profile : profiles_) {
