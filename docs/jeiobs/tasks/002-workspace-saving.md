@@ -66,8 +66,8 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   `config->file` before taking the lock, so two concurrent calls could free the same temporary name; it
   now reads it under the lock (a 3-thread test fails 3 of 20 runs before and 0 of 60 after).
   `config_num_sections` and `config_open_defaults` now take the lock too, and the scripting
-  bindings ignore the two new functions. Linux: the four tests pass in 90 of 90 runs, and the blocking
-  tests fail when the lock is made a no-op. No CI job builds libobs unit tests yet.
+  bindings ignore the two new functions. Linux: the four tests pass in 30 of 30 runs on the final code, and the
+  blocking tests fail when the lock is made a no-op. No CI job builds libobs unit tests yet.
 - Next: PR4b (the frontend capture host on top of `config_lock`). Also
   owed: an owner-merged PR that pins the Unicode Character Database and adds the generated collision
   tables (decision 3), and S2 includes a purge for local history (decision 2).
