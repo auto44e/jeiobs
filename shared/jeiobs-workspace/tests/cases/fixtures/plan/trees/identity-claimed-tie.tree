@@ -1,0 +1,3 @@
+# r2.1: TwinA keeps its path. Other has the scene set that TwinA and TwinB shared in the parent.
+copy scenes/obs-studio/basic/scenes/Other.json fixtures/plan/files/ord-s3.json
+copy scenes/obs-studio/basic/scenes/TwinA.json fixtures/plan/files/ord-s3.json

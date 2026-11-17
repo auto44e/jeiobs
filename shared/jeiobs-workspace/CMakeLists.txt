@@ -10,12 +10,15 @@ find_package(nlohmann_json 3.11 REQUIRED)
 
 set(JW_LIBRARY_SOURCES
 	src/Error.cpp
+	src/Fs.cpp
 	src/Hash.cpp
 	src/IniScan.cpp
 	src/JsonScan.cpp
 	src/Manifest.cpp
 	src/PathRules.cpp
 	src/Redactor.cpp
+	src/ReviewRules.cpp
+	src/CapturePlanner.cpp
 )
 
 add_library(jeiobs-workspace STATIC ${JW_LIBRARY_SOURCES})

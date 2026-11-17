@@ -1,0 +1,12 @@
+# r2.8: folders in basic/profiles without a basic.ini file: allowlisted names only, a folder named
+# basic.ini, a basic.ini.bak only. Main is a profile.
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+file profiles/obs-studio/basic/profiles/Main/service.json 40
+file profiles/obs-studio/basic/profiles/NoIni/service.json 41
+file profiles/obs-studio/basic/profiles/NoIni/service.json.bak 42
+file profiles/obs-studio/basic/profiles/NoIni/streamEncoder.json 43
+file profiles/obs-studio/basic/profiles/NoIni/notes.txt 44
+file profiles/obs-studio/basic/profiles/NoIni/x.tmp 45
+file profiles/obs-studio/basic/profiles/IniDir/basic.ini/nested.txt 46
+file profiles/obs-studio/basic/profiles/IniDir/service.json 47
+file profiles/obs-studio/basic/profiles/Bak/basic.ini.bak 48

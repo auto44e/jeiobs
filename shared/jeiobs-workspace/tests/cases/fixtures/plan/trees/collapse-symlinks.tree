@@ -1,0 +1,7 @@
+# r2.7: a collapsed folder whose subfolder holds a symlink to a folder with files outside the roots.
+needs symlinks
+many scenes/obs-studio/basic/scenes 101 u
+file scenes/obs-studio/basic/scenes/sub/f.txt 1
+link scenes/obs-studio/basic/scenes/sub/link ../../../../../outside/dir
+file outside/dir/a.txt 1000
+file outside/dir/b.txt 2000

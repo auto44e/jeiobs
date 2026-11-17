@@ -1,0 +1,7 @@
+# Symlinks inside directories that are excluded as a whole.
+needs symlinks
+file config/obs-studio/plugin_config/obs-browser/Cookies 100
+link config/obs-studio/plugin_config/obs-browser/Cache ../../../../outside/cache
+file config/obs-studio/logs/a.txt 10
+link config/obs-studio/logs/latest.txt a.txt
+file outside/cache/data_0 5000

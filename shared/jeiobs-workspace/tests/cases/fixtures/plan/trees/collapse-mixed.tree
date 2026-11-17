@@ -1,0 +1,7 @@
+# The 100-file collapse in folders that also hold stored files.
+file profiles/obs-studio/basic/profiles/Big/basic.ini 1000
+many profiles/obs-studio/basic/profiles/Big 101 u
+file profiles/obs-studio/basic/profiles/Edge/basic.ini 1000
+many profiles/obs-studio/basic/profiles/Edge 100 u
+copy scenes/obs-studio/basic/scenes/A.json fixtures/plan/files/small.json
+many scenes/obs-studio/basic/scenes 101 u

@@ -1,0 +1,49 @@
+{
+  "format": "jeiobs-workspace",
+  "major": 1,
+  "minor": 0,
+  "compat": {
+    "incompat": [],
+    "ro_compat": []
+  },
+  "workspace_id": "0d6f3c1e-8b2a-4c47-9e15-6a0b7d93f2c4",
+  "seq": 5,
+  "parent": "f70b87700e2b306a737ac4ec3cbb4565da15bd06cb23e3ac795e86d59cd69b95",
+  "created_utc": "2026-11-16T18:04:05Z",
+  "label": "identity order parent",
+  "creator": {
+    "app": "jeiobs",
+    "version": "0.0.0-dev",
+    "commit": "b76d7cdb1",
+    "obs_base": "33.0.1"
+  },
+  "active": {
+    "profile": "0bd0474a-fc79-47f7-8334-cf15ad350db3",
+    "collection": "15564a8b-8250-43ea-9744-19a09256930b"
+  },
+  "target": {
+    "os": "linux",
+    "arch": "x86_64",
+    "machine_id": "3a9e2b70-51c4-4f0e-8d6a-1c2b3d4e5f60",
+    "app_dir": "obs-studio",
+    "roots": {
+      "config": "default",
+      "user": "default",
+      "scenes": "default",
+      "profiles": "default",
+      "plugin_manager": "default"
+    },
+    "devices": []
+  },
+  "app_keys": [],
+  "secret_refs": [],
+  "dropped_ext": [],
+  "entries": [
+    {"id": "e1", "status": "stored", "root": "scenes", "path": "basic/scenes/Changed.json", "role": "collection", "collection": "15564a8b-8250-43ea-9744-19a09256930b", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 201, "hash": "0000000000000000000000000000000000000000000000000000000000abc101", "scene_uuids": ["00a3b47e-4b21-4a93-9a5b-c12680fe923d"]},
+    {"id": "e2", "status": "stored", "root": "scenes", "path": "basic/scenes/X.json", "role": "collection", "collection": "f19199aa-9b7f-49a8-b39e-776959e33f37", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 202, "hash": "0000000000000000000000000000000000000000000000000000000000abc102", "scene_uuids": ["73012e2d-2b3e-4077-8a99-eaeba540cfad"]},
+    {"id": "e3", "status": "stored", "root": "scenes", "path": "basic/scenes/Y.json", "role": "collection", "collection": "22674977-d7b3-4e51-8827-b7e7a2cda7d1", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 203, "hash": "0000000000000000000000000000000000000000000000000000000000abc103", "scene_uuids": ["53de5b5e-f0b8-423c-8d78-3bb733ea115e"]},
+    {"id": "e4", "status": "stored", "root": "scenes", "path": "basic/scenes/TwinA.json", "role": "collection", "collection": "579fde20-23d6-496f-9030-1b183a408210", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 204, "hash": "0000000000000000000000000000000000000000000000000000000000abc104", "scene_uuids": ["e9bb2647-d2f3-4f13-8339-17d4f7e26826"]},
+    {"id": "e5", "status": "stored", "root": "scenes", "path": "basic/scenes/TwinB.json", "role": "collection", "collection": "d0f5e49d-c44f-4e4c-a6e6-65692d2642f0", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "size": 205, "hash": "0000000000000000000000000000000000000000000000000000000000abc105", "scene_uuids": ["e9bb2647-d2f3-4f13-8339-17d4f7e26826"]},
+    {"id": "e6", "status": "stored", "root": "profiles", "path": "basic/profiles/Main/basic.ini", "role": "profile.basic", "profile": "0bd0474a-fc79-47f7-8334-cf15ad350db3", "fidelity": "exact", "size": 400, "hash": "0000000000000000000000000000000000000000000000000000000000def101"}
+  ]
+}

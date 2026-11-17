@@ -92,8 +92,15 @@ One UTF-8 JSON object, no BOM. Writers choose key order and whitespace; nothing 
   jeiobs parser rejects the file), `bak` (the id of the `<path>.bak` entry) and `load_rule`
   (section 7).
 - `"status": "omitted"` adds `reason` and `size`. A directory excluded as a whole also gets
-  `kind: "dir"`, and its `size` counts its regular files without following symlinks. An omitted
-  entry never has a hash.
+  `kind: "dir"`, and its `size` counts its regular files without following symlinks; a collapsed
+  folder also gets `count` (its number of files, integer >= 1). Names that cannot be represented
+  (not UTF-8, or breaking a path rule) are one entry per folder with `kind: "names"`, `reason:
+  "unrepresentable"` and a `count`, and no names. A folder that cannot be listed is an entry with
+  `reason: "unreadable"`; a symlink, junction or reparse point is `reason: "symlink"` and is never
+  followed; a file over the blob limit is `reason: "too-large"`. `count` is allowed only on omitted
+  entries of kind `dir` or `names`. An omitted entry never has a hash. A `collection` entry may carry
+  `scene_uuids` (sorted, unique strings): the identity data of section 9, local only, dropped by the
+  export projection.
 - `target.audio` = `{sample_rate, channels, explicit, src: {entry}}`. The values come from the
   active profile's `basic.ini [Audio] SampleRate` and `ChannelSetup`
   (`OBSBasicSettings.cpp:3646,3650`). `explicit` is false when OBS's defaults apply (48000,
@@ -607,7 +614,7 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 | PR1 | this document; `Limits`, `PathRules`, `Hash`, `Manifest` (parse, validate, child-writer extension rules, `ProjectForExport`). Synthetic fixtures: valid local and export manifests, unknown fields at each level, future minor, future major (read-only), unknown `incompat` and `ro_compat`, duplicate key, invalid UTF-8, NUL, `1e400`, depth 65, oversize input, every path rule, an undecided `opaque-unreviewed` entry | self-merge gate; persistence format, so review rounds repeat until one finds no blocker or major |
 | CI | `.github/workflows/jeiobs-workspace.yaml`: build and ctest on ubuntu, macos, windows | owner (`.github/`) |
 | PR2 | bounded JSON scanner with byte positions; INI reader that keeps BOM (written on Windows, `config-file.c:378-381`), CRLF and duplicates; redactor with per-kind placeholders. Fixtures: rtmp_common, custom RTMP with auth, WHIP, Twitch/YouTube/Restream tokens, websocket placeholder with forced auth, URL rule; a scan proving no secret bytes remain; a fuzz target | self-merge gate |
-| PR3 | `CapturePlanner` (allowlist, omit-by-default, `.bak` pairs, symlinks, `u1` rules), `CollectionIndex`, identity; synthetic Windows/macOS/Linux root trees with custom locations and portable mode | self-merge gate |
+| PR3 | `Fs` (`MemFs`, `RealFs`), `CapturePlanner` (allowlist, omit-by-default, `.bak` pairs, symlinks, unrepresentable names, collisions, limits), identity against a parent revision, `ReviewRules` (table starts with `scene` and `group`), `jw-check plan`; synthetic root trees with custom locations. Not yet: capture of file contents, real Windows/macOS trees (CI runs the synthetic ones) | self-merge gate |
 | PR4 | frontend capture host: save result, `StageWindowState`, `persistMutex`, root gate, Windows sharing, coordinator. Tests: an off-thread `config_save` blocks instead of tearing a read; an out-of-protocol writer makes capture refuse; `ReplaceFileW` succeeds during a capture read; a failed save yields no result | self-merge gate with decision 1 already made; it changes libobs public API, so review rounds repeat until one finds no Blocker or Major |
 | S2 | store writer, recovery, history, restore, and the purge (delete a revision or a workspace; remove unreferenced blobs) that decision 2 depends on | — |
 | Unicode tables | owner-merged: pin the Unicode Character Database, a committed generator script and the generated normalization and case-fold tables (decision 3); needed before S2 or S3 may write from a manifest with non-ASCII paths | owner (third-party data) |
@@ -679,18 +686,23 @@ The options and costs as they were put to the owner. The "Decided:" labels were 
 
 ## 15. Not done
 
-- Only the PR1 slice is built (`shared/jeiobs-workspace/`), and only on Linux. Sections 2, 6
-  (capture), 7–11 and the ZIP rules are design only.
-- The library builds and passes its tests on Windows and Linux in CI (Ubuntu and Windows runners;
-  `jw-check` uses `wmain` and UTF-8 paths on Windows). The macOS runner has not run yet.
+- Built so far in `shared/jeiobs-workspace/`: limits, path rules, hashing, manifests and export
+  projection (PR1), the JSON and INI scanners and the redactor (PR2), the capture planner and
+  identity (PR3). Sections 2, 6 (capture), 8's live capture hooks, 10 and 11 (store, coherence,
+  durability) and the ZIP rules are design only.
+- The library builds and passes its tests in CI on Ubuntu, macOS and Windows
+  (`.github/workflows/jeiobs-workspace.yaml`). Apple's libc++ differs from libstdc++ (no
+  floating-point `std::from_chars` for older deployment targets, O(n) insertion of equal keys into
+  `unordered_multimap`): both bit PR2, so new code avoids those.
 - Power-loss durability cannot be shown in CI.
-- Until PR3 reviews the first-party source list, every collection is `opaque-unreviewed`.
+- Every real collection is `opaque-unreviewed`: the reviewed first-party source table starts with
+  `scene` and `group` only. Adding a source type means enumerating its settings keys and showing that
+  none is a secret, URL, path or user text.
 - Two cases are not detected: tokens inside URL paths, and plugins that write OBS files directly
   instead of through `config_t` or `SaveService()`.
-- Open for PR3 (CapturePlanner): live OBS states that PathRules rejects. On Linux, profiles `Main`
-  and `main` can both exist (OBS checks for an existing folder case-sensitively,
-  `OBSBasic_Profiles.cpp:146-160`), and a stray file named `What?.txt`, `notes .txt` or with a
-  name that is not UTF-8 can sit in a captured folder. Options: record such names as one omitted
-  entry per folder with a count and no names, and record case collisions as a flag that blocks
-  restore onto a case-insensitive filesystem instead of rejecting the manifest. Also open: 8.3
-  short names, HFS+ normalization and file-versus-folder clashes.
+- Live OBS states that PathRules rejects are handled by the planner: names that are not UTF-8 or
+  break a rule become one omitted `kind: "names"` entry per folder with a count and no names;
+  case-only clashes (profiles `Main` and `main` on Linux, `OBSBasic_Profiles.cpp:146-160`) are
+  planned with `collision: true` and a warning, and capture (PR4) blocks restore onto a
+  case-insensitive filesystem instead of rejecting the manifest. Still open: 8.3 short names, HFS+
+  normalization and file-versus-folder clashes.

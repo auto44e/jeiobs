@@ -1,0 +1,8 @@
+# r2.9: four collections of exactly 64 MiB fill the 256 MiB of stored entries. E.json ({}) and a module
+# config of 1 byte come after them in plan order.
+hardlink scenes/obs-studio/basic/scenes/A.json ${WORK}/plan-gen/collection-64mib.json
+hardlink scenes/obs-studio/basic/scenes/B.json ${WORK}/plan-gen/collection-64mib.json
+hardlink scenes/obs-studio/basic/scenes/C.json ${WORK}/plan-gen/collection-64mib.json
+hardlink scenes/obs-studio/basic/scenes/D.json ${WORK}/plan-gen/collection-64mib.json
+copy scenes/obs-studio/basic/scenes/E.json fixtures/plan/files/uuids-empty-object.json
+file config/obs-studio/plugin_config/obs-websocket/config.json 1

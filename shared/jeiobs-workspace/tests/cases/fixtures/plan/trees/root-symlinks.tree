@@ -1,0 +1,16 @@
+# r2.3: an owned subpath of a root is a symlink: basic/scenes (scenes), basic (profiles), plugin_config
+# (config) and plugin_manager (plugin_manager). With fixtures/plan/roots/root-symlinks-alt.json, basic
+# (scenes2) and basic/profiles (profiles2). The targets under outside/ hold what would be planned.
+needs symlinks
+file user/obs-studio/user.ini 300
+link scenes/obs-studio/basic/scenes ../../../outside/scenes
+link profiles/obs-studio/basic ../../outside/basic
+link config/obs-studio/plugin_config ../../outside/plugin_config
+link plugin_manager/obs-studio/plugin_manager ../../outside/pm
+link scenes2/obs-studio/basic ../../outside/basic
+link profiles2/obs-studio/basic/profiles ../../../outside/basic/profiles
+copy outside/scenes/Main.json fixtures/plan/files/small.json
+copy outside/basic/scenes/S.json fixtures/plan/files/small.json
+file outside/basic/profiles/P/basic.ini 100
+file outside/plugin_config/obs-websocket/config.json 160
+file outside/pm/modules.json 256

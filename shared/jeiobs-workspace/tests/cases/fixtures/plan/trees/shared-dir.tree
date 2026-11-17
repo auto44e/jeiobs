@@ -1,0 +1,12 @@
+# All five roots in one directory, as OBS lays them out by default.
+file all/obs-studio/global.ini 100
+file all/obs-studio/user.ini 200
+copy all/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json
+file all/obs-studio/basic/scenes/Main.json.bak 150
+file all/obs-studio/basic/profiles/Main/basic.ini 300
+file all/obs-studio/basic/profiles/Main/service.json 40
+file all/obs-studio/plugin_manager/modules.json 50
+file all/obs-studio/plugin_config/obs-websocket/config.json 60
+file all/obs-studio/plugin_config/obs-websocket/persistent_data.json 70
+file all/obs-studio/logs/a.txt 80
+file all/obs-studio/themes/t.obt 90

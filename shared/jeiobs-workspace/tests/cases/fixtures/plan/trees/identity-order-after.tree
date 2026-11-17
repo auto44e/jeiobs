@@ -1,0 +1,3 @@
+# r2.1: the same as identity-order-before, with the copy sorting after the collection keeping its path.
+copy scenes/obs-studio/basic/scenes/Changed.json fixtures/plan/files/id-changed.json
+copy scenes/obs-studio/basic/scenes/Zarchive.json fixtures/plan/files/ord-changed-parent.json

@@ -1,0 +1,11 @@
+# Names that are not UTF-8, next to a non-ASCII UTF-8 name.
+needs non-utf8-names
+copy scenes/obs-studio/basic/scenes/Main.json fixtures/plan/files/small.json
+copy scenes/obs-studio/basic/scenes/Caf%C3%A9.json fixtures/plan/files/small.json
+file scenes/obs-studio/basic/scenes/a%FFb.json 10
+file scenes/obs-studio/basic/scenes/%C3(.json 20
+file scenes/obs-studio/basic/scenes/%ED%A0%80.json 30
+file scenes/obs-studio/basic/scenes/%C0%AF.json 40
+file profiles/obs-studio/basic/profiles/Main/basic.ini 100
+file profiles/obs-studio/basic/profiles/Main/%FF.txt 5
+dir profiles/obs-studio/basic/profiles/p%FF

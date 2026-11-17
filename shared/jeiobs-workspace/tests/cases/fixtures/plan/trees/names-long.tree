@@ -1,0 +1,6 @@
+# A 255-byte profile folder name, and files at 512 and 513 bytes of path.
+needs long-names
+file profiles/obs-studio/basic/profiles/{255*P}/basic.ini 100
+file profiles/obs-studio/basic/profiles/{255*P}/{241*f} 11
+file profiles/obs-studio/basic/profiles/{255*P}/{242*g} 12
+copy scenes/obs-studio/basic/scenes/{250*s}.json fixtures/plan/files/small.json

@@ -100,6 +100,9 @@ bool IsOverflowingExponent(std::string_view token)
 
 bool IsFiniteJsonNumber(std::string_view token)
 {
+	if (token.size() > 4096U) {
+		return false;
+	}
 	// Fast path: a grammar-valid number whose first significant digit sits well inside the double
 	// range (10^-300 .. 10^300) is finite; no conversion needed. Only numbers near the limits are
 	// converted, so a document with a million numbers stays linear and cheap on every platform.
@@ -527,6 +530,9 @@ class Parser final {
 		}
 
 		const std::string_view token = bytes_.substr(start, position_ - start);
+		if (token.size() > 4096U) {
+			return Fail(MakeError(ErrorCode::Json));
+		}
 		if (!IsFiniteJsonNumber(token)) {
 			return Fail(MakeError(ErrorCode::Nonfinite));
 		}

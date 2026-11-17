@@ -9,6 +9,7 @@
  * option) any later version.
  */
 #include "Utf8Path.hpp"
+#include "jeiobs/workspace/CapturePlanner.hpp"
 #include "jeiobs/workspace/Hash.hpp"
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
@@ -18,9 +19,12 @@
 
 #include <filesystem>
 #include <fstream>
+#include <charconv>
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -29,13 +33,24 @@ namespace {
 
 using Jeiobs::Workspace::Error;
 using Jeiobs::Workspace::ErrorCode;
+using Jeiobs::Workspace::BytesResult;
+using Jeiobs::Workspace::CapturePlanner;
+using Jeiobs::Workspace::FsListResult;
 using Jeiobs::Workspace::Json;
 using Jeiobs::Workspace::Manifest;
 using Jeiobs::Workspace::ManifestMode;
+using Jeiobs::Workspace::ManifestResult;
+using Jeiobs::Workspace::PlanToJson;
+using Jeiobs::Workspace::PlanResult;
 using Jeiobs::Workspace::RedactOptions;
 using Jeiobs::Workspace::RedactOutcome;
 using Jeiobs::Workspace::RedactResult;
+using Jeiobs::Workspace::RealFs;
+using Jeiobs::Workspace::Roots;
+using Jeiobs::Workspace::SeededUidSource;
 namespace Limits = Jeiobs::Workspace::Limits;
+
+void PrintUsage();
 
 void PrintError(const Error &error)
 {
@@ -351,11 +366,176 @@ int CheckRedact(const std::string &role, const std::string &input_path, const st
 	return 0;
 }
 
+std::string JoinCliPath(const std::string &first, const std::string &second)
+{
+	try {
+		return (std::filesystem::u8path(first) / std::filesystem::u8path(second)).u8string();
+	} catch (...) {
+		return {};
+	}
+}
+
+bool ParseUint64(std::string_view text, std::uint64_t &value)
+{
+	if (text.empty()) {
+		return false;
+	}
+	const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+	return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size();
+}
+
+bool IsRootRelative(std::string_view path)
+{
+	if (path.empty() || path.front() == '/' || path.front() == '\\' || path.find('\\') != std::string_view::npos) {
+		return false;
+	}
+	const Jeiobs::Workspace::PathResult result = Jeiobs::Workspace::ValidatePath(path);
+	return result.ok();
+}
+
+Error ReadRootsFile(const std::string &path, const std::string &tree_dir, Roots &roots)
+{
+	const BytesResult bytes = Jeiobs::Workspace::ReadFile(path);
+	if (!bytes.ok()) {
+		return bytes.error;
+	}
+	const auto parsed = Jeiobs::Workspace::ParseJson(bytes.bytes);
+	if (!parsed.ok()) {
+		return parsed.error;
+	}
+	if (!parsed.value->is_object()) {
+		return {ErrorCode::Schema, "roots"};
+	}
+
+	std::map<std::string, std::string *> root_paths = {
+		{"config", &roots.config.path},
+		{"user", &roots.user.path},
+		{"scenes", &roots.scenes.path},
+		{"profiles", &roots.profiles.path},
+		{"plugin_manager", &roots.plugin_manager.path},
+	};
+	for (const auto &[key, value] : parsed.value->items()) {
+		const auto root = root_paths.find(key);
+		if (root == root_paths.end() || !value.is_string() || !IsRootRelative(value.get<std::string>())) {
+			return {ErrorCode::Schema, "roots"};
+		}
+		*root->second = JoinCliPath(tree_dir, value.get<std::string>());
+		if (root->second->empty()) {
+			return {ErrorCode::Io, {}};
+		}
+		if (key == "config") {
+			roots.config.custom = true;
+		} else if (key == "user") {
+			roots.user.custom = true;
+		} else if (key == "scenes") {
+			roots.scenes.custom = true;
+		} else if (key == "profiles") {
+			roots.profiles.custom = true;
+		} else if (key == "plugin_manager") {
+			roots.plugin_manager.custom = true;
+		}
+	}
+	return {};
+}
+
+int CheckPlan(int argc, char **argv)
+{
+	if (argc < 3) {
+		PrintUsage();
+		return 2;
+	}
+	const std::string tree_dir = argv[2];
+	Roots roots;
+	roots.config.path = JoinCliPath(tree_dir, "config");
+	roots.user.path = JoinCliPath(tree_dir, "user");
+	roots.scenes.path = JoinCliPath(tree_dir, "scenes");
+	roots.profiles.path = JoinCliPath(tree_dir, "profiles");
+	roots.plugin_manager.path = JoinCliPath(tree_dir, "plugin_manager");
+	if (roots.config.path.empty() || roots.user.path.empty() || roots.scenes.path.empty() ||
+	    roots.profiles.path.empty() || roots.plugin_manager.path.empty()) {
+		PrintError({ErrorCode::Io, {}});
+		return 1;
+	}
+
+	std::string roots_path;
+	std::string parent_path;
+	std::string app_dir = "obs-studio";
+	std::uint64_t uid_seed = 0U;
+	bool has_uid_seed = false;
+	for (int index = 3; index < argc; ++index) {
+		const std::string option = argv[index];
+		if (option == "--roots" || option == "--parent" || option == "--uid-seed" || option == "--app-dir") {
+			if (index + 1 >= argc) {
+				PrintUsage();
+				return 2;
+			}
+			const std::string value = argv[++index];
+			if (option == "--roots") {
+				roots_path = value;
+			} else if (option == "--parent") {
+				parent_path = value;
+			} else if (option == "--app-dir") {
+				app_dir = value;
+			} else {
+				if (!ParseUint64(value, uid_seed)) {
+					PrintError({ErrorCode::Schema, "uid-seed"});
+					return 1;
+				}
+				has_uid_seed = true;
+			}
+			continue;
+		}
+		PrintUsage();
+		return 2;
+	}
+	roots.app_dir = app_dir;
+
+	if (!roots_path.empty()) {
+		const Error roots_error = ReadRootsFile(roots_path, tree_dir, roots);
+		if (!roots_error.ok()) {
+			PrintError(roots_error);
+			return 1;
+		}
+	}
+
+	RealFs fs;
+	const FsListResult tree_status = fs.List(tree_dir);
+	if (!tree_status.ok()) {
+		PrintError(tree_status.error);
+		return 1;
+	}
+
+	std::optional<Manifest> parent;
+	if (!parent_path.empty()) {
+		const ManifestResult loaded = Jeiobs::Workspace::LoadManifest(parent_path, ManifestMode::Local);
+		if (!loaded.ok()) {
+			PrintError(loaded.error);
+			return 1;
+		}
+		parent = *loaded.value;
+	}
+
+	PlanResult result;
+	if (has_uid_seed) {
+		SeededUidSource source(uid_seed);
+		result = CapturePlanner::Plan(fs, roots, parent.has_value() ? &*parent : nullptr, source);
+	} else {
+		result = CapturePlanner::Plan(fs, roots, parent.has_value() ? &*parent : nullptr);
+	}
+	if (!result.ok()) {
+		PrintError(result.error);
+		return 1;
+	}
+	std::cout << PlanToJson(*result.value).dump() << '\n';
+	return 0;
+}
+
 void PrintUsage()
 {
 	std::cerr << "usage: jw-check hash FILE | path PATH | manifest FILE [--export] | "
 		     "revision FILE | child PARENT DRAFT | export MANIFEST DECISIONS --now RFC3339 | "
-		     "redact ROLE INFILE OUTFILE REPORT [--ws-placeholder STR]\n";
+		     "redact ROLE INFILE OUTFILE REPORT [--ws-placeholder STR] | "
+		     "plan TREE_DIR [--roots ROOTS.json] [--parent MANIFEST] [--uid-seed N] [--app-dir NAME]\n";
 }
 
 } // namespace
@@ -397,6 +577,9 @@ int Run(int argc, char **argv)
 				options.has_ws_placeholder = true;
 			}
 			return CheckRedact(argv[2], argv[3], argv[4], argv[5], options);
+		}
+		if (command == "plan") {
+			return CheckPlan(argc, argv);
 		}
 		PrintUsage();
 		return 2;
