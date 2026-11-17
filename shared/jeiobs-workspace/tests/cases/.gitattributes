@@ -1,2 +1,3 @@
-# Fixtures are hashed byte for byte: never convert line endings.
-* -text
+# Fixtures are hashed byte for byte: never convert line endings, and do not apply
+# whitespace checks (CRLF, BOM and trailing blanks are test data).
+* -text -whitespace

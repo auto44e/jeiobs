@@ -13,6 +13,8 @@
 #include "jeiobs/workspace/Limits.hpp"
 
 #include <charconv>
+#include <locale>
+#include <sstream>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -24,6 +26,94 @@
 
 namespace Jeiobs::Workspace {
 namespace {
+
+// Called only for a grammar-valid token that the parser reported out of range, which is either
+// huge (overflow) or tiny (underflow). Decide from the decimal position of the first non-zero digit:
+// positive means a magnitude of at least 1, so the out-of-range result was an overflow.
+bool IsOverflowingExponent(std::string_view token)
+{
+	std::size_t i = 0U;
+	if (i < token.size() && token[i] == '-') {
+		++i;
+	}
+	long long first_digit_position = 0; // position of the first non-zero digit, 1 = units
+	bool seen_nonzero = false;
+	long long integer_digits = 0;
+	while (i < token.size() && token[i] >= '0' && token[i] <= '9') {
+		if (token[i] != '0' && !seen_nonzero) {
+			seen_nonzero = true;
+			first_digit_position = 1;
+		} else if (seen_nonzero) {
+			++first_digit_position;
+		}
+		++integer_digits;
+		++i;
+	}
+	if (i < token.size() && token[i] == '.') {
+		++i;
+		long long fraction_index = 0;
+		while (i < token.size() && token[i] >= '0' && token[i] <= '9') {
+			++fraction_index;
+			if (!seen_nonzero && token[i] != '0') {
+				seen_nonzero = true;
+				first_digit_position = 1 - fraction_index;
+			}
+			++i;
+		}
+	}
+	if (!seen_nonzero) {
+		return false; // zero never overflows
+	}
+	long long exponent = 0;
+	if (i < token.size() && (token[i] == 'e' || token[i] == 'E')) {
+		++i;
+		bool negative = false;
+		if (i < token.size() && (token[i] == '+' || token[i] == '-')) {
+			negative = token[i] == '-';
+			++i;
+		}
+		while (i < token.size() && token[i] >= '0' && token[i] <= '9') {
+			if (exponent < 1000000) {
+				exponent = exponent * 10 + (token[i] - '0');
+			}
+			++i;
+		}
+		if (negative) {
+			exponent = -exponent;
+		}
+	}
+	(void)integer_digits;
+	return first_digit_position + exponent > 0;
+}
+
+// The token already matched the JSON number grammar; only overflow to infinity is rejected
+// (an underflow to zero or a denormal is a valid number). Locale independent on every platform:
+// std::from_chars for double where the standard library has it, otherwise a classic-locale
+// stream (Apple's libc++ lacks floating-point from_chars for older deployment targets).
+bool IsFiniteJsonNumber(std::string_view token)
+{
+#if !defined(JW_NO_FROM_CHARS) && defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+	double number = 0.0;
+	const std::from_chars_result parsed =
+		std::from_chars(token.data(), token.data() + token.size(), number, std::chars_format::general);
+	if (parsed.ptr != token.data() + token.size()) {
+		return false;
+	}
+	if (parsed.ec == std::errc::result_out_of_range) {
+		return !IsOverflowingExponent(token);
+	}
+	return parsed.ec == std::errc() && std::isfinite(number);
+#else
+	std::istringstream stream{std::string(token)};
+	stream.imbue(std::locale::classic());
+	double number = 0.0;
+	stream >> number;
+	if (stream.fail()) {
+		return !IsOverflowingExponent(token);
+	}
+	return std::isfinite(number);
+#endif
+}
 
 constexpr std::size_t kNoIndex = std::numeric_limits<std::size_t>::max();
 
@@ -420,12 +510,8 @@ class Parser final {
 			}
 		}
 
-		double number = 0.0;
 		const std::string_view token = bytes_.substr(start, position_ - start);
-		const std::from_chars_result parsed =
-			std::from_chars(token.data(), token.data() + token.size(), number, std::chars_format::general);
-		if (parsed.ec == std::errc::result_out_of_range || parsed.ptr != token.data() + token.size() ||
-		    !std::isfinite(number)) {
+		if (!IsFiniteJsonNumber(token)) {
 			return Fail(MakeError(ErrorCode::Nonfinite));
 		}
 		end = position_;
