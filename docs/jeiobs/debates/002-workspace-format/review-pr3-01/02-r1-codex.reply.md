@@ -1,0 +1,5 @@
+FINDING codex-1 | Major | open | Lone collection `.bak` serializes its filesystem path as `entry.collection` (CapturePlanner.cpp:521-524, 898-900, 986-993, 1116-1117), violating the no-UID rule (31-pr3-contract.md:103-105).
+FINDING codex-2 | Major | open | Directory-listing errors are discarded (CapturePlanner.cpp:370-414), so `RealFs` I/O failures (Fs.cpp:233-243) can produce an incomplete successful plan.
+FINDING codex-3 | Major | open | Scene UUID extraction is quadratic and uncapped (CapturePlanner.cpp:550-586), violating the 100,000-item bound (31-pr3-contract.md:79-81).
+FINDING codex-4 | Minor | open | Path validation precedes symlink handling (CapturePlanner.cpp:375-381), so invalid-name symlinks miss the required size-0 symlink reason (31-pr3-contract.md:114-116).
+VERDICT: request changes

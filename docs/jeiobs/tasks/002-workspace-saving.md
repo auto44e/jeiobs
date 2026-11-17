@@ -57,7 +57,7 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   set); the optional `scene_uuids` manifest field; the first-party review table (`scene`, `group`);
   and the PR2 review Minors (number token length and exponent clamping). Codex wrote the library and
   Claude the black-box cases blind; the cases decided four readings (contract r1). Linux (GCC):
-  `jw-unit`, `jw-fuzz-smoke` and `jw-cases` (1095 case lines) pass, also under ASan and UBSan.
+  `jw-unit`, `jw-fuzz-smoke` and `jw-cases` (1134 case lines) pass, also under ASan and UBSan.
 - Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host). Also
   owed: an owner-merged PR that pins the Unicode Character Database and adds the generated collision
   tables (decision 3), and S2 includes a purge for local history (decision 2).

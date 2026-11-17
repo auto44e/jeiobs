@@ -117,3 +117,38 @@ Spec: `docs/jeiobs/WORKSPACE_FORMAT.md` §6 (fidelity, omitted files), §7 (allo
    `--uid-seed` counter, collections before profiles; omitted entries sorted by path bytes across all roots;
    name matching exact and case-sensitive; `scene_uuids` uses `id` literally; the minus sign counts
    toward the 4,096 number bytes.
+
+## r2 (review run 01 of PR #32; read ~/.local/share/jeiobs-work/reviews/pr32/01-run/*.reply.md)
+1. Identity (claude-1): two passes. Pass 1 applies rule 1 (same root and path) to ALL collections and
+   profiles and claims those parent UIDs. Pass 2 applies rule 2 (unique scene-UUID set) only to the
+   unmatched collections, against unclaimed parent collections. The result must not depend on name order.
+2. `themes/` is skipped only directly under the config root's app dir (claude-2); a profile or collection
+   folder named `themes` is planned normally.
+3. Symlinked roots (claude-3): if a root's app dir, or a subpath a root owns (`basic/`, `basic/scenes`,
+   `basic/profiles`, `plugin_manager`, `plugin_config`), is a symlink or a Windows junction/reparse point,
+   it is NOT followed: it becomes one omitted entry `{"reason":"symlink"}` and a warning
+   `{"code":"root-symlink","path":...}`.
+4. Listing errors (claude-4, codex-2): a directory that cannot be listed (permission, an error part way
+   through) becomes one omitted entry `{"reason":"unreadable","kind":"dir"}` plus a warning
+   `{"code":"listing-error","path":...}`; the plan is never silently partial. On Windows a name with an
+   unpaired UTF-16 surrogate is `unrepresentable`.
+5. `count` (claude-5): the manifest v1 schema gains an OPTIONAL field `count` (integer >= 1) allowed only
+   on omitted entries with `kind` "dir" or "names"; elsewhere `E_SCHEMA count`. Export keeps it; CarryOver
+   treats it as known.
+6. Complexity (claude-6, codex-3): scene-UUID extraction is linear and stops at 100,000 UUIDs (then the
+   collection gets `scene_uuids: []` and a warning `scene-uuids-limit`); collections and profiles count
+   toward the 10,000 entry limit; no O(n^2) lookups (use maps/sets).
+7. Collapse accounting (claude-7): a collapsed folder's `size` and `count` cover its unknown regular files,
+   recursively, without following symlinks; one entry per folder path; no sample truncation.
+8. A folder in `basic/profiles/` without a `basic.ini` is not a profile (OBS lists profiles by
+   `basic.ini`): no UID; its contents are one omitted `unknown` `kind:"dir"` entry.
+9. A stored-shape file larger than 64 MiB is omitted `{"reason":"too-large"}` (no warning about parsing);
+   the planner also stops adding stored entries when their total would exceed 256 MiB (further ones
+   omitted `too-large`).
+10. Lone `.bak`: the only valid reading is "no UID" (r1.2): the black-box cases drop the alternatives.
+
+## r3 (integration)
+`plan-too-large-total` (tests/cases) fails: with four 64 MiB collections A..D plus E.json and a 1-byte module config,
+the stored total is inclusive of 256 MiB counted in plan order, and the collections list must contain A, B, C, D
+in name order. The implementation lists A and C (check how collections are indexed when a file is the 64 MiB
+limit, and whether B is dropped from `collections[]` while kept in `entries[]`). Fix so the case passes; do not edit it.
