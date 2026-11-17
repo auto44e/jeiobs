@@ -17,7 +17,7 @@
         {
             "id": "ffmpeg_source",
             "name": "Options",
-            "settings": {"is_local_file": true, "ffmpeg_options": "a=http://PLAINvalue-tb-1.example.com b=PLAINvalue-tb-2@PLAINvalue-tb-3 c=rtmp://relay.example.com/x?key=SECRETvalue-tb-1 key=PLAINvalue-tb-4&token=PLAINvalue-tb-5"}
+            "settings": {"is_local_file": true, "ffmpeg_options": "a=http://cdn.example.com b=over-tb-1@PLAINvalue-tb-1 c=rtmp://relay.example.com/x?key=SECRETvalue-tb-1 key=SECRETvalue-tb-2&token=SECRETvalue-tb-3 d=over-tb-2"}
         }
     ]
 }

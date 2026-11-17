@@ -37,7 +37,7 @@
         {
             "id": "ffmpeg_source",
             "name": "Clip",
-            "settings": {"is_local_file": true, "local_file": "/home/user/PLAINvalue-col-2.mp4", "input": "rtmp://PLAINvalue-col-3:PLAINvalue-col-4@relay.example.com/live?key=PLAINvalue-col-5", "ffmpeg_options": "reconnect=1 headers=PLAINvalue-col-6", "looping": true}
+            "settings": {"is_local_file": true, "local_file": "/home/user/PLAINvalue-col-2.mp4", "input": "rtmp://@relay.example.com/live?key=", "ffmpeg_options": "reconnect=1 headers=PLAINvalue-col-6", "looping": true}
         },
         {
             "id": "vlc_source",

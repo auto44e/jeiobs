@@ -17,7 +17,7 @@
         {
             "id": "ffmpeg_source",
             "name": "Options",
-            "settings": {"is_local_file": true, "local_file": "/home/user/a.mp4", "ffmpeg_options": "rtsp_transport=tcp http_proxy=http://SECRETvalue-fo-1:SECRETvalue-fo-2@proxy.example.com:3128 key=PLAINvalue-fo-1 srt_url=srt://relay.example.com:9000?streamid=SECRETvalue-fo-3&latency=PLAINvalue-fo-2 token=PLAINvalue-fo-3 note=PLAINvalue-fo-4@PLAINvalue-fo-5 url=https://cdn.example.com/x?Token=SECRETvalue-fo-4#PLAINvalue-fo-6 proxy2=http://PLAINvalue-fo-7.example.com:8080 last=PLAINvalue-fo-8@x"}
+            "settings": {"is_local_file": true, "local_file": "/home/user/a.mp4", "ffmpeg_options": "rtsp_transport=tcp http_proxy=http://SECRETvalue-fo-1:SECRETvalue-fo-2@proxy.example.com:3128 key=PLAINvalue-fo-1 srt_url=srt://relay.example.com:9000?streamid=SECRETvalue-fo-3&latency=PLAINvalue-fo-2 token=PLAINvalue-fo-3 note=PLAINvalue-fo-4@PLAINvalue-fo-5 url=https://cdn.example.com/x?Token=SECRETvalue-fo-4#SECRETvalue-fo-5 proxy2=http://cdn2.example.com:8080 last=x@y"}
         }
     ]
 }

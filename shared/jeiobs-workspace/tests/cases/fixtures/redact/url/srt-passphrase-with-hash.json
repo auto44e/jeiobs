@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "srt://in.example.com:9000?passphrase=SECRETvalue-srt-3#SECRETvalue-srt-4&latency=PLAINvalue-srt-2",
+        "bwtest": false
+    }
+}

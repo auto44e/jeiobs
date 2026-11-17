@@ -17,7 +17,7 @@
         {
             "id": "ffmpeg_source",
             "name": "Media",
-            "settings": {"input": "rtmp://PLAINvalue-fl-1:PLAINvalue-fl-2@relay.example.com/live?key=PLAINvalue-fl-3", "local_file": "/home/user/PLAINvalue-fl-4.mp4"}
+            "settings": {"input": "rtmp://SECRETvalue-fl-1:SECRETvalue-fl-2@relay.example.com/live?key=SECRETvalue-fl-3", "local_file": "/home/user/PLAINvalue-fl-4.mp4"}
         }
     ]
 }

@@ -1,0 +1,28 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "Quoted",
+            "settings": {"is_local_file": true, "local_file": "/home/user/a.mp4", "ffmpeg_options": "rtsp_transport=tcp http_proxy='http://@proxy.example:3128'"}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "Double quotes and tab",
+            "settings": {"is_local_file": true, "local_file": "/home/user/b.mp4", "ffmpeg_options": "rtsp_transport=tcp\thttp_proxy=\"http://@proxy.example:3128\" timeout=PLAINvalue-qp-1"}
+        }
+    ]
+}

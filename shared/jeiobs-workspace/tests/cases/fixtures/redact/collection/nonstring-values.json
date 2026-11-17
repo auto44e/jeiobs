@@ -1,0 +1,33 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "browser_source",
+            "name": "Browser",
+            "settings": {"url": 5}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "Media",
+            "settings": {"is_local_file": false, "input": {}, "ffmpeg_options": []}
+        },
+        {
+            "id": "vlc_source",
+            "name": "VLC",
+            "settings": {"playlist": [{"value": null}, {"value": "http://SECRETvalue-ns-1@h.example.com/"}]}
+        }
+    ]
+}

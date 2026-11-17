@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "https://h.example.com/?token=https://SECRETvalue-ov-1:SECRETvalue-ov-2@x.example.com/",
+        "bwtest": false
+    }
+}
