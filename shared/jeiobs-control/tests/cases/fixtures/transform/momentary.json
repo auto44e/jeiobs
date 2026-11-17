@@ -1,0 +1,10 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "m", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "momentary"}], "target": {"kind": "scene", "id": "m"}},
+    {"id": "m_scale", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "momentary"}, {"op": "scale", "in": [0, 1], "out": [0, 100]}], "target": {"kind": "scene", "id": "m_scale"}}
+  ]
+}

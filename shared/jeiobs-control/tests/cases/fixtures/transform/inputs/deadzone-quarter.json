@@ -1,0 +1,14 @@
+[
+  {"type": "float", "format": "ieee64", "bits_hex": "0000000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fd0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "bfd0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fc999999999999a"},
+  {"type": "float", "format": "ieee64", "bits_hex": "bfc999999999999a"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fe0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "bfe0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3ff0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "bff0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "4000000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fd0000000000001"},
+  {"type": "float", "format": "ieee64", "bits_hex": "8000000000000000"}
+]

@@ -1,0 +1,10 @@
+[
+  {"type": "int", "bits": 8, "value": "1"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fe0000000000000"},
+  {"type": "bool", "value": true},
+  {"type": "trigger"},
+  {"type": "text", "value": "1"},
+  {"type": "blob", "hex": "01"},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}]},
+  {"type": "uint", "bits": 7, "value": "1"}
+]

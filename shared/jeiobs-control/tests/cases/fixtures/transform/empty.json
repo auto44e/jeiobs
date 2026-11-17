@@ -1,0 +1,10 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "e", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [], "target": {"kind": "scene", "id": "e"}},
+    {"id": "none", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "target": {"kind": "scene", "id": "none"}}
+  ]
+}

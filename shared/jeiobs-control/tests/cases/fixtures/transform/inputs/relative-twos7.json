@@ -1,0 +1,9 @@
+[
+  {"type": "uint", "bits": 7, "value": "0"},
+  {"type": "uint", "bits": 7, "value": "1"},
+  {"type": "uint", "bits": 7, "value": "127"},
+  {"type": "uint", "bits": 7, "value": "63"},
+  {"type": "uint", "bits": 7, "value": "64"},
+  {"type": "uint", "bits": 7, "value": "65"},
+  {"type": "uint", "bits": 7, "value": "2"}
+]

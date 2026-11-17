@@ -8,6 +8,7 @@ set(JC_LIBRARY_SOURCES
 	src/Control.cpp
 	src/Value.cpp
 	src/Mapping.cpp
+	src/Transform.cpp
 )
 
 add_library(jeiobs-control STATIC ${JC_LIBRARY_SOURCES})

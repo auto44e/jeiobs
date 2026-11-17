@@ -1,0 +1,5 @@
+[
+  {"type": "float", "format": "ieee64", "bits_hex": "7ff8000000000000"},
+  {"type": "text", "value": "1"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fe0000000000000"}
+]

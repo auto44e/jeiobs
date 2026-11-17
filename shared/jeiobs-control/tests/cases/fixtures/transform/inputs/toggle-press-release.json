@@ -1,0 +1,10 @@
+[
+  {"type": "trigger"},
+  {"type": "bool", "value": false},
+  {"type": "trigger"},
+  {"type": "uint", "bits": 7, "value": "0"},
+  {"type": "uint", "bits": 7, "value": "127"},
+  {"type": "float", "format": "ieee64", "bits_hex": "0000000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fe0000000000000"},
+  {"type": "int", "bits": 8, "value": "-1"}
+]

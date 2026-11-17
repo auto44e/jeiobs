@@ -1,0 +1,21 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "tc7", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.0078125}], "target": {"kind": "scene", "id": "tc7"}},
+    {"id": "sm7", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "sign_magnitude", "step": 0.0078125}], "target": {"kind": "scene", "id": "sm7"}},
+    {"id": "bo7", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "binary_offset", "step": 0.0078125}], "target": {"kind": "scene", "id": "bo7"}},
+    {"id": "tc14", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 3.0517578125e-05}], "target": {"kind": "scene", "id": "tc14"}},
+    {"id": "sm14", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "sign_magnitude", "step": 3.0517578125e-05}], "target": {"kind": "scene", "id": "sm14"}},
+    {"id": "bo14", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "binary_offset", "step": 3.0517578125e-05}], "target": {"kind": "scene", "id": "bo14"}},
+    {"id": "q_tc", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.25}], "target": {"kind": "scene", "id": "q_tc"}},
+    {"id": "q_sm", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "sign_magnitude", "step": 0.25}], "target": {"kind": "scene", "id": "q_sm"}},
+    {"id": "q_bo", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "binary_offset", "step": 0.25}], "target": {"kind": "scene", "id": "q_bo"}},
+    {"id": "tenth", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.1}], "target": {"kind": "scene", "id": "tenth"}},
+    {"id": "big", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 2}], "target": {"kind": "scene", "id": "big"}},
+    {"id": "tiny", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 1e-09}], "target": {"kind": "scene", "id": "tiny"}},
+    {"id": "rel_clip", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.25}, {"op": "scale", "in": [0, 0.5], "out": [0, 1e+308]}, {"op": "clamp", "min": 0, "max": 1}], "target": {"kind": "scene", "id": "rel_clip"}}
+  ]
+}

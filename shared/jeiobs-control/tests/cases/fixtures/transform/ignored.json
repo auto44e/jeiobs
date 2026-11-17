@@ -1,0 +1,11 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "off", "enabled": false, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "invert"}], "target": {"kind": "scene", "id": "off"}},
+    {"id": "guarded", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "guard": {"all": [{"value": {"min": 0.9, "max": 1}}]}, "transforms": [{"op": "invert"}], "target": {"kind": "scene", "id": "guarded"}},
+    {"id": "slotted", "enabled": true, "match": {"slot": "surface", "address": [{"s": "t"}]}, "transforms": [{"op": "invert"}], "target": {"kind": "scene", "id": "slotted"}}
+  ]
+}

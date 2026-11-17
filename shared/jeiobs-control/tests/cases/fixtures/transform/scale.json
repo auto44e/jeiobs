@@ -1,0 +1,20 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "identity", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1], "out": [0, 1]}], "target": {"kind": "scene", "id": "identity"}},
+    {"id": "u7", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 127], "out": [0, 1]}], "target": {"kind": "scene", "id": "u7"}},
+    {"id": "rev_in", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [127, 0], "out": [0, 1]}], "target": {"kind": "scene", "id": "rev_in"}},
+    {"id": "rev_out", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1], "out": [1, 0]}], "target": {"kind": "scene", "id": "rev_out"}},
+    {"id": "both_rev", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [1, 0], "out": [1, 0]}], "target": {"kind": "scene", "id": "both_rev"}},
+    {"id": "extrap", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1], "out": [0, 100]}], "target": {"kind": "scene", "id": "extrap"}},
+    {"id": "bipolar", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [-1, 1], "out": [0, 1]}], "target": {"kind": "scene", "id": "bipolar"}},
+    {"id": "const", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1], "out": [0.5, 0.5]}], "target": {"kind": "scene", "id": "const"}},
+    {"id": "huge", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1e-300], "out": [0, 1e+300]}], "target": {"kind": "scene", "id": "huge"}},
+    {"id": "wide_out", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1], "out": [-1e+308, 1e+308]}], "target": {"kind": "scene", "id": "wide_out"}},
+    {"id": "order_over", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1e+200], "out": [0, 1e+200]}], "target": {"kind": "scene", "id": "order_over"}},
+    {"id": "order_under", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 1e-200], "out": [0, 1e-200]}], "target": {"kind": "scene", "id": "order_under"}}
+  ]
+}

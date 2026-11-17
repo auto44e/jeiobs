@@ -1,0 +1,13 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "linear", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "curve", "kind": "linear"}], "target": {"kind": "scene", "id": "linear"}},
+    {"id": "log", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "curve", "kind": "log"}], "target": {"kind": "scene", "id": "log"}},
+    {"id": "exp", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "curve", "kind": "exp"}], "target": {"kind": "scene", "id": "exp"}},
+    {"id": "log_exp", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "curve", "kind": "log"}, {"op": "curve", "kind": "exp"}], "target": {"kind": "scene", "id": "log_exp"}},
+    {"id": "exp_log", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "curve", "kind": "exp"}, {"op": "curve", "kind": "log"}], "target": {"kind": "scene", "id": "exp_log"}}
+  ]
+}

@@ -1,0 +1,11 @@
+[
+  {"type": "float", "format": "ieee32", "bits_hex": "7fc00000"},
+  {"type": "float", "format": "ieee32", "bits_hex": "7f800000"},
+  {"type": "float", "format": "ieee32", "bits_hex": "ff800000"},
+  {"type": "float", "format": "ieee32", "bits_hex": "7fc00001"},
+  {"type": "float", "format": "ieee64", "bits_hex": "7ff8000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "7ff0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "fff0000000000000"},
+  {"type": "float", "format": "ieee64", "bits_hex": "7ff0000000000001"},
+  {"type": "float", "format": "ieee64", "bits_hex": "fff8000000000000"}
+]

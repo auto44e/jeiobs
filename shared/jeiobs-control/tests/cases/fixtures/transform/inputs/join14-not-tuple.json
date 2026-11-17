@@ -1,0 +1,10 @@
+[
+  {"type": "uint", "bits": 14, "value": "100"},
+  {"type": "uint", "bits": 7, "value": "1"},
+  {"type": "trigger"},
+  {"type": "bool", "value": true},
+  {"type": "float", "format": "ieee64", "bits_hex": "3fe0000000000000"},
+  {"type": "int", "bits": 14, "value": "1"},
+  {"type": "text", "value": "x"},
+  {"type": "blob", "hex": "01"}
+]

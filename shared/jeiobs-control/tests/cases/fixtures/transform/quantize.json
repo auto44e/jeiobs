@@ -1,0 +1,13 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [{"id": "surface", "requires": []}],
+  "routes": [
+    {"id": "s2", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "quantize", "steps": 2}], "target": {"kind": "scene", "id": "s2"}},
+    {"id": "s3", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "quantize", "steps": 3}], "target": {"kind": "scene", "id": "s3"}},
+    {"id": "s5", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "quantize", "steps": 5}], "target": {"kind": "scene", "id": "s5"}},
+    {"id": "s128", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "quantize", "steps": 128}], "target": {"kind": "scene", "id": "s128"}},
+    {"id": "u7_s128", "enabled": true, "match": {"slot": null, "address": [{"s": "t"}]}, "transforms": [{"op": "scale", "in": [0, 127], "out": [0, 1]}, {"op": "quantize", "steps": 128}], "target": {"kind": "scene", "id": "u7_s128"}}
+  ]
+}

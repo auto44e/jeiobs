@@ -1,0 +1,9 @@
+[
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "0"}, {"type": "uint", "bits": 7, "value": "0"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "127"}, {"type": "uint", "bits": 7, "value": "127"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "64"}, {"type": "uint", "bits": 7, "value": "0"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "uint", "bits": 7, "value": "2"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "0"}, {"type": "uint", "bits": 7, "value": "127"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 8, "value": "127"}, {"type": "uint", "bits": 14, "value": "5"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 64, "value": "3"}, {"type": "uint", "bits": 128, "value": "4"}]}
+]

@@ -1,0 +1,13 @@
+[
+  {"type": "tuple", "values": []},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "uint", "bits": 7, "value": "2"}, {"type": "uint", "bits": 7, "value": "3"}]},
+  {"type": "tuple", "values": [{"type": "int", "bits": 7, "value": "1"}, {"type": "uint", "bits": 7, "value": "1"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "bool", "value": true}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "trigger"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "float", "format": "ieee64", "bits_hex": "3fe0000000000000"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 6, "value": "1"}, {"type": "uint", "bits": 7, "value": "1"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "uint", "bits": 1, "value": "1"}]},
+  {"type": "tuple", "values": [{"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}]}, {"type": "uint", "bits": 7, "value": "1"}]},
+  {"type": "tuple", "values": [{"type": "uint", "bits": 7, "value": "1"}, {"type": "text", "value": "1"}]}
+]
