@@ -6,5 +6,8 @@
   Claude replies to Codex's skeleton, and Codex reviews that reply. The decisions are recorded in
   [task 006](../../tasks/006-control-protocols.md), "K1 design".
 
+- `07`–`12`: K1-PR1 (contract with addendum r1, Codex briefs and reports, Claude case brief and
+  report, written without reading the library).
+
 Transcripts are verbatim except that trailing whitespace was stripped, the home directory is shown
 as `~`, and markdown links were turned into plain text. This is a design consult, not a gate review.

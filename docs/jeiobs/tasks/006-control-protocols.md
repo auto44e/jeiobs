@@ -321,3 +321,17 @@ ports); the exact `ControlValue`
 tuple nesting limits; the OSC address-pattern fan-out cap number; the default endpoint quota and
 queue sizes; whether transforms need per-route state (for example smoothing); how `ParameterChanges`
 preallocation for VST3 is sized (A7); the policy table defaults beyond the ones in A1.
+
+## Progress
+
+- **K1-PR1** (2026-11-17): `shared/jeiobs-control/` (C++17, no Qt, no libobs): exact tagged values,
+  addresses and patterns, wire envelope, events and principals, capability classes (A15), the
+  `mappings.json` v1 schema and validator, and the compile checks (hard deny, wildcard on privileged
+  targets, fan-out cap 64, ambiguous merge, cycles), with the `jc-check` CLI. It settles the "Open
+  before K1-PR1" limits (contract in `debates/006-control-protocols/07-k1pr1-contract.md`). Codex
+  wrote the library and Claude the black-box cases blind; the cases decided eight readings
+  (contract r1), and AddressSanitizer found a recursive cycle check that overflowed the stack on a
+  10,000-route chain (now iterative). Linux (GCC): `jc-unit` and `jc-cases` (916 case lines) pass,
+  also under ASan and UBSan. Not yet in CI: the library needs its own workflow job (owner-merged
+  `.github` change).
+- Next: K1-PR2 (transform execution with property tests), then PR3 (headless runtime).
