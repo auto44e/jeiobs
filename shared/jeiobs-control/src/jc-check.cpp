@@ -13,6 +13,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -44,33 +46,41 @@ void PrintError(const Error &error)
 	std::cout << '\n';
 }
 
-bool ReadFile(const std::string &path, std::string &bytes)
+Jeiobs::Control::Result<std::string> ReadFile(const std::string &path)
 {
 	try {
 		const std::filesystem::path filesystem_path = std::filesystem::u8path(path);
 		std::error_code status_error;
 		const std::filesystem::file_status status = std::filesystem::status(filesystem_path, status_error);
 		if (status_error || !std::filesystem::is_regular_file(status)) {
-			return false;
+			return {{}, {ErrorCode::Io, {}}};
 		}
 		std::error_code size_error;
 		const std::uintmax_t size = std::filesystem::file_size(filesystem_path, size_error);
-		if (size_error || size > kMappingBytes || size > std::numeric_limits<std::size_t>::max()) {
-			return false;
+		if (size_error) {
+			return {{}, {ErrorCode::Io, {}}};
+		}
+		if (size > kMappingBytes) {
+			return {{}, {ErrorCode::Limit, "event"}};
+		}
+		if (size > std::numeric_limits<std::size_t>::max()) {
+			return {{}, {ErrorCode::Limit, "event"}};
 		}
 		std::ifstream input;
 		input.open(filesystem_path, std::ios::in | std::ios::binary);
 		if (!input.is_open()) {
-			return false;
+			return {{}, {ErrorCode::Io, {}}};
 		}
-		bytes.assign(static_cast<std::size_t>(size), '\0');
+		std::string bytes(static_cast<std::size_t>(size), '\0');
 		if (!bytes.empty()) {
 			input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-			return input.gcount() == static_cast<std::streamsize>(bytes.size());
+			if (input.gcount() != static_cast<std::streamsize>(bytes.size())) {
+				return {{}, {ErrorCode::Io, {}}};
+			}
 		}
-		return true;
+		return {std::move(bytes), {}};
 	} catch (...) {
-		return false;
+		return {{}, {ErrorCode::Io, {}}};
 	}
 }
 
@@ -150,11 +160,12 @@ int CheckMatch(const std::string &mapping_path, const std::string &event_path)
 		return 1;
 	}
 	std::string bytes;
-	if (!ReadFile(event_path, bytes)) {
-		PrintError({ErrorCode::Schema, "event"});
+	auto event_bytes = ReadFile(event_path);
+	if (!event_bytes.ok()) {
+		PrintError(event_bytes.error);
 		return 1;
 	}
-	const auto event = Jeiobs::Control::ParseEvent(bytes);
+	const auto event = Jeiobs::Control::ParseEvent(*event_bytes.value);
 	if (!event.ok()) {
 		PrintError(event.error);
 		return 1;
@@ -233,6 +244,26 @@ bool ParseFloatRaw(const Json &document, Jeiobs::Control::FloatFormat &format, s
 		raw = (raw << 4U) | static_cast<std::uint64_t>(nibble);
 	}
 	format = format_name == "ieee32" ? Jeiobs::Control::FloatFormat::Ieee32 : Jeiobs::Control::FloatFormat::Ieee64;
+	return true;
+}
+
+bool IsIntegerLiteral(std::string_view value)
+{
+	if (value.empty()) {
+		return false;
+	}
+	std::size_t start = 0U;
+	if (value[0] == '+' || value[0] == '-') {
+		start = 1U;
+	}
+	if (start == value.size()) {
+		return false;
+	}
+	for (std::size_t index = start; index < value.size(); ++index) {
+		if (value[index] < '0' || value[index] > '9') {
+			return false;
+		}
+	}
 	return true;
 }
 
@@ -329,27 +360,169 @@ Jeiobs::Control::Result<Value> ParseValue(const Json &document)
 	return ParseValueAt(document, 1U);
 }
 
-bool IsIntegerLiteral(std::string_view value)
+bool ParseDoubleArgument(std::string_view argument, double &result)
 {
-	if (value.empty()) {
-		return false;
+	if (argument == "inf" || argument == "+inf") {
+		result = std::numeric_limits<double>::infinity();
+		return true;
 	}
-	std::size_t start = 0U;
-	if (value[0] == '+' || value[0] == '-') {
-		start = 1U;
+	if (argument == "-inf") {
+		result = -std::numeric_limits<double>::infinity();
+		return true;
 	}
-	if (start == value.size()) {
-		return false;
+	if (argument == "nan" || argument == "+nan" || argument == "-nan") {
+		result = std::numeric_limits<double>::quiet_NaN();
+		return true;
 	}
-	for (std::size_t index = start; index < value.size(); ++index) {
-		if (value[index] < '0' || value[index] > '9') {
-			return false;
-		}
-	}
-	return true;
+	std::string text(argument);
+	char *end = nullptr;
+	errno = 0;
+	result = std::strtod(text.c_str(), &end);
+	return end != text.c_str() && end == text.c_str() + text.size();
 }
 
-int CheckValue(const std::string &operation, const std::string &value_bytes)
+std::string UInt128Decimal(Jeiobs::Control::UInt128 value)
+{
+	if (value.high == 0U && value.low == 0U) {
+		return "0";
+	}
+	std::string result;
+	while (value.high != 0U || value.low != 0U) {
+		Jeiobs::Control::UInt128 quotient;
+		unsigned int remainder = 0U;
+		for (int bit = 127; bit >= 0; --bit) {
+			const bool set = bit >= 64 ? ((value.high >> (bit - 64)) & 1U) != 0U
+						   : ((value.low >> bit) & 1U) != 0U;
+			remainder = remainder * 2U + (set ? 1U : 0U);
+			if (remainder >= 10U) {
+				remainder -= 10U;
+				if (bit >= 64) {
+					quotient.high |= std::uint64_t(1U) << (bit - 64);
+				} else {
+					quotient.low |= std::uint64_t(1U) << bit;
+				}
+			}
+		}
+		result.push_back(static_cast<char>('0' + remainder));
+		value = quotient;
+	}
+	std::reverse(result.begin(), result.end());
+	return result;
+}
+
+Jeiobs::Control::UInt128 IntMagnitude(const Value &value)
+{
+	Jeiobs::Control::UInt128 magnitude{value.intRaw().high, value.intRaw().low};
+	if (value.widthBits() <= 64U) {
+		magnitude.high = 0U;
+		if (value.widthBits() < 64U) {
+			magnitude.low &= (std::uint64_t(1U) << value.widthBits()) - 1U;
+		}
+	} else if (value.widthBits() < 128U) {
+		magnitude.high &= (std::uint64_t(1U) << (value.widthBits() - 64U)) - 1U;
+	}
+	const bool negative = value.widthBits() <= 64U
+				      ? (value.intRaw().low & (std::uint64_t(1U) << (value.widthBits() - 1U))) != 0U
+				      : (value.intRaw().high & (std::uint64_t(1U) << (value.widthBits() - 65U))) != 0U;
+	if (!negative) {
+		return magnitude;
+	}
+	magnitude.high = ~magnitude.high;
+	magnitude.low = ~magnitude.low;
+	++magnitude.low;
+	if (magnitude.low == 0U) {
+		++magnitude.high;
+	}
+	if (value.widthBits() <= 64U) {
+		magnitude.high = 0U;
+		if (value.widthBits() < 64U) {
+			magnitude.low &= (std::uint64_t(1U) << value.widthBits()) - 1U;
+		}
+	} else if (value.widthBits() < 128U) {
+		magnitude.high &= (std::uint64_t(1U) << (value.widthBits() - 64U)) - 1U;
+	}
+	return magnitude;
+}
+
+std::string Int128Decimal(const Value &value)
+{
+	const bool negative = value.widthBits() <= 64U
+				      ? (value.intRaw().low & (std::uint64_t(1U) << (value.widthBits() - 1U))) != 0U
+				      : (value.intRaw().high & (std::uint64_t(1U) << (value.widthBits() - 65U))) != 0U;
+	std::string result = UInt128Decimal(
+		negative ? IntMagnitude(value) : Jeiobs::Control::UInt128{value.intRaw().high, value.intRaw().low});
+	if (negative && result != "0") {
+		result.insert(result.begin(), '-');
+	}
+	return result;
+}
+
+std::string HexValue(std::uint64_t value, std::size_t digits)
+{
+	std::string result(digits, '0');
+	const char *hex = "0123456789abcdef";
+	for (std::size_t index = digits; index > 0U; --index) {
+		result[index - 1U] = hex[value & 0xfU];
+		value >>= 4U;
+	}
+	return result;
+}
+
+Json ValueJson(const Value &value)
+{
+	Json result = Json::object();
+	switch (value.kind()) {
+	case Jeiobs::Control::ValueKind::Trigger:
+		result["type"] = "trigger";
+		break;
+	case Jeiobs::Control::ValueKind::Bool:
+		result["type"] = "bool";
+		result["value"] = value.boolValue();
+		break;
+	case Jeiobs::Control::ValueKind::UInt:
+		result["bits"] = value.widthBits();
+		result["type"] = "uint";
+		result["value"] = UInt128Decimal(value.uintRaw());
+		break;
+	case Jeiobs::Control::ValueKind::Int:
+		result["bits"] = value.widthBits();
+		result["type"] = "int";
+		result["value"] = Int128Decimal(value);
+		break;
+	case Jeiobs::Control::ValueKind::FloatBits:
+		result["bits_hex"] = HexValue(value.floatRaw(),
+					      value.floatFormat() == Jeiobs::Control::FloatFormat::Ieee32 ? 8U : 16U);
+		result["format"] = value.floatFormat() == Jeiobs::Control::FloatFormat::Ieee32 ? "ieee32" : "ieee64";
+		result["type"] = "float";
+		break;
+	case Jeiobs::Control::ValueKind::Text:
+		result["type"] = "text";
+		result["value"] = value.text();
+		break;
+	case Jeiobs::Control::ValueKind::Blob: {
+		std::string hex;
+		hex.reserve(value.blob().size() * 2U);
+		for (const std::uint8_t byte : value.blob()) {
+			hex += HexValue(byte, 2U);
+		}
+		result["hex"] = std::move(hex);
+		result["type"] = "blob";
+		break;
+	}
+	case Jeiobs::Control::ValueKind::Tuple:
+		result["type"] = "tuple";
+		result["values"] = Json::array();
+		for (const Value &child : value.tuple()) {
+			result["values"].push_back(ValueJson(child));
+		}
+		break;
+	case Jeiobs::Control::ValueKind::Invalid:
+		break;
+	}
+	return result;
+}
+
+int CheckValue(const std::string &operation, const std::string &value_bytes, std::string_view double_argument = {})
 {
 	try {
 		Json document = Json::parse(value_bytes, nullptr, false);
@@ -389,6 +562,20 @@ int CheckValue(const std::string &operation, const std::string &value_bytes)
 			std::cout << std::setprecision(17) << std::defaultfloat << value.value->AsDouble() << '\n';
 			return 0;
 		}
+		if (operation == "fromdouble") {
+			double number = 0.0;
+			if (!ParseDoubleArgument(double_argument, number)) {
+				PrintError({ErrorCode::Value, {}});
+				return 1;
+			}
+			const auto converted = Value::FromDoubleInCodeSpace(*value.value, number);
+			if (!converted.ok()) {
+				PrintError(converted.error);
+				return 1;
+			}
+			std::cout << ValueJson(*converted.value).dump() << '\n';
+			return 0;
+		}
 		if (operation == "limits") {
 			std::cout << "OK\n";
 			return 0;
@@ -403,7 +590,8 @@ int CheckValue(const std::string &operation, const std::string &value_bytes)
 
 void PrintUsage()
 {
-	std::cerr << "usage: jc-check validate FILE | compile FILE | match FILE EVENT.json | value OP VALUE_JSON\n";
+	std::cerr << "usage: jc-check validate FILE | compile FILE | match FILE EVENT.json | value OP VALUE_JSON"
+		     " [DOUBLE]\n";
 }
 
 } // namespace
@@ -420,8 +608,11 @@ int Run(int argc, char **argv)
 		if (argc == 4 && std::string_view(argv[1]) == "match") {
 			return CheckMatch(argv[2], argv[3]);
 		}
-		if ((argc == 4 || argc == 5) && std::string_view(argv[1]) == "value") {
+		if (argc == 4 && std::string_view(argv[1]) == "value" && std::string_view(argv[2]) != "fromdouble") {
 			return CheckValue(argv[2], argv[3]);
+		}
+		if (argc == 5 && std::string_view(argv[1]) == "value" && std::string_view(argv[2]) == "fromdouble") {
+			return CheckValue(argv[2], argv[3], argv[4]);
 		}
 		PrintUsage();
 		return 2;

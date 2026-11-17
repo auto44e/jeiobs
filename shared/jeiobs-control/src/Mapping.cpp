@@ -1689,6 +1689,9 @@ Result<ControlAddress> ParseEventAddress(std::string_view bytes)
 
 Result<ParsedEvent> ParseEvent(std::string_view bytes)
 {
+	if (bytes.size() > Limits::kMappingBytes) {
+		return {{}, MakeError(ErrorCode::Limit, "event")};
+	}
 	auto document = ParseJson(bytes);
 	if (!document.ok()) {
 		return {{}, document.error};

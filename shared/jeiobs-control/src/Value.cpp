@@ -86,6 +86,26 @@ bool IsPositiveDecimal(std::string_view value)
 	return has_digit && has_nonzero;
 }
 
+bool IsIntegerDecimal(std::string_view value)
+{
+	if (value.empty()) {
+		return false;
+	}
+	std::size_t start = 0U;
+	if (value[0] == '+' || value[0] == '-') {
+		start = 1U;
+	}
+	if (start == value.size()) {
+		return false;
+	}
+	for (std::size_t index = start; index < value.size(); ++index) {
+		if (value[index] < '0' || value[index] > '9') {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool IsLess(UInt128 left, UInt128 right) noexcept
 {
 	return left.high < right.high || (left.high == right.high && left.low < right.low);
@@ -524,6 +544,12 @@ Result<Value> Value::MakeTuple(std::vector<Value> values, std::string unit)
 
 Result<Value> Value::MakeUIntDecimal(unsigned int width_bits, const std::string &decimal, std::string unit)
 {
+	if (width_bits == 0U || width_bits > 128U) {
+		return {{}, MakeError(ErrorCode::Value)};
+	}
+	if (!decimal.empty() && decimal[0] == '-' && IsIntegerDecimal(decimal)) {
+		return {{}, MakeError(ErrorCode::Limit, "value")};
+	}
 	auto raw = ParseUnsignedDecimal(decimal);
 	if (!raw.ok()) {
 		return {{}, raw.error};
@@ -613,14 +639,21 @@ Result<Value> Value::FromDoubleInCodeSpace(const Value &value, double number)
 			const UInt128 raw = negative ? TwosComplement(magnitude) : magnitude;
 			return PreserveRelative(MakeInt(value.width_bits_, {raw.high, raw.low}, value.unit_), value);
 		}
-		case ValueKind::FloatBits:
+		case ValueKind::FloatBits: {
 			if (value.float_format_ == FloatFormat::Ieee32) {
 				float converted = static_cast<float>(number);
+				if (!std::isfinite(converted)) {
+					converted = std::signbit(number) ? -std::numeric_limits<float>::max()
+									 : std::numeric_limits<float>::max();
+				}
 				return PreserveRelative(
 					MakeFloatBits(value.float_format_, Float32Bits(converted), value.unit_), value);
 			}
-			return PreserveRelative(MakeFloatBits(value.float_format_, DoubleBits(number), value.unit_),
+			const double converted =
+				std::isinf(number) ? std::copysign(std::numeric_limits<double>::max(), number) : number;
+			return PreserveRelative(MakeFloatBits(value.float_format_, DoubleBits(converted), value.unit_),
 						value);
+		}
 		case ValueKind::Text:
 			return MakeText(value.text_, value.unit_);
 		case ValueKind::Blob:
