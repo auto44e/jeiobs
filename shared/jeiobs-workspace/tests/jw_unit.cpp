@@ -471,9 +471,19 @@ void TestReviewR3()
 	JW_CHECK(versioned_source.bytes.find("u:p") == std::string::npos);
 	JW_CHECK(versioned_source.bytes.find("SECRET") == std::string::npos);
 
+	const auto additional_sources = Jeiobs::Workspace::Redact(
+		"collection",
+		R"json({"groups":[{"id":"browser_source","settings":{"url":"https://u:p@group/?token=GROUP"}}],"DesktopAudioDevice1":{"id":"ffmpeg_source","settings":{"input":"rtmp://u:p@audio/live?key=AUDIO"}},"AuxAudioDevice4":{"id":"vlc_source","settings":{"playlist":[{"value":"srt://u:p@vlc:9?streamid=VLC"}]}}})json");
+	JW_CHECK(additional_sources.ok());
+	JW_CHECK(additional_sources.bytes.find("u:p@") == std::string::npos);
+	JW_CHECK(additional_sources.bytes.find("GROUP") == std::string::npos);
+	JW_CHECK(additional_sources.bytes.find("AUDIO") == std::string::npos);
+	JW_CHECK(additional_sources.bytes.find("VLC") == std::string::npos);
+
 	const std::vector<std::string> ini_inputs = {
-		"[Twitch] ;x\nToken=S\n", "[Twitch\nToken=S\n",   "[Twitch]\rToken=S\n",
-		"[Twitch]\n\rToken=S\n",  "[Twitch]]\nToken=S\n",
+		"[Twitch] ;x\nToken=S\n", "[Twitch\nToken=S\n",      "[Twitch]\rToken=S\n",    "[Twitch]\n\rToken=S\n",
+		"[Twitch]]\nToken=S\n",   "[Twitch]\n[]\nToken=S\n", "Token=S\n[Twitch] ;x\n", "[\nToken=S\n",
+		"[]\nToken=S\n",          "[ ]\nToken=S\n",
 	};
 	for (const std::string &input : ini_inputs) {
 		const auto result = Jeiobs::Workspace::Redact("profile.basic", input);
@@ -481,6 +491,26 @@ void TestReviewR3()
 		JW_CHECK(result.bytes.find("Token=S") == std::string::npos);
 		JW_CHECK(!result.report.redactions.empty());
 	}
+
+	const std::string long_section_input = "[Twitch" + std::string(1019U, 'x') + "]\nToken=S\n";
+	const auto long_section = Jeiobs::Workspace::Redact("profile.basic", long_section_input);
+	JW_CHECK(long_section.ok());
+	JW_CHECK(long_section.report.fidelity == "opaque-unreviewed");
+	JW_CHECK(long_section.bytes.find("Token=S") == std::string::npos);
+	JW_CHECK(long_section.report.redactions.size() == 1U);
+	JW_CHECK_EQ(long_section.report.redactions[0].pointer, "/~section-0/Token");
+
+	std::string oversized_report_url = "https://host/?";
+	for (std::size_t index = 0U; index < 100000U; ++index) {
+		oversized_report_url += "token=x&";
+	}
+	const std::string oversized_report_document =
+		R"json({"type":"rtmp_common","settings":{"server":")json" + oversized_report_url + R"json("}})json";
+	const auto oversized_report = Jeiobs::Workspace::Redact("profile.service", oversized_report_document);
+	JW_CHECK(oversized_report.ok());
+	JW_CHECK(oversized_report.report.outcome == Jeiobs::Workspace::RedactOutcome::Omitted);
+	JW_CHECK(oversized_report.report.reason == "unparseable");
+	JW_CHECK(oversized_report.bytes.empty());
 
 	const char *previous_locale = std::setlocale(LC_NUMERIC, nullptr);
 	const std::string saved_locale = previous_locale == nullptr ? "C" : previous_locale;

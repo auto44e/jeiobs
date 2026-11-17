@@ -54,22 +54,44 @@ bool CheckResult(std::string_view input, const Jeiobs::Workspace::RedactResult &
 		return false;
 	}
 	if (result.report.outcome != Jeiobs::Workspace::RedactOutcome::Stored) {
-		return result.bytes.empty();
+		return result.bytes.empty() && result.report.reason == "unparseable";
 	}
+	if (result.report.redactions.empty()) {
+		return result.bytes == input;
+	}
+
 	std::size_t expected = input.size();
-	std::size_t previous_end = 0U;
+	std::size_t input_position = 0U;
+	std::size_t output_position = 0U;
+	bool has_effect = false;
 	bool first = true;
 	for (const Jeiobs::Workspace::Redaction &redaction : result.report.redactions) {
 		if (redaction.start > redaction.end || redaction.end > input.size() ||
-		    (!first && previous_end > redaction.start)) {
+		    (!first && input_position > redaction.start)) {
 			return false;
 		}
+		const std::size_t unchanged_size = redaction.start - input_position;
+		if (output_position + unchanged_size > result.bytes.size() ||
+		    result.bytes.compare(output_position, unchanged_size, input, input_position, unchanged_size) != 0) {
+			return false;
+		}
+		output_position += unchanged_size;
+		if (redaction.replacement_size > result.bytes.size() - output_position) {
+			return false;
+		}
+		output_position += redaction.replacement_size;
 		expected -= redaction.end - redaction.start;
 		expected += redaction.replacement_size;
-		previous_end = redaction.end;
+		has_effect = has_effect || redaction.start != redaction.end || redaction.replacement_size != 0U;
+		input_position = redaction.end;
 		first = false;
 	}
-	return expected == result.bytes.size();
+	const std::size_t suffix_size = input.size() - input_position;
+	if (output_position + suffix_size != result.bytes.size() ||
+	    result.bytes.compare(output_position, suffix_size, input, input_position, suffix_size) != 0) {
+		return false;
+	}
+	return expected == result.bytes.size() && (has_effect ? result.bytes != input : result.bytes == input);
 }
 
 } // namespace

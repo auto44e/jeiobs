@@ -154,51 +154,98 @@ IniScanResult IniScan::Scan(std::string_view bytes)
 			}
 			consume_newline(position);
 		};
+		const auto append_key = [&](std::size_t &position, std::size_t current_section) {
+			if (position >= bytes.size()) {
+				return;
+			}
+			if (bytes[position] == '#') {
+				skip_to_newline(position);
+				return;
+			}
+
+			const std::size_t key_start = position;
+			while (position < bytes.size() && bytes[position] != '=' && !IsNewline(bytes[position])) {
+				++position;
+			}
+			if (position >= bytes.size() || IsNewline(bytes[position])) {
+				consume_newline(position);
+				return;
+			}
+
+			const std::size_t equals = position++;
+			const std::size_t value_start = position;
+			while (position < bytes.size() && !IsNewline(bytes[position])) {
+				++position;
+			}
+			const std::size_t value_end = position;
+			if (key_start < equals) {
+				if (result.keys.size() >= Limits::kIniKeys) {
+					result.error = MakeError(ErrorCode::Limit, "values");
+					return;
+				}
+				IniKeyOccurrence key;
+				key.start = value_start;
+				key.end = value_end;
+				key.value_start = value_start;
+				key.value_end = value_end;
+				key.section_index = current_section;
+				key.key_start = key_start;
+				key.key_end = equals;
+				result.keys.push_back(std::move(key));
+			}
+			consume_newline(position);
+		};
 
 		while (offset < bytes.size()) {
 			skip_whitespace(offset);
 			if (offset >= bytes.size()) {
 				break;
 			}
-			if (bytes[offset] != '[') {
-				skip_to_newline(offset);
-				continue;
-			}
-
-			++offset;
-			const std::size_t name_start = offset;
-			while (offset < bytes.size() && bytes[offset] != ']' && !IsNewline(bytes[offset])) {
+			if (bytes[offset] == '[') {
 				++offset;
-			}
-			const std::size_t name_end = offset;
-			const bool has_close = offset < bytes.size() && bytes[offset] == ']';
-			if (name_start == name_end) {
-				return result;
-			}
-			if (result.sections.size() >= Limits::kIniSections) {
-				result.error = MakeError(ErrorCode::Limit, "values");
-				return result;
-			}
-			IniSectionOccurrence section;
-			section.name.assign(bytes.substr(name_start, name_end - name_start));
-			section.start = name_start;
-			section.end = name_end;
-			result.sections.push_back(std::move(section));
-			section_index = result.sections.size() - 1U;
-
-			bool exact_header = has_close;
-			if (has_close) {
-				++offset;
-			}
-			for (std::size_t trailing = offset; trailing < bytes.size() && !IsNewline(bytes[trailing]);
-			     ++trailing) {
-				if (bytes[trailing] != ' ' && bytes[trailing] != '\t') {
-					exact_header = false;
-					break;
+				const std::size_t name_start = offset;
+				while (offset < bytes.size() && bytes[offset] != ']' && !IsNewline(bytes[offset])) {
+					++offset;
 				}
-			}
-			if (!exact_header) {
-				result.uncertain = true;
+				const std::size_t name_end = offset;
+				const bool has_close = offset < bytes.size() && bytes[offset] == ']';
+				bool has_nonblank_name = false;
+				for (std::size_t index = name_start; index < name_end; ++index) {
+					if (bytes[index] != ' ' && bytes[index] != '\t') {
+						has_nonblank_name = true;
+						break;
+					}
+				}
+
+				bool exact_header = has_close && name_start < name_end && has_nonblank_name;
+				if (has_close) {
+					++offset;
+				}
+				for (std::size_t trailing = offset;
+				     trailing < bytes.size() && !IsNewline(bytes[trailing]); ++trailing) {
+					if (bytes[trailing] != ' ' && bytes[trailing] != '\t') {
+						exact_header = false;
+						break;
+					}
+				}
+				if (!exact_header) {
+					result.uncertain = true;
+				}
+
+				if (name_start < name_end) {
+					if (result.sections.size() >= Limits::kIniSections) {
+						result.error = MakeError(ErrorCode::Limit, "values");
+						return result;
+					}
+					IniSectionOccurrence section;
+					section.name.assign(bytes.substr(name_start, name_end - name_start));
+					section.start = name_start;
+					section.end = name_end;
+					result.sections.push_back(std::move(section));
+					section_index = result.sections.size() - 1U;
+				}
+			} else {
+				append_key(offset, section_index);
 			}
 
 			while (offset < bytes.size()) {
@@ -206,42 +253,10 @@ IniScanResult IniScan::Scan(std::string_view bytes)
 				if (offset >= bytes.size() || bytes[offset] == '[') {
 					break;
 				}
-				if (bytes[offset] == '#') {
-					skip_to_newline(offset);
-					continue;
+				append_key(offset, section_index);
+				if (!result.error.ok()) {
+					return result;
 				}
-
-				const std::size_t key_start = offset;
-				while (offset < bytes.size() && bytes[offset] != '=' && !IsNewline(bytes[offset])) {
-					++offset;
-				}
-				if (offset >= bytes.size() || IsNewline(bytes[offset])) {
-					consume_newline(offset);
-					continue;
-				}
-
-				const std::size_t equals = offset++;
-				const std::size_t value_start = offset;
-				while (offset < bytes.size() && !IsNewline(bytes[offset])) {
-					++offset;
-				}
-				const std::size_t value_end = offset;
-				if (key_start < equals) {
-					if (result.keys.size() >= Limits::kIniKeys) {
-						result.error = MakeError(ErrorCode::Limit, "values");
-						return result;
-					}
-					IniKeyOccurrence key;
-					key.start = value_start;
-					key.end = value_end;
-					key.value_start = value_start;
-					key.value_end = value_end;
-					key.section_index = section_index;
-					key.key_start = key_start;
-					key.key_end = equals;
-					result.keys.push_back(std::move(key));
-				}
-				consume_newline(offset);
 			}
 		}
 	} catch (...) {

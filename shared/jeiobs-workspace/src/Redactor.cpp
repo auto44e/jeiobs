@@ -35,6 +35,23 @@ struct Edit {
 	std::string replacement;
 };
 
+struct ReportBudget {
+	std::size_t bytes = 0U;
+
+	bool CanAdd(std::string_view pointer, std::string_view kind, std::size_t replacement_size)
+	{
+		if (pointer.size() > Limits::kStringBytes) {
+			return false;
+		}
+		const std::size_t item_bytes = sizeof(Edit) + pointer.size() + kind.size() + replacement_size;
+		if (item_bytes > Limits::kManifestBytes - bytes) {
+			return false;
+		}
+		bytes += item_bytes;
+		return true;
+	}
+};
+
 bool IsJsonRole(std::string_view role)
 {
 	return role == "profile.service" || role == "profile.service.bak" || role == "module.obs-websocket" ||
@@ -536,9 +553,12 @@ std::vector<Offset> BuildBoundaryMap(std::string_view bytes, const JsonValueOccu
 	return boundaries;
 }
 
-void AddEdit(std::vector<Edit> &edits, std::string_view pointer, std::string_view kind, std::size_t start,
-	     std::size_t end, std::string replacement, bool has_was = false, bool was = false)
+bool AddEdit(std::vector<Edit> &edits, ReportBudget &budget, std::string_view pointer, std::string_view kind,
+	     std::size_t start, std::size_t end, std::string replacement, bool has_was = false, bool was = false)
 {
+	if (!budget.CanAdd(pointer, kind, replacement.size())) {
+		return false;
+	}
 	Edit edit;
 	edit.report.pointer = std::string(pointer);
 	edit.report.kind = std::string(kind);
@@ -549,20 +569,21 @@ void AddEdit(std::vector<Edit> &edits, std::string_view pointer, std::string_vie
 	edit.report.was = was;
 	edit.replacement = std::move(replacement);
 	edits.push_back(std::move(edit));
+	return true;
 }
 
-void AddJsonStringEdit(std::vector<Edit> &edits, const JsonValueOccurrence &value, std::string_view pointer,
-		       std::string_view kind, std::string replacement)
+bool AddJsonStringEdit(std::vector<Edit> &edits, ReportBudget &budget, const JsonValueOccurrence &value,
+		       std::string_view pointer, std::string_view kind, std::string replacement)
 {
-	AddEdit(edits, pointer, kind, value.content_start, value.content_end, std::move(replacement));
+	return AddEdit(edits, budget, pointer, kind, value.content_start, value.content_end, std::move(replacement));
 }
 
-void AddJsonUrlEdits(std::vector<Edit> &edits, std::string_view bytes, const JsonValueOccurrence &value,
-		     std::string_view pointer)
+bool AddJsonUrlEdits(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes,
+		     const JsonValueOccurrence &value, std::string_view pointer)
 {
 	const std::vector<DecodedRange> ranges = UrlRanges(value.string_value);
-	const std::size_t escape = bytes.find('\\', value.content_start);
-	const bool has_escape = escape != std::string_view::npos && escape < value.content_end;
+	const std::string_view raw_value = bytes.substr(value.content_start, value.content_end - value.content_start);
+	const bool has_escape = raw_value.find('\\') != std::string_view::npos;
 	std::vector<Offset> boundaries;
 	if (has_escape) {
 		boundaries = BuildBoundaryMap(bytes, value);
@@ -574,12 +595,16 @@ void AddJsonUrlEdits(std::vector<Edit> &edits, std::string_view bytes, const Jso
 			start = boundaries[range.start];
 			end = boundaries[range.end];
 		}
-		AddEdit(edits, pointer, "url_credential", start, end, {});
+		if (!AddEdit(edits, budget, pointer, "url_credential", start, end, {})) {
+			return false;
+		}
 	}
+	return true;
 }
 
-void AddJsonUrlValues(std::vector<Edit> &edits, std::string_view bytes, const JsonScanResult &scan,
-		      const std::vector<std::size_t> &values, std::string_view pointer, std::size_t &unreviewed)
+bool AddJsonUrlValues(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes,
+		      const JsonScanResult &scan, const std::vector<std::size_t> &values, std::string_view pointer,
+		      std::size_t &unreviewed)
 {
 	for (const std::size_t value_index : values) {
 		const JsonValueOccurrence &value = scan.values[value_index];
@@ -587,11 +612,14 @@ void AddJsonUrlValues(std::vector<Edit> &edits, std::string_view bytes, const Js
 			++unreviewed;
 			continue;
 		}
-		AddJsonUrlEdits(edits, bytes, value, pointer);
+		if (!AddJsonUrlEdits(edits, budget, bytes, value, pointer)) {
+			return false;
+		}
 	}
+	return true;
 }
 
-void AddJsonStringAt(std::vector<Edit> &edits, const JsonScanResult &scan, const JsonIndex &index,
+bool AddJsonStringAt(std::vector<Edit> &edits, ReportBudget &budget, const JsonScanResult &scan, const JsonIndex &index,
 		     std::string_view pointer, std::string_view kind, std::size_t &unreviewed)
 {
 	for (const std::size_t value_index : FindValues(index, pointer)) {
@@ -600,25 +628,32 @@ void AddJsonStringAt(std::vector<Edit> &edits, const JsonScanResult &scan, const
 			++unreviewed;
 			continue;
 		}
-		AddJsonStringEdit(edits, value, pointer, kind, {});
+		if (!AddJsonStringEdit(edits, budget, value, pointer, kind, {})) {
+			return false;
+		}
 	}
+	return true;
 }
 
-void RedactService(std::vector<Edit> &edits, std::string_view bytes, const JsonScanResult &scan, const JsonIndex &index,
-		   std::size_t &unreviewed)
+bool RedactService(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes, const JsonScanResult &scan,
+		   const JsonIndex &index, std::size_t &unreviewed)
 {
 	const JsonValueOccurrence *type = FindFirstValue(index, "/type");
 	if (type == nullptr || type->kind != JsonValueKind::String || type->string_value != "rtmp_common") {
 		++unreviewed;
 	}
-	AddJsonStringAt(edits, scan, index, "/settings/key", "stream_key", unreviewed);
-	AddJsonStringAt(edits, scan, index, "/settings/bearer_token", "bearer_token", unreviewed);
-	AddJsonStringAt(edits, scan, index, "/settings/username", "rtmp_auth", unreviewed);
-	AddJsonStringAt(edits, scan, index, "/settings/password", "rtmp_auth", unreviewed);
-	AddJsonUrlValues(edits, bytes, scan, FindValues(index, "/settings/server"), "/settings/server", unreviewed);
+	if (!AddJsonStringAt(edits, budget, scan, index, "/settings/key", "stream_key", unreviewed) ||
+	    !AddJsonStringAt(edits, budget, scan, index, "/settings/bearer_token", "bearer_token", unreviewed) ||
+	    !AddJsonStringAt(edits, budget, scan, index, "/settings/username", "rtmp_auth", unreviewed) ||
+	    !AddJsonStringAt(edits, budget, scan, index, "/settings/password", "rtmp_auth", unreviewed) ||
+	    !AddJsonUrlValues(edits, budget, bytes, scan, FindValues(index, "/settings/server"), "/settings/server",
+			      unreviewed)) {
+		return false;
+	}
+	return true;
 }
 
-void RedactWebsocket(std::vector<Edit> &edits, const JsonScanResult &scan, const JsonIndex &index,
+bool RedactWebsocket(std::vector<Edit> &edits, ReportBudget &budget, const JsonScanResult &scan, const JsonIndex &index,
 		     std::string_view placeholder, std::size_t &unreviewed)
 {
 	static constexpr std::string_view kAllowed[] = {"first_load",     "server_enabled", "server_port",
@@ -645,15 +680,22 @@ void RedactWebsocket(std::vector<Edit> &edits, const JsonScanResult &scan, const
 		if (value.kind != JsonValueKind::String) {
 			++unreviewed;
 		} else {
-			AddJsonStringEdit(edits, value, "/server_password", "ws_password", std::string(placeholder));
+			if (!AddJsonStringEdit(edits, budget, value, "/server_password", "ws_password",
+					       std::string(placeholder))) {
+				return false;
+			}
 		}
 	}
 	for (const std::size_t value_index : FindValues(index, "/auth_required")) {
 		const JsonValueOccurrence &value = scan.values[value_index];
 		if (value.kind == JsonValueKind::Boolean && !value.boolean_value) {
-			AddEdit(edits, "/auth_required", "forced", value.start, value.end, "true", true, false);
+			if (!AddEdit(edits, budget, "/auth_required", "forced", value.start, value.end, "true", true,
+				     false)) {
+				return false;
+			}
 		}
 	}
+	return true;
 }
 
 std::string_view SourceType(const JsonScanResult &scan, const JsonIndex &index, std::size_t source_index,
@@ -678,53 +720,49 @@ std::string_view SourceType(const JsonScanResult &scan, const JsonIndex &index, 
 	return id->string_value;
 }
 
-void RedactSource(std::vector<Edit> &edits, std::string_view bytes, const JsonScanResult &scan, const JsonIndex &index,
-		  std::size_t source_index, std::string_view type, std::size_t &unreviewed)
+bool RedactSource(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes, const JsonScanResult &scan,
+		  const JsonIndex &index, std::size_t source_index, std::string_view type, std::size_t &unreviewed)
 {
 	const std::string settings_pointer = JsonPointer(scan, source_index) + "/settings";
 	const JsonValueOccurrence *settings = FindFirstValue(index, settings_pointer);
 	if (settings == nullptr || settings->kind != JsonValueKind::Object) {
-		return;
+		return true;
 	}
 	const auto add_url_child = [&](std::string_view key) {
 		const std::string pointer = settings_pointer + "/" + std::string(key);
-		AddJsonUrlValues(edits, bytes, scan, FindValues(index, pointer), pointer, unreviewed);
+		return AddJsonUrlValues(edits, budget, bytes, scan, FindValues(index, pointer), pointer, unreviewed);
 	};
 	if (type == "browser_source") {
-		add_url_child("url");
+		return add_url_child("url");
 	} else if (type == "ffmpeg_source") {
-		add_url_child("input");
-		add_url_child("ffmpeg_options");
+		return add_url_child("input") && add_url_child("ffmpeg_options");
 	} else if (type == "vlc_source") {
 		const std::string playlist_pointer = settings_pointer + "/playlist";
 		const JsonValueOccurrence *playlist = FindFirstValue(index, playlist_pointer);
 		if (playlist == nullptr || playlist->kind != JsonValueKind::Array) {
-			return;
+			return true;
 		}
 		for (const std::size_t item_index :
 		     index.ArrayChildren(static_cast<std::size_t>(playlist - scan.values.data()))) {
 			const std::string value_pointer = JsonPointer(scan, item_index) + "/value";
-			AddJsonUrlValues(edits, bytes, scan, FindValues(index, value_pointer), value_pointer,
-					 unreviewed);
+			if (!AddJsonUrlValues(edits, budget, bytes, scan, FindValues(index, value_pointer),
+					      value_pointer, unreviewed)) {
+				return false;
+			}
 		}
 	}
+	return true;
 }
 
-void RedactCollection(std::vector<Edit> &edits, std::string_view bytes, const JsonScanResult &scan,
-		      const JsonIndex &index, std::size_t &unreviewed)
+bool RedactCollection(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes,
+		      const JsonScanResult &scan, const JsonIndex &index, std::size_t &unreviewed)
 {
-	const JsonValueOccurrence *sources = FindFirstValue(index, "/sources");
-	std::vector<std::size_t> source_values;
-	if (sources != nullptr && sources->kind == JsonValueKind::Array) {
-		source_values = index.ArrayChildren(static_cast<std::size_t>(sources - scan.values.data()));
-	}
 	std::size_t unknown_sources = 0U;
 	std::size_t non_string_registry = 0U;
-
-	for (const std::size_t source_index : source_values) {
+	const auto process_source = [&](std::size_t source_index) {
 		if (scan.values[source_index].kind != JsonValueKind::Object) {
 			++unknown_sources;
-			continue;
+			return true;
 		}
 		bool non_string = false;
 		const std::string_view type = SourceType(scan, index, source_index, non_string);
@@ -735,10 +773,46 @@ void RedactCollection(std::vector<Edit> &edits, std::string_view bytes, const Js
 			++unknown_sources;
 		}
 		if (type == "browser_source" || type == "ffmpeg_source" || type == "vlc_source") {
-			RedactSource(edits, bytes, scan, index, source_index, type, non_string_registry);
+			if (!RedactSource(edits, budget, bytes, scan, index, source_index, type, non_string_registry)) {
+				return false;
+			}
+		}
+		return true;
+	};
+	const auto process_array = [&](std::string_view pointer) {
+		const JsonValueOccurrence *array = FindFirstValue(index, pointer);
+		if (array == nullptr) {
+			return true;
+		}
+		if (array->kind != JsonValueKind::Array) {
+			++unknown_sources;
+			return true;
+		}
+		for (const std::size_t source_index :
+		     index.ArrayChildren(static_cast<std::size_t>(array - scan.values.data()))) {
+			if (!process_source(source_index)) {
+				return false;
+			}
+		}
+		return true;
+	};
+	if (!process_array("/sources") || !process_array("/groups")) {
+		return false;
+	}
+
+	static constexpr std::string_view kAudioDeviceKeys[] = {
+		"/DesktopAudioDevice1", "/DesktopAudioDevice2", "/AuxAudioDevice1",
+		"/AuxAudioDevice2",     "/AuxAudioDevice3",     "/AuxAudioDevice4",
+	};
+	for (const std::string_view pointer : kAudioDeviceKeys) {
+		const JsonValueOccurrence *audio_device = FindFirstValue(index, pointer);
+		if (audio_device != nullptr &&
+		    !process_source(static_cast<std::size_t>(audio_device - scan.values.data()))) {
+			return false;
 		}
 	}
 	unreviewed += std::max<std::size_t>(1U, unknown_sources + non_string_registry);
+	return true;
 }
 
 bool IsAllowedBasicSection(std::string_view section)
@@ -765,35 +839,54 @@ std::string_view IniKey(std::string_view bytes, const IniKeyOccurrence &key)
 	return bytes.substr(key.key_start, key.key_end - key.key_start);
 }
 
-std::string IniPointer(std::string_view section, std::string_view key)
+bool AppendPointerToken(std::string &pointer, std::string_view token)
 {
-	std::string pointer;
-	const auto append = [&pointer](std::string_view token) {
-		pointer.push_back('/');
-		for (const char character : token) {
-			if (character == '~') {
-				pointer += "~0";
-			} else if (character == '/') {
-				pointer += "~1";
-			} else {
-				pointer.push_back(character);
-			}
+	pointer.push_back('/');
+	for (const char character : token) {
+		if (character == '~') {
+			pointer += "~0";
+		} else if (character == '/') {
+			pointer += "~1";
+		} else {
+			pointer.push_back(character);
 		}
-	};
-	append(section);
-	append(key);
-	return pointer;
+		if (pointer.size() > Limits::kStringBytes) {
+			return false;
+		}
+	}
+	return true;
 }
 
-void AddIniUrlEdit(std::vector<Edit> &edits, std::string_view bytes, const IniScanResult &scan,
+bool IniPointer(const IniScanResult &scan, const IniKeyOccurrence &key, std::string_view bytes, std::string &pointer)
+{
+	pointer.clear();
+	const std::string_view section = IniSection(scan, key);
+	if (section.size() > 1024U) {
+		pointer = "/~section-" + std::to_string(key.section_index);
+		if (pointer.size() > Limits::kStringBytes) {
+			return false;
+		}
+	} else if (!AppendPointerToken(pointer, section)) {
+		return false;
+	}
+	return AppendPointerToken(pointer, IniKey(bytes, key));
+}
+
+bool AddIniUrlEdit(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes, const IniScanResult &scan,
 		   const IniKeyOccurrence &key)
 {
 	const std::string_view value = bytes.substr(key.value_start, key.value_end - key.value_start);
-	const std::string pointer = IniPointer(IniSection(scan, key), IniKey(bytes, key));
-	for (const DecodedRange range : UrlRanges(value)) {
-		AddEdit(edits, pointer, "url_credential", key.value_start + range.start, key.value_start + range.end,
-			{});
+	std::string pointer;
+	if (!IniPointer(scan, key, bytes, pointer)) {
+		return false;
 	}
+	for (const DecodedRange range : UrlRanges(value)) {
+		if (!AddEdit(edits, budget, pointer, "url_credential", key.value_start + range.start,
+			     key.value_start + range.end, {})) {
+			return false;
+		}
+	}
+	return true;
 }
 
 bool StartsWith(std::string_view value, std::string_view prefix)
@@ -801,7 +894,8 @@ bool StartsWith(std::string_view value, std::string_view prefix)
 	return value.size() >= prefix.size() && value.substr(0U, prefix.size()) == prefix;
 }
 
-void RedactBasic(std::vector<Edit> &edits, std::string_view bytes, const IniScanResult &scan, std::size_t &unreviewed)
+bool RedactBasic(std::vector<Edit> &edits, ReportBudget &budget, std::string_view bytes, const IniScanResult &scan,
+		 std::size_t &unreviewed)
 {
 	std::set<std::string_view> unknown_sections;
 	for (const IniSectionOccurrence &section : scan.sections) {
@@ -821,15 +915,22 @@ void RedactBasic(std::vector<Edit> &edits, std::string_view bytes, const IniScan
 		const bool oauth_section = StartsWith(section, "Twitch") || StartsWith(section, "Restream") ||
 					   StartsWith(section, "YouTube");
 		if (oauth_name && (oauth_section || scan.uncertain)) {
-			AddEdit(edits, IniPointer(section, name), "oauth_token", key.value_start, key.value_end, {});
+			std::string pointer;
+			if (!IniPointer(scan, key, bytes, pointer) ||
+			    !AddEdit(edits, budget, pointer, "oauth_token", key.value_start, key.value_end, {})) {
+				return false;
+			}
 		} else if (section == "AdvOut" && name == "FFURL" && key.value_start != key.value_end) {
 			if (!ffurl_counted) {
 				++unreviewed;
 				ffurl_counted = true;
 			}
-			AddIniUrlEdit(edits, bytes, scan, key);
+			if (!AddIniUrlEdit(edits, budget, bytes, scan, key)) {
+				return false;
+			}
 		}
 	}
+	return true;
 }
 
 void RedactUser(std::string_view bytes, const IniScanResult &scan, std::size_t &unreviewed)
@@ -957,21 +1058,25 @@ RedactResult Redact(std::string_view role, std::string_view bytes, const RedactO
 				return result;
 			}
 			std::vector<Edit> edits;
+			ReportBudget budget;
 			std::size_t unreviewed = 0U;
+			bool plan_ok = true;
 			if (role == "profile.service" || role == "profile.service.bak") {
-				RedactService(edits, bytes, scan, index, unreviewed);
+				plan_ok = RedactService(edits, budget, bytes, scan, index, unreviewed);
 			} else if (role == "module.obs-websocket") {
-				RedactWebsocket(edits, scan, index, placeholder, unreviewed);
+				plan_ok = RedactWebsocket(edits, budget, scan, index, placeholder, unreviewed);
 			} else if (role == "collection" || role == "collection.bak") {
-				RedactCollection(edits, bytes, scan, index, unreviewed);
+				plan_ok = RedactCollection(edits, budget, bytes, scan, index, unreviewed);
+			}
+			if (!plan_ok) {
+				return InvalidResult(role, bytes);
 			}
 			result.report.outcome = RedactOutcome::Stored;
 			result.report.unreviewed_count = unreviewed;
 			result.report.fidelity = unreviewed != 0U ? "opaque-unreviewed"
 								  : (edits.empty() ? "exact" : "redacted");
 			if (!ApplyEdits(bytes, edits, result)) {
-				result.bytes.assign(bytes);
-				result.report.redactions.clear();
+				return InvalidResult(role, bytes);
 			}
 			return result;
 		}
@@ -981,19 +1086,23 @@ RedactResult Redact(std::string_view role, std::string_view bytes, const RedactO
 			return InvalidResult(role, bytes);
 		}
 		std::vector<Edit> edits;
+		ReportBudget budget;
 		std::size_t unreviewed = 0U;
+		bool plan_ok = true;
 		if (role == "profile.basic") {
-			RedactBasic(edits, bytes, scan, unreviewed);
+			plan_ok = RedactBasic(edits, budget, bytes, scan, unreviewed);
 		} else {
 			RedactUser(bytes, scan, unreviewed);
+		}
+		if (!plan_ok) {
+			return InvalidResult(role, bytes);
 		}
 		result.report.outcome = RedactOutcome::Stored;
 		result.report.unreviewed_count = unreviewed;
 		result.report.fidelity = unreviewed != 0U ? "opaque-unreviewed"
 							  : (edits.empty() ? "exact" : "redacted");
 		if (!ApplyEdits(bytes, edits, result)) {
-			result.bytes.assign(bytes);
-			result.report.redactions.clear();
+			return InvalidResult(role, bytes);
 		}
 		return result;
 	} catch (...) {
