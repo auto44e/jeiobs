@@ -342,13 +342,17 @@ int config_save(config_t *config)
 
 	if (!config)
 		return CONFIG_ERROR;
-	if (!config->file)
-		return CONFIG_ERROR;
 
 	dstr_init(&str);
 	dstr_init(&tmp);
 
 	pthread_mutex_lock(&config->mutex);
+
+	/* config_save_safe swaps config->file under this lock, so test it only while holding it. */
+	if (!config->file) {
+		pthread_mutex_unlock(&config->mutex);
+		return CONFIG_ERROR;
+	}
 
 	f = os_fopen(config->file, "wb");
 	if (!f) {

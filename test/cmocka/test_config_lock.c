@@ -109,7 +109,7 @@ static void test_concurrent_save_safe(void **state)
 	/* The real file holds a complete config, and no temporary file is left behind. */
 	config_t *reopened = NULL;
 	assert_int_equal(config_open(&reopened, path.text, CONFIG_OPEN_EXISTING), CONFIG_SUCCESS);
-	assert_true(config_get_int(reopened, "A", "counter") >= 0);
+	assert_int_equal(config_get_int(reopened, "A", "counter"), 399);
 	config_close(reopened);
 	char temporary[560];
 	snprintf(temporary, sizeof(temporary), "%s.tmp", path.text);

@@ -293,3 +293,10 @@ codex-5 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.r
 codex-6 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-6) | as claude-2
 codex-7 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-7) | as claude-5
 codex-8 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-8) | as claude-6
+
+### PR #38 run 02 (`review-pr4a-02`) on `e3ecb4179`: both peers approve
+
+Every run 01 finding is `accepted-fix` by its finder (Claude and Codex both check each against the code). Three new
+Minors, all fixed in the PR after the run: `config_save` tested `config->file` before taking the lock (claude-8,
+codex-9), stale `config-file.c:` line citations in section 10 and PR2 (claude-7, codex-10), and the
+concurrent test asserted `>= 0` where it can assert the final counter 399 (claude-9, codex-11).
