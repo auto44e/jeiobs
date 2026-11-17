@@ -187,7 +187,11 @@ public:
 		Frame frame;
 		frame.kind = FrameKind::Object;
 		frame.value = Json::object();
-		frame.keys.reserve(elements);
+		// nlohmann passes size_t(-1) when the element count is unknown; reserving that throws on MSVC and is
+		// undefined elsewhere. Reserve only for a plausible count.
+		if (elements != static_cast<std::size_t>(-1) && elements <= 1024U) {
+			frame.keys.reserve(elements);
+		}
 		stack_.push_back(std::move(frame));
 		return true;
 	}

@@ -910,7 +910,7 @@ compile-empty | 0 | {"routes":[],"slots":[]} | compile fixtures/valid/empty.json
 compile-target-keys | 0 | =expected/compile/keys.json | compile fixtures/compile/keys.json
 compile-target-key-scene-item | 0 | =expected/compile/key-scene-item.json | compile fixtures/compile/key-scene-item.json
 compile-target-key-mixer | 0 | =expected/compile/key-mixer-mute.json | compile fixtures/compile/key-mixer-mute.json
-compile-target-key-hotkey | 0 | =expected/compile/key-hotkey.json,expected/compile/key-hotkey-with-effect.json | compile fixtures/compile/key-hotkey.json
+compile-target-key-hotkey | 0 | =expected/compile/key-hotkey-with-effect.json | compile fixtures/compile/key-hotkey.json
 compile-target-key-output | 0 | =expected/compile/key-output.json,expected/compile/key-output-with-action.json | compile fixtures/compile/key-output.json
 compile-target-key-egress | 0 | =expected/compile/key-egress.json,expected/compile/key-egress-with-trust.json | compile fixtures/compile/key-egress.json
 compile-target-key-ignores-extra-member | 0 | =expected/compile/key-extra-member.json | compile fixtures/compile/key-extra-member.json
