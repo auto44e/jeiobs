@@ -9,5 +9,7 @@
 - `07`–`12`: K1-PR1 (contract with addendum r1, Codex briefs and reports, Claude case brief and
   report, written without reading the library).
 
+- `13`–`17`: K1-PR1 fix rounds 2 and 3 (contract r2, r3); `review-pr33-01/`: the first PR #33 review run.
+
 Transcripts are verbatim except that trailing whitespace was stripped, the home directory is shown
 as `~`, and markdown links were turned into plain text. This is a design consult, not a gate review.

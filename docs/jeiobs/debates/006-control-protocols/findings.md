@@ -200,3 +200,27 @@ codex-11 | Minor | accepted-fix | codex | review-06/04-r2-codex.reply.md (FINDIN
 codex-12 | Major | accepted-fix | codex | review-06/04-r2-codex.reply.md (FINDING codex-12) | -
 codex-13 | Major | accepted-fix | codex | review-06/04-r2-codex.reply.md (FINDING codex-13) | -
 codex-14 | Major | accepted-fix | codex | review-06/04-r2-codex.reply.md (FINDING codex-14) | -
+
+## PR #33 (K1-PR1), review `review-pr33-01` on `1a8bd1eb4`
+
+Fixed in the next head per contract r2 (items 1-8) and r3: clamping `FromDoubleInCodeSpace`, one strict
+parser for every entry point, hotkeys always privileged, source URL fields denied, near-linear JSON
+parsing, injective target keys, ASCII-only ids and requirements, iterative cycle detection and a
+pruned graph; `jc-check value fromdouble`, `E_LIMIT event`, nested limit codes.
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-1) | contract r2/r3
+claude-2 | Major | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-2) | contract r2/r3
+claude-3 | Major | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-3) | contract r2/r3
+claude-4 | Major | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-4) | contract r2/r3
+claude-5 | Major | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-5) | contract r2/r3
+claude-6 | Major | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-6) | contract r2/r3
+claude-7 | Minor | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-7) | contract r2/r3
+claude-8 | Minor | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-8) | contract r2/r3
+claude-9 | Minor | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-9) | contract r2/r3
+claude-10 | Minor | open → fixed (awaiting finder) | claude | review-pr33-01/03-r2-claude.reply.md (FINDING claude-10) | contract r2/r3
+codex-1 | Major | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-1) | contract r2/r3
+codex-2 | Minor | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-2) | contract r2/r3
+codex-3 | Major | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-3) | contract r2/r3
+codex-4 | Major | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-4) | contract r2/r3

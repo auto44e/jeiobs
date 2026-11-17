@@ -331,7 +331,7 @@ preallocation for VST3 is sized (A7); the policy table defaults beyond the ones 
   before K1-PR1" limits (contract in `debates/006-control-protocols/07-k1pr1-contract.md`). Codex
   wrote the library and Claude the black-box cases blind; the cases decided eight readings
   (contract r1), and AddressSanitizer found a recursive cycle check that overflowed the stack on a
-  10,000-route chain (now iterative). Linux (GCC): `jc-unit` and `jc-cases` (916 case lines) pass,
+  10,000-route chain (now iterative). Linux (GCC): `jc-unit` and `jc-cases` (1128 case lines) pass,
   also under ASan and UBSan. Not yet in CI: the library needs its own workflow job (owner-merged
   `.github` change).
 - Next: K1-PR2 (transform execution with property tests), then PR3 (headless runtime).

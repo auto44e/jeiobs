@@ -123,3 +123,36 @@ NOT in the merge (4) or cycle (5) checks.
    exact integer, not by converting two halves.
 8. `value limits`: an int/uint `value` outside `bits` (including i128 min - 1 and a uint7 of 128 inside a
    tuple) is `E_LIMIT value`, wherever it is nested.
+
+## r2 (review run 01 of PR #33; read ~/.local/share/jeiobs-work/reviews/pr33/01-run/*.reply.md)
+1. Values (claude-1, codex-4): `FromDoubleInCodeSpace` CLAMPS to the width's range (uint7 127.5 -> 127, int8
+   127.5 -> 127, -inf -> min, NaN -> E_VALUE) and keeps the template's unit and Relative metadata; `MakeInt`
+   and `MakeUInt` REJECT a value outside `bits` (E_LIMIT value), never mask; `MakeFloatBits` rejects an ieee32
+   raw value above 32 bits. Add fractional-input tests.
+2. One strict parser (claude-2, codex-1): every public entry point (`ParseMapping`, `CompileMapping(bytes)`,
+   `LoadMapping`, event parsing) uses the same strict rules; unit tests cover the byte-level API.
+3. Hotkeys (claude-3): the class of a `hotkey` target is ALWAYS `output-control` in K1 (the declared `effect` is
+   a hint only, kept in the file; PR4 resolves the real effect from OBS's hotkey registry). So wildcard routes to
+   hotkeys are refused (`E_WILDCARD_PRIVILEGED`).
+4. Hard deny (claude-4): add the WORKSPACE_FORMAT section 8 source fields `url`, `input`, `ffmpeg_options`,
+   `playlist` (case-insensitive) to the denied `source-property`/`filter-property` fields (they carry URL
+   credentials; reading them for feedback leaks them).
+5. JSON parsing complexity (claude-5): no linear-scan ordered object insert; parsing a 4 MiB object with
+   ~500,000 keys must stay near-linear (use nlohmann::json or a hash set for duplicate detection).
+6. `target_key` (claude-6, codex-3): escape `\`, `|`, `=` AND `/` (and any separator AddressKey uses) so
+   distinct targets, including emit addresses, never share a key; merge grouping uses the escaped key.
+7. `requires` and ids are ASCII only (codex-2): non-ASCII -> `E_SCHEMA requires`.
+8. Complexity (claude-9): the merge check groups in O(n log n); the cycle graph only has edges from `emit`
+   routes to routes (no edges to non-emit routes from non-emit routes), and builds them without testing every
+   pair when an index by first segment can prune.
+
+## r3 (integration)
+1. CLI gains `jc-check value fromdouble VALUE_JSON DOUBLE`: DOUBLE is a JSON number or `inf`, `-inf`, `nan`;
+   it prints the result of `FromDoubleInCodeSpace(value, DOUBLE)` as compact value JSON with sorted keys
+   (`{"bits":7,"type":"uint","value":"127"}`); `nan` -> `ERR E_VALUE`; float templates clamp to the largest finite
+   value for `inf` and the most negative finite for `-inf`; missing arguments -> usage exit 2.
+2. An EVENT.json larger than 4 MiB is `ERR E_LIMIT event`.
+3. An out-of-range uint/int inside a tuple is `E_LIMIT value` (not `E_VALUE`), same as at the top level.
+4. `hotkey` target keys use registerer_kind, registerer_id and name only; `effect` is NOT part of
+   `target_key` (A15: identity is registerer + name). The Claude worker's `key-hotkey-with-effect.json`
+   expected file is changed by the lead to match.
