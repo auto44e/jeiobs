@@ -1,0 +1,7 @@
+FINDING codex-1 | Major | open | Balance remains a plain cross-thread field, unlike the proposed queued/atomic boundary (docs/jeiobs/tasks/006-control-protocols.md:55-61; libobs/obs-source.c:4057-4059,5725-5738).
+FINDING codex-2 | Major | open | Device bindings remain outside workspace capture/export, contradicting M1 snapshot scope (docs/jeiobs/tasks/006-control-protocols.md:87-93; docs/jeiobs/ROADMAP.md:42-44).
+FINDING codex-3 | Major | open | No target read/subscribe path is specified for feedback, pickup, or arbitration (docs/jeiobs/tasks/006-control-protocols.md:37-61; docs/jeiobs/ROADMAP.md:227-228).
+FINDING codex-4 | Major | open | Mixer/listen-bus, output, replay, and plugin-event targets remain unspecified; RequestStreaming omits recording/replay selection (docs/jeiobs/tasks/006-control-protocols.md:49-64; docs/jeiobs/ROADMAP.md:220-224).
+FINDING codex-5 | Major | open | ControlCommand has no principal or authorization capability, while local-admin and remote-origin rules remain undefined (docs/jeiobs/tasks/006-control-protocols.md:55-64,94-100).
+FINDING codex-6 | Major | open | Queue policy lacks overflow, fairness, and rejection behavior for non-coalesced events, bundles, and privileged actions (docs/jeiobs/tasks/006-control-protocols.md:73-79).
+VERDICT: request changes
