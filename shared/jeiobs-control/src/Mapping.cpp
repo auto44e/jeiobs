@@ -90,7 +90,7 @@ class BoundedSax final : public JsonSax {
 		FrameKind kind = FrameKind::Object;
 		Json value;
 		std::optional<std::string> pending_key;
-		std::unordered_set<std::string> keys;
+		std::set<std::string> keys; // ordered: an unseeded hash set is floodable on MSVC
 	};
 
 	Json root_;
@@ -176,7 +176,7 @@ public:
 
 	bool binary(binary_t &) override { return Fail(MakeError(ErrorCode::Json)); }
 
-	bool start_object(std::size_t elements) override
+	bool start_object(std::size_t /*elements*/) override
 	{
 		if (!BeforeValue()) {
 			return false;
@@ -187,11 +187,6 @@ public:
 		Frame frame;
 		frame.kind = FrameKind::Object;
 		frame.value = Json::object();
-		// nlohmann passes size_t(-1) when the element count is unknown; reserving that throws on MSVC and is
-		// undefined elsewhere. Reserve only for a plausible count.
-		if (elements != static_cast<std::size_t>(-1) && elements <= 1024U) {
-			frame.keys.reserve(elements);
-		}
 		stack_.push_back(std::move(frame));
 		return true;
 	}
