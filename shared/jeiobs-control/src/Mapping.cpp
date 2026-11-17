@@ -1141,20 +1141,14 @@ Error FindCycleError(const Mapping &mapping)
 	std::vector<std::size_t> stack;
 	int next_index = 0;
 	std::size_t first_cycle = route_count;
-	std::function<void(std::size_t)> visit = [&](std::size_t node) {
-		index[node] = next_index;
-		lowlink[node] = next_index;
-		++next_index;
-		stack.push_back(node);
-		on_stack[node] = true;
-		for (const std::size_t adjacent : edges[node]) {
-			if (index[adjacent] == -1) {
-				visit(adjacent);
-				lowlink[node] = std::min(lowlink[node], lowlink[adjacent]);
-			} else if (on_stack[adjacent]) {
-				lowlink[node] = std::min(lowlink[node], index[adjacent]);
-			}
-		}
+	// Iterative Tarjan: a chain of 10,000 routes would overflow the stack with recursion (a 1 MiB
+	// Windows stack, or any stack under AddressSanitizer).
+	struct Frame {
+		std::size_t node;
+		std::size_t next_edge;
+	};
+	std::vector<Frame> call_stack;
+	const auto finish = [&](std::size_t node) {
 		if (lowlink[node] != index[node]) {
 			return;
 		}
@@ -1176,9 +1170,37 @@ Error FindCycleError(const Mapping &mapping)
 			first_cycle = std::min(first_cycle, component_first);
 		}
 	};
+	const auto enter = [&](std::size_t node) {
+		index[node] = next_index;
+		lowlink[node] = next_index;
+		++next_index;
+		stack.push_back(node);
+		on_stack[node] = true;
+		call_stack.push_back({node, 0U});
+	};
 	for (std::size_t route = 0U; route < route_count; ++route) {
-		if (index[route] == -1) {
-			visit(route);
+		if (index[route] != -1) {
+			continue;
+		}
+		enter(route);
+		while (!call_stack.empty()) {
+			Frame &frame = call_stack.back();
+			const std::size_t node = frame.node;
+			if (frame.next_edge < edges[node].size()) {
+				const std::size_t adjacent = edges[node][frame.next_edge++];
+				if (index[adjacent] == -1) {
+					enter(adjacent); // invalidates `frame`
+				} else if (on_stack[adjacent]) {
+					lowlink[node] = std::min(lowlink[node], index[adjacent]);
+				}
+				continue;
+			}
+			call_stack.pop_back();
+			finish(node);
+			if (!call_stack.empty()) {
+				const std::size_t parent = call_stack.back().node;
+				lowlink[parent] = std::min(lowlink[parent], lowlink[node]);
+			}
 		}
 	}
 	if (first_cycle == route_count) {
