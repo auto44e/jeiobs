@@ -25,13 +25,11 @@
 
 namespace {
 
-using Jeiobs::Control::AddressSegment;
 using Jeiobs::Control::CompileMapping;
 using Jeiobs::Control::CompiledMapping;
 using Jeiobs::Control::Error;
 using Jeiobs::Control::ErrorCode;
 using Jeiobs::Control::ErrorCodeName;
-using Jeiobs::Control::Limits::kAddressSegments;
 using Jeiobs::Control::Limits::kMappingBytes;
 using Jeiobs::Control::Limits::kTupleDepth;
 using Jeiobs::Control::Value;
@@ -139,71 +137,6 @@ bool GetUInt(const Json &value, std::uint64_t &result)
 	return false;
 }
 
-bool ParseEvent(const std::string &bytes, std::optional<std::string> &slot, Jeiobs::Control::ControlAddress &address)
-{
-	try {
-		Json document = Json::parse(bytes, nullptr, false);
-		if (document.is_discarded() || !document.is_object()) {
-			return false;
-		}
-		const auto slot_iterator = document.find("slot");
-		if (slot_iterator == document.end()) {
-			return false;
-		}
-		if (!slot_iterator->is_null()) {
-			if (!slot_iterator->is_string()) {
-				return false;
-			}
-			slot = slot_iterator->get<std::string>();
-		} else {
-			slot.reset();
-		}
-		const auto address_iterator = document.find("address");
-		if (address_iterator == document.end() || !address_iterator->is_array() ||
-		    address_iterator->size() > kAddressSegments) {
-			return false;
-		}
-		std::vector<AddressSegment> segments;
-		segments.reserve(address_iterator->size());
-		for (const Json &entry : *address_iterator) {
-			if (!entry.is_object() || entry.size() != 1U) {
-				return false;
-			}
-			const auto member = entry.begin();
-			if (member.key() == "s" && member.value().is_string()) {
-				auto parsed = AddressSegment::Symbol(member.value().get<std::string>());
-				if (!parsed.ok()) {
-					return false;
-				}
-				segments.push_back(std::move(*parsed.value));
-			} else if (member.key() == "t" && member.value().is_string()) {
-				auto parsed = AddressSegment::Text(member.value().get<std::string>());
-				if (!parsed.ok()) {
-					return false;
-				}
-				segments.push_back(std::move(*parsed.value));
-			} else if (member.key() == "i") {
-				std::uint64_t integer = 0U;
-				if (!GetUInt(member.value(), integer) || integer > (std::uint64_t(1U) << 53U)) {
-					return false;
-				}
-				auto parsed = AddressSegment::Int(integer);
-				segments.push_back(std::move(*parsed.value));
-			} else {
-				return false;
-			}
-		}
-		auto parsed_address = Jeiobs::Control::ControlAddress::Create(std::move(segments));
-		if (!parsed_address.ok()) {
-			return false;
-		}
-		address = std::move(*parsed_address.value);
-		return true;
-	} catch (...) {
-		return false;
-	}
-}
-
 int CheckMatch(const std::string &mapping_path, const std::string &event_path)
 {
 	const auto mapping = Jeiobs::Control::LoadMapping(mapping_path);
@@ -221,18 +154,17 @@ int CheckMatch(const std::string &mapping_path, const std::string &event_path)
 		PrintError({ErrorCode::Schema, "event"});
 		return 1;
 	}
-	std::optional<std::string> slot;
-	Jeiobs::Control::ControlAddress address;
-	if (!ParseEvent(bytes, slot, address)) {
-		PrintError({ErrorCode::Schema, "event"});
+	const auto event = Jeiobs::Control::ParseEvent(bytes);
+	if (!event.ok()) {
+		PrintError(event.error);
 		return 1;
 	}
 	Json result = Json::object();
 	result["matches"] = Json::array();
 	for (std::size_t index = 0U; index < mapping.value->routes.size(); ++index) {
 		const auto &route = mapping.value->routes[index];
-		if (!route.enabled || (route.match.slot.has_value() && route.match.slot != slot) ||
-		    !Jeiobs::Control::Matches(route.match.address, address)) {
+		if (!route.enabled || (route.match.slot.has_value() && route.match.slot != event.value->slot) ||
+		    !Jeiobs::Control::Matches(route.match.address, event.value->address)) {
 			continue;
 		}
 		result["matches"].push_back(route.id);

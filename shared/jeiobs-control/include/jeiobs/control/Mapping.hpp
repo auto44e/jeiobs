@@ -108,7 +108,7 @@ struct Target {
 	std::string id;
 	std::string field;
 	std::string scene_id;
-	std::string item_id;
+	std::uint64_t item_id = 0U;
 	std::string name;
 	std::string registerer_kind;
 	std::string registerer_id;
@@ -159,7 +159,7 @@ struct Route {
 
 struct Mapping {
 	int major = 1;
-	int minor = 0;
+	std::uint64_t minor = 0U;
 	std::vector<Slot> slots;
 	std::vector<Route> routes;
 };
@@ -178,11 +178,17 @@ struct CompiledMapping {
 	std::vector<CompiledRoute> routes;
 };
 
+struct ParsedEvent {
+	std::optional<std::string> slot;
+	ControlAddress address;
+};
+
 [[nodiscard]] Result<Mapping> ParseMapping(std::string_view bytes);
 [[nodiscard]] Result<Mapping> LoadMapping(const std::string &path);
 [[nodiscard]] Result<Mapping> ValidateMapping(const Mapping &mapping);
 [[nodiscard]] Result<CompiledMapping> CompileMapping(const Mapping &mapping);
 [[nodiscard]] Result<CompiledMapping> CompileMapping(std::string_view bytes);
+[[nodiscard]] Result<ParsedEvent> ParseEvent(std::string_view bytes);
 [[nodiscard]] Result<ControlAddress> ParseEventAddress(std::string_view bytes);
 
 [[nodiscard]] std::string TargetKey(const Target &target);

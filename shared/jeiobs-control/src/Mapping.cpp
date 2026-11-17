@@ -329,6 +329,26 @@ bool IsId(std::string_view value)
 	return true;
 }
 
+bool IsRequirement(std::string_view value)
+{
+	if (value.empty() || value.size() > 64U) {
+		return false;
+	}
+	bool has_non_ascii = false;
+	for (const unsigned char character : value) {
+		if (character >= 0x80U) {
+			has_non_ascii = true;
+			continue;
+		}
+		if (!((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+		      character == '_' || character == '.')) {
+			return false;
+		}
+	}
+	return has_non_ascii ||
+	       value.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_.") == std::string_view::npos;
+}
+
 bool GetString(const Json &object, const char *key, std::string &result)
 {
 	const auto iterator = object.find(key);
@@ -445,10 +465,16 @@ Result<PatternSegment> ParsePatternSegment(const Json &value, std::string_view e
 	return {{}, Schema(error_field)};
 }
 
-Result<ControlPattern> ParsePattern(const Json &value, std::string_view error_field)
+Result<ControlPattern> ParsePattern(const Json &value, std::string_view error_field, bool allow_empty)
 {
-	if (!value.is_array() || value.size() > Limits::kAddressSegments) {
-		return {{}, value.is_array() ? MakeError(ErrorCode::Limit, "address") : Schema(error_field)};
+	if (!value.is_array()) {
+		return {{}, Schema(error_field)};
+	}
+	if (value.empty() && !allow_empty) {
+		return {{}, Schema(error_field)};
+	}
+	if (value.size() > Limits::kAddressSegments) {
+		return {{}, MakeError(ErrorCode::Limit, "address")};
 	}
 	std::vector<PatternSegment> segments;
 	segments.reserve(value.size());
@@ -462,10 +488,16 @@ Result<ControlPattern> ParsePattern(const Json &value, std::string_view error_fi
 	return ControlPattern::Create(std::move(segments));
 }
 
-Result<ControlAddress> ParseConcreteAddress(const Json &value, std::string_view error_field)
+Result<ControlAddress> ParseConcreteAddress(const Json &value, std::string_view error_field, bool allow_empty)
 {
-	if (!value.is_array() || value.size() > Limits::kAddressSegments) {
-		return {{}, value.is_array() ? MakeError(ErrorCode::Limit, "address") : Schema(error_field)};
+	if (!value.is_array()) {
+		return {{}, Schema(error_field)};
+	}
+	if (value.empty() && !allow_empty) {
+		return {{}, Schema(error_field)};
+	}
+	if (value.size() > Limits::kAddressSegments) {
+		return {{}, MakeError(ErrorCode::Limit, "address")};
 	}
 	std::vector<AddressSegment> segments;
 	segments.reserve(value.size());
@@ -664,7 +696,7 @@ bool ParseEnum(const Json &object, const char *key, const std::vector<std::strin
 	return std::find(allowed.begin(), allowed.end(), result) != allowed.end();
 }
 
-Result<Target> ParseTarget(const Json &value)
+Result<Target> ParseTarget(const Json &value, bool allow_empty_address)
 {
 	if (!value.is_object()) {
 		return {{}, Schema("target")};
@@ -687,10 +719,13 @@ Result<Target> ParseTarget(const Json &value)
 		}
 	} else if (kind == "scene-item") {
 		result.kind = TargetKind::SceneItem;
-		if (!GetString(value, "scene_id", result.scene_id) || !GetString(value, "item_id", result.item_id) ||
-		    result.scene_id.empty() || result.item_id.empty()) {
+		std::uint64_t item_id = 0U;
+		if (!GetString(value, "scene_id", result.scene_id) ||
+		    !GetUInt(value.value("item_id", Json()), item_id) || item_id > (std::uint64_t(1U) << 53U) ||
+		    result.scene_id.empty()) {
 			return {{}, Schema("target")};
 		}
+		result.item_id = item_id;
 	} else if (kind == "mixer") {
 		result.kind = TargetKind::Mixer;
 		const std::vector<std::string> fields = {"volume",     "mute",   "balance",
@@ -776,7 +811,7 @@ Result<Target> ParseTarget(const Json &value)
 							 : TrustClass::RemoteNet;
 	} else if (kind == "emit") {
 		result.kind = TargetKind::Emit;
-		auto address = ParseConcreteAddress(value.value("address", Json()), "target");
+		auto address = ParseConcreteAddress(value.value("address", Json()), "target", allow_empty_address);
 		if (!address.ok()) {
 			return {{}, address.error};
 		}
@@ -814,7 +849,7 @@ Result<MergeSpec> ParseMerge(const Json &value)
 	return {std::move(result), {}};
 }
 
-Result<Slot> ParseSlot(const Json &value)
+Result<Slot> ParseSlot(const Json &value, bool require_r1_fields)
 {
 	if (!value.is_object()) {
 		return {{}, Schema("slots")};
@@ -824,22 +859,23 @@ Result<Slot> ParseSlot(const Json &value)
 		return {{}, Schema("slots")};
 	}
 	const auto iterator = value.find("requires");
-	if (iterator != value.end()) {
-		if (!iterator->is_array()) {
-			return {{}, Schema("slots")};
+	if (iterator == value.end() && !require_r1_fields) {
+		return {std::move(result), {}};
+	}
+	if (iterator == value.end() || !iterator->is_array() || iterator->size() > 64U) {
+		return {{}, Schema("requires")};
+	}
+	result.requirements.reserve(iterator->size());
+	for (const Json &requirement : *iterator) {
+		if (!requirement.is_string() || !IsRequirement(requirement.get<std::string>())) {
+			return {{}, Schema("requires")};
 		}
-		result.requirements.reserve(iterator->size());
-		for (const Json &requirement : *iterator) {
-			if (!requirement.is_string()) {
-				return {{}, Schema("slots")};
-			}
-			result.requirements.push_back(requirement.get<std::string>());
-		}
+		result.requirements.push_back(requirement.get<std::string>());
 	}
 	return {std::move(result), {}};
 }
 
-Result<Route> ParseRoute(const Json &value)
+Result<Route> ParseRoute(const Json &value, bool require_r1_fields, bool allow_empty_address)
 {
 	if (!value.is_object()) {
 		return {{}, Schema("routes")};
@@ -848,10 +884,11 @@ Result<Route> ParseRoute(const Json &value)
 	if (!GetString(value, "id", result.id) || !IsId(result.id)) {
 		return {{}, Schema("routes")};
 	}
-	if (IsField(value, "enabled") && !value.at("enabled").is_boolean()) {
+	if (!IsField(value, "enabled") && !require_r1_fields) {
+		result.enabled = true;
+	} else if (!IsField(value, "enabled") || !value.at("enabled").is_boolean()) {
 		return {{}, Schema("routes")};
-	}
-	if (IsField(value, "enabled")) {
+	} else {
 		result.enabled = value.at("enabled").get<bool>();
 	}
 	const auto match = value.find("match");
@@ -872,7 +909,7 @@ Result<Route> ParseRoute(const Json &value)
 	if (address == match->end()) {
 		return {{}, Schema("address")};
 	}
-	auto parsed_address = ParsePattern(*address, "address");
+	auto parsed_address = ParsePattern(*address, "address", allow_empty_address);
 	if (!parsed_address.ok()) {
 		return {{}, parsed_address.error};
 	}
@@ -906,7 +943,7 @@ Result<Route> ParseRoute(const Json &value)
 	if (target == value.end()) {
 		return {{}, Schema("target")};
 	}
-	auto parsed_target = ParseTarget(*target);
+	auto parsed_target = ParseTarget(*target, allow_empty_address);
 	if (!parsed_target.ok()) {
 		return {{}, parsed_target.error};
 	}
@@ -1028,7 +1065,7 @@ std::string AddressKey(const ControlAddress &address)
 
 bool ValidateModel(const Mapping &mapping, Error &error)
 {
-	if (mapping.major != 1 || mapping.minor < 0) {
+	if (mapping.major != 1 || mapping.minor > (std::uint64_t(1U) << 53U)) {
 		error = mapping.major != 1 ? MakeError(ErrorCode::Major) : Schema("minor");
 		return false;
 	}
@@ -1262,6 +1299,18 @@ std::size_t PatternFanout(const ControlPattern &pattern) noexcept
 
 std::string TargetKey(const Target &target)
 {
+	auto escape_value = [](std::string_view value) {
+		std::string escaped;
+		escaped.reserve(value.size());
+		for (const char character : value) {
+			if (character == '|' || character == '=') {
+				escaped.push_back('\\');
+			}
+			escaped.push_back(character);
+		}
+		return escaped;
+	};
+
 	try {
 		std::vector<std::pair<std::string, std::string>> fields;
 		switch (target.kind) {
@@ -1273,7 +1322,7 @@ std::string TargetKey(const Target &target)
 			fields = {{"id", target.id}};
 			break;
 		case TargetKind::SceneItem:
-			fields = {{"item_id", target.item_id}, {"scene_id", target.scene_id}};
+			fields = {{"item_id", std::to_string(target.item_id)}, {"scene_id", target.scene_id}};
 			break;
 		case TargetKind::Mixer:
 			fields = {{"field", target.field}, {"id", target.id}};
@@ -1314,7 +1363,7 @@ std::string TargetKey(const Target &target)
 			result += '|';
 			result += field.first;
 			result += '=';
-			result += field.second;
+			result += escape_value(field.second);
 		}
 		return result;
 	} catch (...) {
@@ -1322,7 +1371,7 @@ std::string TargetKey(const Target &target)
 	}
 }
 
-Result<Mapping> ParseMappingInternal(std::string_view bytes)
+Result<Mapping> ParseMappingInternal(std::string_view bytes, bool require_r1_fields)
 {
 	auto document = ParseJson(bytes);
 	if (!document.ok()) {
@@ -1345,9 +1394,8 @@ Result<Mapping> ParseMappingInternal(std::string_view bytes)
 		return {{}, MakeError(ErrorCode::Major)};
 	}
 	const auto minor = root.find("minor");
-	std::int64_t minor_number = 0;
-	if (minor == root.end() || !GetInt(*minor, minor_number) || minor_number < 0 ||
-	    minor_number > std::numeric_limits<int>::max()) {
+	std::uint64_t minor_number = 0U;
+	if (minor == root.end() || !GetUInt(*minor, minor_number) || minor_number > (std::uint64_t(1U) << 53U)) {
 		return {{}, Schema("minor")};
 	}
 	const auto slots = root.find("slots");
@@ -1359,11 +1407,11 @@ Result<Mapping> ParseMappingInternal(std::string_view bytes)
 	}
 	Mapping mapping;
 	mapping.major = static_cast<int>(major_number);
-	mapping.minor = static_cast<int>(minor_number);
+	mapping.minor = minor_number;
 	mapping.slots.reserve(slots->size());
 	std::set<std::string> slot_ids;
 	for (const Json &entry : *slots) {
-		auto slot = ParseSlot(entry);
+		auto slot = ParseSlot(entry, require_r1_fields);
 		if (!slot.ok()) {
 			return {{}, slot.error};
 		}
@@ -1382,7 +1430,7 @@ Result<Mapping> ParseMappingInternal(std::string_view bytes)
 	mapping.routes.reserve(routes->size());
 	std::set<std::string> route_ids;
 	for (const Json &entry : *routes) {
-		auto route = ParseRoute(entry);
+		auto route = ParseRoute(entry, require_r1_fields, !require_r1_fields);
 		if (!route.ok()) {
 			return {{}, route.error};
 		}
@@ -1400,7 +1448,7 @@ Result<Mapping> ParseMappingInternal(std::string_view bytes)
 Result<Mapping> ParseMapping(std::string_view bytes)
 {
 	try {
-		return ParseMappingInternal(bytes);
+		return ParseMappingInternal(bytes, false);
 	} catch (...) {
 		return {{}, MakeError(ErrorCode::Value)};
 	}
@@ -1412,7 +1460,11 @@ Result<Mapping> LoadMapping(const std::string &path)
 	if (!bytes.ok()) {
 		return {{}, bytes.error};
 	}
-	return ParseMapping(*bytes.value);
+	try {
+		return ParseMappingInternal(*bytes.value, true);
+	} catch (...) {
+		return {{}, MakeError(ErrorCode::Value)};
+	}
 }
 
 Result<Mapping> ValidateMapping(const Mapping &mapping)
@@ -1525,15 +1577,44 @@ Result<CompiledMapping> CompileMapping(std::string_view bytes)
 
 Result<ControlAddress> ParseEventAddress(std::string_view bytes)
 {
+	auto event = ParseEvent(bytes);
+	if (!event.ok()) {
+		return {{}, event.error};
+	}
+	return {std::move(event.value->address), {}};
+}
+
+Result<ParsedEvent> ParseEvent(std::string_view bytes)
+{
 	auto document = ParseJson(bytes);
-	if (!document.ok() || !document.value->is_object()) {
+	if (!document.ok()) {
+		return {{}, document.error};
+	}
+	if (!document.value->is_object()) {
 		return {{}, Schema("event")};
 	}
-	const auto address = document.value->find("address");
-	if (address == document.value->end()) {
+	const Json &root = *document.value;
+	const auto slot = root.find("slot");
+	if (slot == root.end() || (!slot->is_null() && !slot->is_string())) {
 		return {{}, Schema("event")};
 	}
-	return ParseConcreteAddress(*address, "event");
+	const auto address = root.find("address");
+	if (address == root.end()) {
+		return {{}, Schema("event")};
+	}
+	auto parsed_address = ParseConcreteAddress(*address, "event", false);
+	if (!parsed_address.ok()) {
+		if (parsed_address.error.code == ErrorCode::Limit) {
+			return {{}, Schema("event")};
+		}
+		return {{}, parsed_address.error};
+	}
+	ParsedEvent result;
+	if (!slot->is_null()) {
+		result.slot = slot->get<std::string>();
+	}
+	result.address = std::move(*parsed_address.value);
+	return {std::move(result), {}};
 }
 
 } // namespace Jeiobs::Control

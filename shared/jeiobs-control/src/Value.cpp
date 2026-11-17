@@ -91,6 +91,77 @@ bool IsLess(UInt128 left, UInt128 right) noexcept
 	return left.high < right.high || (left.high == right.high && left.low < right.low);
 }
 
+unsigned int BitLength(UInt128 value) noexcept
+{
+	if (value.high != 0U) {
+		unsigned int length = 64U;
+		std::uint64_t high = value.high;
+		while (high != 0U) {
+			++length;
+			high >>= 1U;
+		}
+		return length;
+	}
+	unsigned int length = 0U;
+	std::uint64_t low = value.low;
+	while (low != 0U) {
+		++length;
+		low >>= 1U;
+	}
+	return length;
+}
+
+bool BitAt(UInt128 value, unsigned int bit) noexcept
+{
+	if (bit >= 64U) {
+		return ((value.high >> (bit - 64U)) & 1U) != 0U;
+	}
+	return ((value.low >> bit) & 1U) != 0U;
+}
+
+bool HasLowerBits(UInt128 value, unsigned int count) noexcept
+{
+	if (count == 0U) {
+		return false;
+	}
+	if (count >= 64U && value.low != 0U) {
+		return true;
+	}
+	if (count <= 64U) {
+		const std::uint64_t mask = count == 64U ? kMaxUint64 : (std::uint64_t(1U) << count) - 1U;
+		return (value.low & mask) != 0U;
+	}
+	const unsigned int high_count = count - 64U;
+	const std::uint64_t mask = high_count == 64U ? kMaxUint64 : (std::uint64_t(1U) << high_count) - 1U;
+	return (value.high & mask) != 0U;
+}
+
+double UInt128ToDouble(UInt128 value) noexcept
+{
+	const unsigned int bit_length = BitLength(value);
+	if (bit_length == 0U) {
+		return 0.0;
+	}
+	if (bit_length <= 53U) {
+		return static_cast<double>(value.low);
+	}
+
+	const unsigned int shift = bit_length - 53U;
+	std::uint64_t significand = 0U;
+	if (shift >= 64U) {
+		significand = value.high >> (shift - 64U);
+	} else {
+		significand = (value.high << (64U - shift)) | (value.low >> shift);
+	}
+
+	const bool halfway = BitAt(value, shift - 1U);
+	const bool sticky = HasLowerBits(value, shift - 1U);
+	if (halfway && (sticky || (significand & 1U) != 0U)) {
+		++significand;
+	}
+	return std::ldexp(static_cast<double>(significand), static_cast<int>(shift));
+}
+
 UInt128 BitMask(unsigned int bits) noexcept
 {
 	if (bits >= 128U) {
@@ -203,38 +274,8 @@ Result<UInt128> ParseUnsignedDecimal(const std::string &decimal)
 				return {{}, MakeError(ErrorCode::Value)};
 			}
 			if (MultiplyByTenAdd(result, static_cast<unsigned int>(character - '0'))) {
-				return {{}, MakeError(ErrorCode::Value)};
+				return {{}, MakeError(ErrorCode::Limit, "value")};
 			}
-		}
-		return {result, {}};
-	} catch (...) {
-		return {{}, MakeError(ErrorCode::Value)};
-	}
-}
-
-Result<Int128> ParseSignedDecimal(const std::string &decimal)
-{
-	try {
-		if (decimal.empty()) {
-			return {{}, MakeError(ErrorCode::Value)};
-		}
-		bool negative = false;
-		std::size_t start = 0U;
-		if (decimal[0] == '-' || decimal[0] == '+') {
-			negative = decimal[0] == '-';
-			start = 1U;
-		}
-		if (start == decimal.size()) {
-			return {{}, MakeError(ErrorCode::Value)};
-		}
-		auto magnitude = ParseUnsignedDecimal(decimal.substr(start));
-		if (!magnitude.ok()) {
-			return {{}, magnitude.error};
-		}
-		Int128 result{magnitude.value->high, magnitude.value->low};
-		if (negative) {
-			const UInt128 twos = TwosComplement(*magnitude.value);
-			result = {twos.high, twos.low};
 		}
 		return {result, {}};
 	} catch (...) {
@@ -367,8 +408,11 @@ Result<Value> Value::MakeBool(bool value_data, std::string unit)
 
 Result<Value> Value::MakeUInt(unsigned int width_bits, UInt128 raw, std::string unit)
 {
-	if (width_bits == 0U || width_bits > 128U || !Fits(raw, width_bits)) {
+	if (width_bits == 0U || width_bits > 128U) {
 		return {{}, MakeError(ErrorCode::Value)};
+	}
+	if (!Fits(raw, width_bits)) {
+		return {{}, MakeError(ErrorCode::Limit, "value")};
 	}
 	Value value;
 	value.kind_ = ValueKind::UInt;
@@ -379,8 +423,11 @@ Result<Value> Value::MakeUInt(unsigned int width_bits, UInt128 raw, std::string 
 
 Result<Value> Value::MakeInt(unsigned int width_bits, Int128 raw, std::string unit)
 {
-	if (width_bits == 0U || width_bits > 128U || !FitsSigned(raw, width_bits)) {
+	if (width_bits == 0U || width_bits > 128U) {
 		return {{}, MakeError(ErrorCode::Value)};
+	}
+	if (!FitsSigned(raw, width_bits)) {
+		return {{}, MakeError(ErrorCode::Limit, "value")};
 	}
 	Value value;
 	value.kind_ = ValueKind::Int;
@@ -485,21 +532,33 @@ Result<Value> Value::MakeUIntDecimal(unsigned int width_bits, const std::string 
 
 Result<Value> Value::MakeIntDecimal(unsigned int width_bits, const std::string &decimal, std::string unit)
 {
-	auto raw = ParseSignedDecimal(decimal);
-	if (!raw.ok() || width_bits == 0U || width_bits > 128U) {
-		return {{}, raw.ok() ? MakeError(ErrorCode::Value) : raw.error};
+	if (width_bits == 0U || width_bits > 128U || decimal.empty()) {
+		return {{}, MakeError(ErrorCode::Value)};
 	}
-	const bool negative = !decimal.empty() && decimal[0] == '-';
-	const UInt128 magnitude = IntMagnitude(*raw.value, 128U);
+	bool negative = false;
+	std::size_t start = 0U;
+	if (decimal[0] == '-' || decimal[0] == '+') {
+		negative = decimal[0] == '-';
+		start = 1U;
+	}
+	if (start == decimal.size()) {
+		return {{}, MakeError(ErrorCode::Value)};
+	}
+	auto magnitude_result = ParseUnsignedDecimal(decimal.substr(start));
+	if (!magnitude_result.ok()) {
+		return {{}, magnitude_result.error};
+	}
+	const UInt128 magnitude = *magnitude_result.value;
 	const UInt128 limit = SignedLimit(width_bits);
 	if (negative) {
 		if (IsLess(limit, magnitude)) {
-			return {{}, MakeError(ErrorCode::Value)};
+			return {{}, MakeError(ErrorCode::Limit, "value")};
 		}
 	} else if (!IsLess(magnitude, limit)) {
-		return {{}, MakeError(ErrorCode::Value)};
+		return {{}, MakeError(ErrorCode::Limit, "value")};
 	}
-	return MakeInt(width_bits, {raw.value->high, raw.value->low}, std::move(unit));
+	const UInt128 raw = negative ? TwosComplement(magnitude) : magnitude;
+	return MakeInt(width_bits, {raw.high, raw.low}, std::move(unit));
 }
 
 Result<Value> Value::FromDoubleInCodeSpace(const Value &value, double number)
@@ -589,12 +648,11 @@ double Value::AsDouble() const noexcept
 	case ValueKind::Bool:
 		return bool_value_ ? 1.0 : 0.0;
 	case ValueKind::UInt:
-		return static_cast<double>(uint_raw_.high) * kTwoTo64 + static_cast<double>(uint_raw_.low);
+		return UInt128ToDouble(uint_raw_);
 	case ValueKind::Int: {
 		const bool negative = HasSignBit(int_raw_, width_bits_);
 		const UInt128 magnitude = IntMagnitude({int_raw_.high, int_raw_.low}, width_bits_);
-		const double value =
-			static_cast<double>(magnitude.high) * kTwoTo64 + static_cast<double>(magnitude.low);
+		const double value = UInt128ToDouble(magnitude);
 		return negative ? -value : value;
 	}
 	case ValueKind::FloatBits:
