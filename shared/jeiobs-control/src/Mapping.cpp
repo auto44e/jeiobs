@@ -1141,6 +1141,17 @@ bool ValidateModel(const Mapping &mapping, Error &error)
 			error = MakeError(ErrorCode::Limit, "transforms");
 			return false;
 		}
+		for (std::size_t index = 0U; index < route.transforms.size(); ++index) {
+			const std::string &operation = route.transforms[index].op;
+			if ((operation == "join14" || operation == "relative") && index != 0U) {
+				error = Schema("transforms");
+				return false;
+			}
+			if (operation == "split14" && index + 1U != route.transforms.size()) {
+				error = Schema("transforms");
+				return false;
+			}
+		}
 		if (route.match.slot.has_value() && slot_ids.find(*route.match.slot) == slot_ids.end()) {
 			error = MakeError(ErrorCode::Reference, *route.match.slot);
 			return false;
