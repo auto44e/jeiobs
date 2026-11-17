@@ -158,6 +158,47 @@ bool StringsWithinLimit(std::string_view bytes, std::size_t limit)
 	return true;
 }
 
+bool NumbersWithinLimit(std::string_view bytes)
+{
+	bool in_string = false;
+	bool escaped = false;
+	for (std::size_t index = 0U; index < bytes.size(); ++index) {
+		const char character = bytes[index];
+		if (in_string) {
+			if (escaped) {
+				escaped = false;
+			} else if (character == '\\') {
+				escaped = true;
+			} else if (character == '"') {
+				in_string = false;
+			}
+			continue;
+		}
+		if (character == '"') {
+			in_string = true;
+			continue;
+		}
+		if (character != '-' && !(character >= '0' && character <= '9')) {
+			continue;
+		}
+		std::size_t end = index + 1U;
+		while (end < bytes.size()) {
+			const char next = bytes[end];
+			if ((next >= '0' && next <= '9') || next == '-' || next == '+' || next == '.' || next == 'e' ||
+			    next == 'E') {
+				++end;
+				continue;
+			}
+			break;
+		}
+		if (end - index > 4096U) {
+			return false;
+		}
+		index = end == 0U ? end : end - 1U;
+	}
+	return true;
+}
+
 class BoundedSax final : public JsonSax {
 	struct Frame {
 		enum class Kind {
@@ -370,6 +411,9 @@ JsonResult ParseJsonInternal(std::string_view bytes)
 	}
 	if (!StringsWithinLimit(bytes, Limits::kStringBytes)) {
 		return {std::nullopt, MakeError(ErrorCode::Limit, "string")};
+	}
+	if (!NumbersWithinLimit(bytes)) {
+		return {std::nullopt, MakeError(ErrorCode::Json)};
 	}
 
 	BoundedSax sax;
@@ -809,6 +853,22 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 		if (entry.contains("bak") && !entry.at("bak").is_string()) {
 			return Schema("bak");
 		}
+		if (entry.contains("scene_uuids")) {
+			if (status != "stored" || !entry.contains("role") || entry.at("role") != "collection" ||
+			    !entry.at("scene_uuids").is_array() || entry.at("scene_uuids").size() > 100000U) {
+				return Schema("scene_uuids");
+			}
+			std::string previous;
+			bool first = true;
+			for (const Json &uuid : entry.at("scene_uuids")) {
+				if (!uuid.is_string() || uuid.get_ref<const std::string &>().size() > 256U ||
+				    (!first && uuid.get_ref<const std::string &>() <= previous)) {
+					return Schema("scene_uuids");
+				}
+				previous = uuid.get_ref<const std::string &>();
+				first = false;
+			}
+		}
 		const bool opaque = status == "stored" &&
 				    entry.at("fidelity").get<std::string>() == "opaque-unreviewed";
 		if (entry.contains("unreviewed")) {
@@ -1060,9 +1120,10 @@ bool IsKnownTopLevel(std::string_view key)
 
 bool IsKnownEntry(std::string_view key)
 {
-	static constexpr std::array<std::string_view, 17U> fields = {
-		"id",       "status",     "root",       "path",  "role", "profile",   "collection", "size",   "hash",
-		"fidelity", "redactions", "unreviewed", "parse", "bak",  "load_rule", "kind",       "reason",
+	static constexpr std::array<std::string_view, 18U> fields = {
+		"id",         "status", "root",      "path",     "role",       "profile",
+		"collection", "size",   "hash",      "fidelity", "redactions", "unreviewed",
+		"parse",      "bak",    "load_rule", "kind",     "reason",     "scene_uuids",
 	};
 	return std::find(fields.begin(), fields.end(), key) != fields.end();
 }

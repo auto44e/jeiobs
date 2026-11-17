@@ -11,12 +11,15 @@
 #include "jw_test.hpp"
 
 #include "jeiobs/workspace/Hash.hpp"
+#include "jeiobs/workspace/CapturePlanner.hpp"
+#include "jeiobs/workspace/Fs.hpp"
 #include "jeiobs/workspace/IniScan.hpp"
 #include "jeiobs/workspace/JsonScan.hpp"
 #include "jeiobs/workspace/Limits.hpp"
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
 #include "jeiobs/workspace/Redactor.hpp"
+#include "jeiobs/workspace/ReviewRules.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -518,8 +521,10 @@ void TestReviewR3()
 	if (comma_locale == nullptr) {
 		comma_locale = std::setlocale(LC_NUMERIC, "de_DE");
 	}
-	const auto decimal = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1.5}");
+	const auto decimal = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1.5e300}");
 	JW_CHECK(decimal.ok());
+	const auto locale_underflow = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1e-9999999}");
+	JW_CHECK(locale_underflow.ok());
 	if (comma_locale != nullptr) {
 		JW_CHECK(std::setlocale(LC_NUMERIC, saved_locale.c_str()) != nullptr);
 	}
@@ -529,6 +534,144 @@ void TestReviewR3()
 	const auto audio_error = Jeiobs::Workspace::ParseManifest(export_document.dump(), ManifestMode::Export);
 	JW_CHECK(audio_error.error.code == Jeiobs::Workspace::ErrorCode::Schema);
 	JW_CHECK(audio_error.error.detail == "target.audio");
+}
+
+void TestPartBNumbers()
+{
+	const auto near_double = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1.5e300}");
+	JW_CHECK(near_double.ok());
+	const auto underflow = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1e-9999999}");
+	JW_CHECK(underflow.ok());
+	const auto oversized = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1" + std::string(4096U, '0') + "}");
+	JW_CHECK(oversized.error.code == Jeiobs::Workspace::ErrorCode::Json);
+	const auto long_exponent = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1e9999999}");
+	JW_CHECK(long_exponent.error.code == Jeiobs::Workspace::ErrorCode::Nonfinite);
+	const auto negative_long_exponent = Jeiobs::Workspace::JsonScan::Scan("{\"number\":1e-9999999}");
+	JW_CHECK(negative_long_exponent.ok());
+	const auto manifest_underflow = Jeiobs::Workspace::ParseJson("{\"number\":1e-9999999}");
+	JW_CHECK(manifest_underflow.ok());
+	const auto manifest_oversized = Jeiobs::Workspace::ParseJson("{\"number\":1" + std::string(4096U, '0') + "}");
+	JW_CHECK(manifest_oversized.error.code == Jeiobs::Workspace::ErrorCode::Json);
+}
+
+void TestSceneUuidValidationAndExport()
+{
+	Json document = Json::parse(kLocalManifest);
+	document["entries"][0]["root"] = "scenes";
+	document["entries"][0]["path"] = "basic/scenes/Main.json";
+	document["entries"][0]["role"] = "collection";
+	document["entries"][0]["scene_uuids"] = {"scene-a", "scene-b"};
+	const auto parsed = Jeiobs::Workspace::ParseManifest(document.dump(), ManifestMode::Local);
+	JW_CHECK(parsed.ok());
+	const auto exported = Jeiobs::Workspace::ProjectForExport(*parsed.value, std::string(64, 'a'), Json::object(),
+								  "2026-11-17T00:00:00Z");
+	JW_CHECK(exported.ok());
+	JW_CHECK(!exported.value->at("entries")[0].contains("scene_uuids"));
+
+	document["entries"][0]["scene_uuids"] = {"scene-b", "scene-a"};
+	const auto unsorted = Jeiobs::Workspace::ParseManifest(document.dump(), ManifestMode::Local);
+	JW_CHECK(unsorted.error.code == Jeiobs::Workspace::ErrorCode::Schema);
+	JW_CHECK_EQ(unsorted.error.detail, "scene_uuids");
+}
+
+void TestReviewRules()
+{
+	const auto scene_and_group = Jeiobs::Workspace::ReviewRules::AnalyzeCollection(
+		R"json({"sources":[{"id":"scene"},{"id":"group"}]})json");
+	JW_CHECK(scene_and_group.ok());
+	JW_CHECK_EQ(scene_and_group.unreviewed_count, 1U);
+	const auto opaque = Jeiobs::Workspace::ReviewRules::AnalyzeCollection(
+		R"json({"sources":[{"id":"scene"},{"id":"third-party"}]})json");
+	JW_CHECK(opaque.ok());
+	JW_CHECK_EQ(opaque.unreviewed_count, 1U);
+}
+
+void TestMemFsAndPlanner()
+{
+	Jeiobs::Workspace::MemFs fs;
+	JW_CHECK(fs.AddFile("config/obs-studio/plugin_config/obs-websocket/config.json", "{}").ok());
+	JW_CHECK(fs.AddFile("user/obs-studio/user.ini", "x=y\n").ok());
+	JW_CHECK(fs.AddFile("plugin_manager/obs-studio/plugin_manager/modules.json", "[]").ok());
+	JW_CHECK(fs.AddFile("scenes/obs-studio/basic/scenes/Main.json",
+			    R"json({"sources":[{"id":"scene","uuid":"scene-b"},{"id":"scene","uuid":"scene-a"}]})json")
+			 .ok());
+	JW_CHECK(fs.AddFile("scenes/obs-studio/basic/scenes/Main.json.bak", "{}").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/Main/basic.ini", "x=y\n").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/Main/service.json", "{}").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/Main/service.json.bak", "{}").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/main/basic.ini", "x=y\n").ok());
+	JW_CHECK(fs.AddFile("profiles/obs-studio/basic/profiles/Main/unknown.bin", "unknown").ok());
+	JW_CHECK(fs.AddSymlink("config/obs-studio/plugin_config/obs-websocket/link.json").ok());
+
+	Jeiobs::Workspace::Roots roots;
+	roots.config.path = "config";
+	roots.user.path = "user";
+	roots.scenes.path = "scenes";
+	roots.profiles.path = "profiles";
+	roots.plugin_manager.path = "plugin_manager";
+	Jeiobs::Workspace::SeededUidSource source("42");
+	const auto planned = Jeiobs::Workspace::CapturePlanner::Plan(fs, roots, nullptr, source);
+	JW_CHECK(planned.ok());
+	if (planned.ok()) {
+		JW_CHECK_EQ(planned.value->entries.size(), 11U);
+		if (planned.value->entries.size() >= 2U) {
+			JW_CHECK_EQ(planned.value->entries[0].path, "user.ini");
+			JW_CHECK_EQ(planned.value->entries[1].path, "plugin_manager/modules.json");
+		}
+		JW_CHECK_EQ(planned.value->collections.size(), 1U);
+		if (planned.value->collections.size() == 1U) {
+			JW_CHECK_EQ(planned.value->collections[0].scene_uuids[0], "scene-a");
+			JW_CHECK_EQ(planned.value->collections[0].scene_uuids[1], "scene-b");
+		}
+		JW_CHECK_EQ(planned.value->profiles.size(), 2U);
+		if (planned.value->profiles.size() >= 1U) {
+			JW_CHECK_EQ(planned.value->profiles[0].uid, "uid-42-0002");
+		}
+		JW_CHECK(!planned.value->warnings.empty());
+		if (!planned.value->warnings.empty()) {
+			JW_CHECK_EQ(planned.value->warnings.back().code, "case-collision");
+		}
+
+		const auto plan_json = Jeiobs::Workspace::PlanToJson(*planned.value);
+		if (plan_json.at("entries").size() >= 3U) {
+			JW_CHECK(plan_json.at("entries")[2].at("fidelity").is_null());
+			JW_CHECK(plan_json.at("entries")[2].at("scene_uuids").is_array());
+		}
+
+		Json parent_document = Json::parse(kLocalManifest);
+		parent_document["entries"] = {{{"id", "old-collection"},
+					       {"status", "stored"},
+					       {"root", "scenes"},
+					       {"path", "basic/scenes/Main.json"},
+					       {"role", "collection"},
+					       {"collection", "collection-old"},
+					       {"size", 1},
+					       {"hash", std::string(64, 'a')},
+					       {"fidelity", "exact"},
+					       {"scene_uuids", {"scene-a", "scene-b"}}},
+					      {{"id", "old-profile"},
+					       {"status", "stored"},
+					       {"root", "profiles"},
+					       {"path", "basic/profiles/Main/basic.ini"},
+					       {"role", "profile.basic"},
+					       {"profile", "profile-old"},
+					       {"size", 1},
+					       {"hash", std::string(64, 'b')},
+					       {"fidelity", "exact"}}};
+		const auto parent = Jeiobs::Workspace::ParseManifest(parent_document.dump(), ManifestMode::Local);
+		JW_CHECK(parent.ok());
+		if (parent.ok()) {
+			Jeiobs::Workspace::SeededUidSource parent_source("90");
+			const auto matched =
+				Jeiobs::Workspace::CapturePlanner::Plan(fs, roots, &*parent.value, parent_source);
+			JW_CHECK(matched.ok());
+			if (matched.ok()) {
+				JW_CHECK_EQ(matched.value->collections[0].uid, "collection-old");
+				JW_CHECK_EQ(matched.value->profiles[0].uid, "profile-old");
+				JW_CHECK_EQ(matched.value->profiles[1].uid, "uid-90-0001");
+			}
+		}
+	}
 }
 
 void TestBoundedWorstCases()
@@ -591,6 +734,10 @@ int main()
 	TestScanners();
 	TestRedactor();
 	TestReviewR3();
+	TestPartBNumbers();
+	TestSceneUuidValidationAndExport();
+	TestReviewRules();
+	TestMemFsAndPlanner();
 	TestBoundedWorstCases();
 	return JwTest::failures == 0 ? 0 : 1;
 }

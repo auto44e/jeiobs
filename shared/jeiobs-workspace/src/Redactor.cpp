@@ -13,6 +13,7 @@
 #include "jeiobs/workspace/IniScan.hpp"
 #include "jeiobs/workspace/JsonScan.hpp"
 #include "jeiobs/workspace/Limits.hpp"
+#include "jeiobs/workspace/ReviewRules.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -768,7 +769,7 @@ bool RedactCollection(std::vector<Edit> &edits, ReportBudget &budget, std::strin
 		if (non_string) {
 			++non_string_registry;
 		}
-		if (type != "scene" && type != "group") {
+		if (!IsFirstPartySourceType(type)) {
 			++unknown_sources;
 		}
 		if (type == "browser_source" || type == "ffmpeg_source" || type == "vlc_source") {
