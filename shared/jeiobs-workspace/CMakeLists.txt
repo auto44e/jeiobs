@@ -16,6 +16,7 @@ set(JW_LIBRARY_SOURCES
 	src/JsonScan.cpp
 	src/Manifest.cpp
 	src/PathRules.cpp
+	src/Unicode.cpp
 	src/Redactor.cpp
 	src/ReviewRules.cpp
 	src/CapturePlanner.cpp
@@ -102,4 +103,19 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/cases/run-cases.cmake")
 			-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/cases-work
 			-P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cases/run-cases.cmake
 	)
+endif()
+
+# Checks the generated Unicode tables against the pinned data files (tools/jeiobs/unicode/fetch-ucd.sh
+# UCD_DIR). Off unless JW_UCD_DIR names a directory that holds them.
+set(JW_UCD_DIR "" CACHE PATH "Directory with the pinned Unicode data files; enables jw-unicode-conformance")
+if(JW_UCD_DIR)
+	add_executable(jw-unicode-conformance tests/jw_unicode_conformance.cpp)
+	target_compile_features(jw-unicode-conformance PRIVATE cxx_std_17)
+	target_link_libraries(jw-unicode-conformance PRIVATE jeiobs-workspace)
+	if(MSVC)
+		target_compile_options(jw-unicode-conformance PRIVATE /W4 /WX)
+	elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+		target_compile_options(jw-unicode-conformance PRIVATE -Wall -Wextra -Werror)
+	endif()
+	add_test(NAME jw-unicode-conformance COMMAND jw-unicode-conformance "${JW_UCD_DIR}")
 endif()

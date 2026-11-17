@@ -14,6 +14,7 @@
 #include "jeiobs/workspace/Manifest.hpp"
 #include "jeiobs/workspace/PathRules.hpp"
 #include "jeiobs/workspace/Redactor.hpp"
+#include "jeiobs/workspace/Unicode.hpp"
 
 #include "jeiobs/workspace/Limits.hpp"
 
@@ -70,9 +71,6 @@ void PrintManifestOk(const Manifest &manifest)
 	if (manifest.roCompat) {
 		std::cout << " ro_compat";
 	}
-	if (manifest.uncheckedPaths) {
-		std::cout << " unchecked-paths";
-	}
 	std::cout << '\n';
 }
 
@@ -123,10 +121,33 @@ int CheckPath(const std::string &path)
 		return 1;
 	}
 	std::cout << "OK";
-	if (result.status == Jeiobs::Workspace::PathStatus::Unchecked) {
-		std::cout << " unchecked";
-	}
 	std::cout << '\n';
+	return 0;
+}
+
+int CheckUnicode(const std::string &function, const std::string &text)
+{
+	std::string out;
+	bool ok = false;
+	if (function == "nfd") {
+		ok = Jeiobs::Workspace::ToNfd(text, out);
+	} else if (function == "fold") {
+		ok = Jeiobs::Workspace::ToCaseFold(text, out);
+	} else {
+		ok = Jeiobs::Workspace::CollisionKey(text, out);
+	}
+	if (!ok) {
+		PrintError({ErrorCode::Path, "not-utf8"});
+		return 1;
+	}
+	static const char digits[] = "0123456789abcdef";
+	std::string hex;
+	for (const char byte : out) {
+		const unsigned char value = static_cast<unsigned char>(byte);
+		hex.push_back(digits[value >> 4U]);
+		hex.push_back(digits[value & 0x0FU]);
+	}
+	std::cout << "OK " << hex << '\n';
 	return 0;
 }
 
@@ -532,7 +553,7 @@ int CheckPlan(int argc, char **argv)
 
 void PrintUsage()
 {
-	std::cerr << "usage: jw-check hash FILE | path PATH | manifest FILE [--export] | "
+	std::cerr << "usage: jw-check hash FILE | path PATH | unicode nfd|fold|key TEXT | manifest FILE [--export] | "
 		     "revision FILE | child PARENT DRAFT | export MANIFEST DECISIONS --now RFC3339 | "
 		     "redact ROLE INFILE OUTFILE REPORT [--ws-placeholder STR] | "
 		     "plan TREE_DIR [--roots ROOTS.json] [--parent MANIFEST] [--uid-seed N] [--app-dir NAME]\n";
@@ -553,6 +574,12 @@ int Run(int argc, char **argv)
 		}
 		if (command == "path" && argc == 3) {
 			return CheckPath(argv[2]);
+		}
+		if (command == "unicode" && argc == 4) {
+			const std::string function = argv[2];
+			if (function == "nfd" || function == "fold" || function == "key") {
+				return CheckUnicode(function, argv[3]);
+			}
 		}
 		if (command == "manifest" && (argc == 3 || (argc == 4 && std::string(argv[3]) == "--export"))) {
 			return CheckManifest(argv[2], argc == 4 ? ManifestMode::Export : ManifestMode::Local);

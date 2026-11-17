@@ -33,7 +33,6 @@ struct Manifest {
 	ManifestMode mode = ManifestMode::Local;
 	bool readonly = false;
 	bool roCompat = false;
-	bool uncheckedPaths = false;
 };
 
 struct ManifestResult {

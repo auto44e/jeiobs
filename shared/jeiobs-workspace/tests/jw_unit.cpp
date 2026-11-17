@@ -87,8 +87,8 @@ void TestPaths()
 	const auto valid = Jeiobs::Workspace::ValidatePath("basic/scenes/Main.json");
 	JW_CHECK(valid.status == Jeiobs::Workspace::PathStatus::Ok);
 
-	const auto unchecked = Jeiobs::Workspace::ValidatePath(u8"basic/scenes/Mün.json");
-	JW_CHECK(unchecked.status == Jeiobs::Workspace::PathStatus::Unchecked);
+	const auto non_ascii = Jeiobs::Workspace::ValidatePath(u8"basic/scenes/Mün.json");
+	JW_CHECK(non_ascii.status == Jeiobs::Workspace::PathStatus::Ok);
 
 	const auto dot = Jeiobs::Workspace::ValidatePath("basic//Main.json");
 	JW_CHECK_EQ(dot.rule, "dot");
@@ -190,7 +190,6 @@ void TestManifest()
 	const auto parsed = Jeiobs::Workspace::ParseManifest(kLocalManifest, ManifestMode::Local);
 	JW_CHECK(parsed.ok());
 	JW_CHECK(!parsed.value->readonly);
-	JW_CHECK(!parsed.value->uncheckedPaths);
 
 	const auto duplicate = Jeiobs::Workspace::ParseManifest(
 		R"json({"format":"jeiobs-workspace","format":"jeiobs-workspace"})json", ManifestMode::Local);

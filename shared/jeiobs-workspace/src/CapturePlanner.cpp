@@ -1302,7 +1302,7 @@ void PlannerImpl::MarkCollisions(Plan &plan)
 {
 	std::map<std::string, std::vector<std::size_t>> groups;
 	for (std::size_t index = 0U; index < plan.entries.size(); ++index) {
-		groups[plan.entries[index].root + '\0' + AsciiFold(plan.entries[index].path)].push_back(index);
+		groups[EntryCollisionKey(plan.entries[index].root, plan.entries[index].path)].push_back(index);
 	}
 	for (const auto &[key, indices] : groups) {
 		if (indices.size() < 2U) {

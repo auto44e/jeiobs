@@ -744,9 +744,8 @@ bool IsStoredEntryAllowed(std::string_view root, std::string_view role, std::str
 	return false;
 }
 
-Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_paths,
-		      std::unordered_set<std::string> &entry_ids, std::vector<std::string> &redaction_refs,
-		      std::uint64_t &stored_bytes)
+Error ValidateEntries(const Json &document, ManifestMode mode, std::unordered_set<std::string> &entry_ids,
+		      std::vector<std::string> &redaction_refs, std::uint64_t &stored_bytes)
 {
 	if (!document.contains("entries") || !document.at("entries").is_array()) {
 		return Schema("entries");
@@ -788,10 +787,7 @@ Error ValidateEntries(const Json &document, ManifestMode mode, bool &unchecked_p
 			return MakeError(IsPathLimitRule(path_result.rule) ? ErrorCode::Limit : ErrorCode::Path,
 					 path_result.rule);
 		}
-		if (path_result.status == PathStatus::Unchecked) {
-			unchecked_paths = true;
-		}
-		const std::string collision_key = root + '\0' + AsciiFold(path);
+		const std::string collision_key = EntryCollisionKey(root, path);
 		if (!collision_keys.insert(collision_key).second) {
 			return MakeError(ErrorCode::Collision);
 		}
@@ -1090,12 +1086,10 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 		}
 	}
 
-	bool unchecked_paths = false;
 	std::unordered_set<std::string> entry_ids;
 	std::vector<std::string> redaction_refs;
 	std::uint64_t stored_bytes = 0U;
-	const Error entries_error =
-		ValidateEntries(document, mode, unchecked_paths, entry_ids, redaction_refs, stored_bytes);
+	const Error entries_error = ValidateEntries(document, mode, entry_ids, redaction_refs, stored_bytes);
 	if (!entries_error.ok()) {
 		return {std::nullopt, entries_error};
 	}
@@ -1109,7 +1103,6 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 	manifest.mode = mode;
 	manifest.readonly = major != 1U;
 	manifest.roCompat = ro_compat;
-	manifest.uncheckedPaths = unchecked_paths;
 	return {std::move(manifest), {}};
 }
 
