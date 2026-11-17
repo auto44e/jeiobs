@@ -22,6 +22,10 @@ FFMPEG_SHA256=6136812ea6d4e68bdba27e33c2a94382711cdf4f8602ffef056ff792bd6f9818
 MBEDTLS_V=3.6.7
 MBEDTLS_SHA256=a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6
 QT_V=6.11.1
+# aqtinstall installs Qt; the wheel is pinned by version and sha256. Its own dependencies are not
+# hash-pinned (pip resolves them).
+AQT_V=3.3.0
+AQT_WHEEL_SHA256=e88dbd87226f276fdd5d05347a44578d390d93a7f176e9476fbda0a7c9635f69
 # Steinberg VST3 SDK: same commit upstream CI pins (.github/scripts/utils.zsh/
 # setup_ubuntu). MIT licensed; only base, pluginterfaces and public.sdk are used.
 VST3_HASH=9fad9770f2ae8542ab1a548a68c1ad1ac690abe0
@@ -61,7 +65,14 @@ fi
 
 # --- Qt (official binaries via aqtinstall, in a private venv) ---------------
 if [ ! -d "$DEPS/Qt/$QT_V/gcc_64/lib/cmake/Qt6" ]; then
-  [ -x "$DEPS/aqt-venv/bin/aqt" ] || { python3 -m venv "$DEPS/aqt-venv" && "$DEPS/aqt-venv/bin/pip" install -q aqtinstall; }
+  if [ ! -x "$DEPS/aqt-venv/bin/aqt" ]; then
+    python3 -m venv "$DEPS/aqt-venv"
+    # Download the pinned wheel alone, check its hash, then install it (its dependencies resolve normally).
+    mkdir -p "$SRC/aqt"
+    "$DEPS/aqt-venv/bin/pip" download -q --no-deps "aqtinstall==$AQT_V" -d "$SRC/aqt"
+    verify "$SRC/aqt/aqtinstall-$AQT_V-py3-none-any.whl" "$AQT_WHEEL_SHA256"
+    "$DEPS/aqt-venv/bin/pip" install -q "$SRC/aqt/aqtinstall-$AQT_V-py3-none-any.whl"
+  fi
   "$DEPS/aqt-venv/bin/aqt" install-qt linux desktop "$QT_V" linux_gcc_64 -O "$DEPS/Qt" -m qtimageformats
 fi
 
