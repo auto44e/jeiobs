@@ -285,28 +285,21 @@ Result<UInt128> ParseUnsignedDecimal(const std::string &decimal)
 
 bool FitsSigned(Int128 raw, unsigned int bits) noexcept
 {
-	const bool negative = HasSignBit(raw, bits);
-	const UInt128 magnitude = IntMagnitude(raw, bits);
-	UInt128 limit;
 	if (bits == 128U) {
-		limit = {std::uint64_t(1U) << 63U, 0U};
-	} else if (bits == 64U) {
-		limit = {0U, std::uint64_t(1U) << 63U};
-	} else if (bits > 64U) {
-		limit = {std::uint64_t(1U) << (bits - 65U), 0U};
-	} else {
-		limit = {0U, std::uint64_t(1U) << (bits - 1U)};
+		return true;
+	}
+
+	const UInt128 value{raw.high, raw.low};
+	const UInt128 mask = BitMask(bits);
+	const bool negative = (raw.high & (std::uint64_t(1U) << 63U)) != 0U;
+	const bool sign_bit = HasSignBit(raw, bits);
+	if (negative != sign_bit) {
+		return false;
 	}
 	if (negative) {
-		return !IsLess(limit, magnitude);
+		return (value.high & ~mask.high) == ~mask.high && (value.low & ~mask.low) == ~mask.low;
 	}
-	if (IsLess(limit, magnitude)) {
-		return false;
-	}
-	if (magnitude == limit) {
-		return false;
-	}
-	return true;
+	return (value.high & ~mask.high) == 0U && (value.low & ~mask.low) == 0U;
 }
 
 UInt128 RoundedDoubleToUInt(double number) noexcept
@@ -340,6 +333,14 @@ UInt128 SignedLimit(unsigned int bits) noexcept
 		return {std::uint64_t(1U) << (bits - 65U), 0U};
 	}
 	return {0U, std::uint64_t(1U) << (bits - 1U)};
+}
+
+Result<Value> PreserveRelative(Result<Value> result, const Value &template_value)
+{
+	if (!result.ok() || !template_value.relative().has_value()) {
+		return result;
+	}
+	return result.value->WithRelative(*template_value.relative());
 }
 
 std::uint32_t Float32Bits(float value) noexcept
@@ -441,8 +442,8 @@ Result<Value> Value::MakeFloatBits(FloatFormat format, std::uint64_t raw, std::s
 	if (format != FloatFormat::Ieee32 && format != FloatFormat::Ieee64) {
 		return {{}, MakeError(ErrorCode::Value)};
 	}
-	if (format == FloatFormat::Ieee32) {
-		raw &= 0xffffffffU;
+	if (format == FloatFormat::Ieee32 && raw > std::numeric_limits<std::uint32_t>::max()) {
+		return {{}, MakeError(ErrorCode::Limit, "value")};
 	}
 	Value value;
 	value.kind_ = ValueKind::FloatBits;
@@ -564,48 +565,62 @@ Result<Value> Value::MakeIntDecimal(unsigned int width_bits, const std::string &
 Result<Value> Value::FromDoubleInCodeSpace(const Value &value, double number)
 {
 	try {
-		if (!std::isfinite(number) && value.kind() != ValueKind::FloatBits) {
+		if (std::isnan(number)) {
 			return {{}, MakeError(ErrorCode::Value)};
 		}
 		switch (value.kind_) {
 		case ValueKind::Trigger:
-			return MakeTrigger(value.unit_);
+			return PreserveRelative(MakeTrigger(value.unit_), value);
 		case ValueKind::Bool:
-			return MakeBool(number != 0.0, value.unit_);
+			return PreserveRelative(MakeBool(number != 0.0, value.unit_), value);
 		case ValueKind::UInt: {
-			double clamped = std::max(0.0, number);
 			const UInt128 maximum = BitMask(value.width_bits_);
-			const double maximum_double = value.width_bits_ == 128U
-							      ? kTwoTo128
-							      : std::ldexp(1.0, static_cast<int>(value.width_bits_));
-			if (clamped >= maximum_double) {
-				return MakeUInt(value.width_bits_, maximum, value.unit_);
+			UInt128 rounded;
+			if (number > 0.0) {
+				rounded = RoundedDoubleToUInt(number);
 			}
-			return MakeUInt(value.width_bits_, Masked(RoundedDoubleToUInt(clamped), value.width_bits_),
-					value.unit_);
+			if (IsLess(maximum, rounded)) {
+				rounded = maximum;
+			}
+			return PreserveRelative(MakeUInt(value.width_bits_, rounded, value.unit_), value);
 		}
 		case ValueKind::Int: {
 			const double limit_double = std::ldexp(1.0, static_cast<int>(value.width_bits_ - 1U));
 			if (number >= limit_double) {
 				const UInt128 maximum = SubtractOne(SignedLimit(value.width_bits_));
-				return MakeInt(value.width_bits_, {maximum.high, maximum.low}, value.unit_);
+				return PreserveRelative(
+					MakeInt(value.width_bits_, {maximum.high, maximum.low}, value.unit_), value);
 			}
 			if (number <= -limit_double) {
 				const UInt128 magnitude = SignedLimit(value.width_bits_);
 				const UInt128 raw = TwosComplement(magnitude);
-				return MakeInt(value.width_bits_, {raw.high, raw.low}, value.unit_);
+				return PreserveRelative(MakeInt(value.width_bits_, {raw.high, raw.low}, value.unit_),
+							value);
 			}
 			const bool negative = number < 0.0;
 			const UInt128 magnitude = RoundedDoubleToUInt(std::abs(number));
+			const UInt128 signed_limit = SignedLimit(value.width_bits_);
+			if (magnitude == signed_limit || IsLess(signed_limit, magnitude)) {
+				if (negative) {
+					const UInt128 raw = TwosComplement(signed_limit);
+					return PreserveRelative(
+						MakeInt(value.width_bits_, {raw.high, raw.low}, value.unit_), value);
+				}
+				const UInt128 maximum = SubtractOne(signed_limit);
+				return PreserveRelative(
+					MakeInt(value.width_bits_, {maximum.high, maximum.low}, value.unit_), value);
+			}
 			const UInt128 raw = negative ? TwosComplement(magnitude) : magnitude;
-			return MakeInt(value.width_bits_, {raw.high, raw.low}, value.unit_);
+			return PreserveRelative(MakeInt(value.width_bits_, {raw.high, raw.low}, value.unit_), value);
 		}
 		case ValueKind::FloatBits:
 			if (value.float_format_ == FloatFormat::Ieee32) {
 				float converted = static_cast<float>(number);
-				return MakeFloatBits(value.float_format_, Float32Bits(converted), value.unit_);
+				return PreserveRelative(
+					MakeFloatBits(value.float_format_, Float32Bits(converted), value.unit_), value);
 			}
-			return MakeFloatBits(value.float_format_, DoubleBits(number), value.unit_);
+			return PreserveRelative(MakeFloatBits(value.float_format_, DoubleBits(number), value.unit_),
+						value);
 		case ValueKind::Text:
 			return MakeText(value.text_, value.unit_);
 		case ValueKind::Blob:
