@@ -53,6 +53,8 @@ static inline void wrap_blog(int log_level, const char *message)
 %typemap(newfree) char * "bfree($1);";
 
 %ignore blog;
+%ignore config_lock; /* scripts must not hold a config lock: it is outside the S1 capture lock-order proof */
+%ignore config_unlock;
 %ignore blogva;
 %ignore bcrash;
 %ignore base_set_crash_handler;

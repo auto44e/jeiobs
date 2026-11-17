@@ -458,8 +458,9 @@ is raised (`:1518-1522`). Geometry and `DockState` reach the config only in `sav
    continues.
 3. Take the locks in this order: a new frontend `persistMutex`, which `SaveService()` also takes;
    then `config_lock` on the user, profile and app configs. `config_save` and `config_save_safe`
-   hold the recursive `config->mutex` (`config-file.c:81`) across the write and the replace
-   (`config-file.c:345-390,411-441`). Holding it therefore blocks every `config_t` writer on every
+   hold the recursive `config->mutex` (`struct config_data` in `config-file.c`) across the write and
+   the replace (functions `config_save` and `config_save_safe`; line numbers drift, so they are not
+   cited). Holding it therefore blocks every `config_t` writer on every
    thread, including obs-websocket and plugins.
 4. Stage the window state (code extracted from `saveAll`), then `config_save_safe` the user and
    profile configs.
@@ -470,7 +471,7 @@ is raised (`:1518-1522`). Geometry and `DockState` reach the config only in `sav
 6. Release the locks in reverse order. Redaction, hashing and the manifest are built on a worker.
 
 PR4 must show that each writer takes at most one of these locks. Getters also take `config->mutex`
-(`config-file.c:625-630`), so PR4 must also show that no audio or video thread reads these configs,
+(`config_get_string` and the other `config_get_*` functions), so PR4 must also show that no audio or video thread reads these configs,
 and it reports the hold time.
 
 **Root gate.** Steps 2 and 4 write live config. While the fork shares `obs-studio/` with OBS

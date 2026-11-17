@@ -108,7 +108,7 @@ Config File Functions
    setter and save function takes. While it is held, no other thread can
    change or save this configuration object, so a file read in the meantime
    is not rewritten by it. The lock is recursive: the holding thread may
-   call any other *config_* function. Does nothing for *NULL*.
+   call any other *config_* function except :c:func:`config_close`. Does nothing for *NULL*.
 
    Release it with :c:func:`config_unlock` on the same thread. Keep it short,
    because every other thread that uses the object waits, and do not wait for

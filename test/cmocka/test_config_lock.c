@@ -189,7 +189,6 @@ static void test_file_not_rewritten_while_held(void **state)
 
 	struct writer writer = {.config = config};
 	assert_int_equal(os_event_init(&writer.started, OS_EVENT_TYPE_MANUAL), 0);
-	assert_int_equal(os_event_init(&writer.finished, OS_EVENT_TYPE_MANUAL), 0);
 	assert_int_equal(pthread_create(&writer.thread, NULL, save_loop, &writer), 0);
 	assert_int_equal(os_event_wait(writer.started), 0);
 	os_sleep_ms(50);
@@ -221,7 +220,6 @@ static void test_file_not_rewritten_while_held(void **state)
 	os_atomic_store_bool(&writer.stop, true);
 	pthread_join(writer.thread, NULL);
 	os_event_destroy(writer.started);
-	os_event_destroy(writer.finished);
 	config_close(config);
 	os_unlink(path.text);
 }

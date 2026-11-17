@@ -62,9 +62,12 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   approved in WORKSPACE_FORMAT section 14), with sphinx docs and a cmocka test
   (`test/cmocka/test_config_lock.c`: recursion, an off-thread setter blocks until unlock, and the file is
   not rewritten while the lock is held). The tree already had `test/cmocka` but never built it, so
-  the top-level CMakeLists now adds it behind `ENABLE_UNIT_TESTS`. Linux: the three tests pass in 80 of
-  80 runs, and the two blocking tests fail when the lock is made a no-op. No CI job builds libobs unit
-  tests yet.
+  the top-level CMakeLists now adds it behind `ENABLE_UNIT_TESTS`. Review also found a pre-existing race: `config_save_safe` read
+  `config->file` before taking the lock, so two concurrent calls could free the same temporary name; it
+  now reads it under the lock (a 3-thread test fails 3 of 20 runs before and 0 of 60 after).
+  `config_num_sections` and `config_open_defaults` now take the lock too, and the scripting
+  bindings ignore the two new functions. Linux: the four tests pass in 90 of 90 runs, and the blocking
+  tests fail when the lock is made a no-op. No CI job builds libobs unit tests yet.
 - Next: PR4b (the frontend capture host on top of `config_lock`). Also
   owed: an owner-merged PR that pins the Unicode Character Database and adds the generated collision
   tables (decision 3), and S2 includes a purge for local history (decision 2).

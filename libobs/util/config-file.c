@@ -322,10 +322,16 @@ int config_open_string(config_t **config, const char *str)
 
 int config_open_defaults(config_t *config, const char *file)
 {
+	int ret;
+
 	if (!config)
 		return CONFIG_ERROR;
 
-	return config_parse_file(&config->defaults, file, false);
+	pthread_mutex_lock(&config->mutex);
+	ret = config_parse_file(&config->defaults, file, false);
+	pthread_mutex_unlock(&config->mutex);
+
+	return ret;
 }
 
 int config_save(config_t *config)

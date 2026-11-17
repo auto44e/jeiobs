@@ -34,4 +34,4 @@ add_executable(test_config_lock test_config_lock.c)
 target_include_directories(test_config_lock PRIVATE ${CMOCKA_INCLUDE_DIR})
 target_link_libraries(test_config_lock PRIVATE OBS::libobs ${CMOCKA_LIBRARIES})
 
-add_test(test_config_lock ${CMAKE_CURRENT_BINARY_DIR}/test_config_lock)
+add_test(NAME test_config_lock COMMAND test_config_lock)

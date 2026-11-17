@@ -51,7 +51,7 @@ EXPORT void config_close(config_t *config);
 /*
  * Holds the configuration's own lock, the one every getter, setter and save call takes. While a
  * thread holds it, no other thread can change or save this config_t, so a file that is read in the
- * meantime is not rewritten. The lock is recursive: the holder may call any config_* function.
+ * meantime is not rewritten. The lock is recursive: the holder may call any config_* function except config_close().
  * Release with config_unlock() on the same thread, and keep the hold short: every other thread that
  * touches this config_t waits. Do not wait for another thread that may be using this config_t while
  * you hold it. If you also take your own locks, use one fixed order relative to this lock everywhere
