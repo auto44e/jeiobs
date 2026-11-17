@@ -458,8 +458,9 @@ is raised (`:1518-1522`). Geometry and `DockState` reach the config only in `sav
    continues.
 3. Take the locks in this order: a new frontend `persistMutex`, which `SaveService()` also takes;
    then `config_lock` on the user, profile and app configs. `config_save` and `config_save_safe`
-   hold the recursive `config->mutex` (`config-file.c:81`) across the write and the replace
-   (`config-file.c:345-390,411-441`). Holding it therefore blocks every `config_t` writer on every
+   hold the recursive `config->mutex` (`struct config_data` in `config-file.c`) across the write and
+   the replace (functions `config_save` and `config_save_safe`; line numbers drift, so they are not
+   cited). Holding it therefore blocks every `config_t` writer on every
    thread, including obs-websocket and plugins.
 4. Stage the window state (code extracted from `saveAll`), then `config_save_safe` the user and
    profile configs.
@@ -470,7 +471,7 @@ is raised (`:1518-1522`). Geometry and `DockState` reach the config only in `sav
 6. Release the locks in reverse order. Redaction, hashing and the manifest are built on a worker.
 
 PR4 must show that each writer takes at most one of these locks. Getters also take `config->mutex`
-(`config-file.c:625-630`), so PR4 must also show that no audio or video thread reads these configs,
+(`config_get_string` and the other `config_get_*` functions), so PR4 must also show that no audio or video thread reads these configs,
 and it reports the hold time.
 
 **Root gate.** Steps 2 and 4 write live config. While the fork shares `obs-studio/` with OBS
@@ -485,14 +486,14 @@ Writer inventory (audit section 2, re-checked):
 | File | Writers (thread) | Primitive | Serialized by |
 | --- | --- | --- | --- |
 | `user.ini` | settings, docks, exit (UI; `OBSBasicSettings.cpp:3789`, `OBSBasic.cpp:1769`); plugins through `obs_frontend_get_user_config()` (any thread) | `config_save_safe` | config lock |
-| `basic.ini` | settings (UI, `OBSBasicSettings.cpp:3788`); OAuth (UI, `Auth.cpp:79,86`); hotkey rename (UI, `OBSBasic_Hotkeys.cpp:122`); obs-websocket `SetProfileParameter`, `SetVideoSettings`, `SetRecordDirectory` (worker pool, `WebSocketServer.cpp:352`; `RequestHandler_Config.cpp:417,513,655`); plugins through `obs_frontend_get_profile_config()` | `config_save` (truncates in place, `config-file.c:347`), `config_save_safe` | config lock |
+| `basic.ini` | settings (UI, `OBSBasicSettings.cpp:3788`); OAuth (UI, `Auth.cpp:79,86`); hotkey rename (UI, `OBSBasic_Hotkeys.cpp:122`); obs-websocket `SetProfileParameter`, `SetVideoSettings`, `SetRecordDirectory` (worker pool, `WebSocketServer.cpp:352`; `RequestHandler_Config.cpp:417,513,655`); plugins through `obs_frontend_get_profile_config()` | `config_save` (truncates in place), `config_save_safe` | config lock |
 | `service.json` | `SaveService()` (`OBSBasic_Service.cpp:24-43`), called from the UI (`OBSBasicSettings_Stream.cpp:333`) and from obs-websocket `SetStreamServiceSettings` on a worker (`RequestHandler_Config.cpp:603` → `OBSStudioAPI.cpp:534-536`) | tmp + `.bak` | `persistMutex` |
 | encoder JSON, collections, `modules.json`, websocket `config.json`, decklink and AJA props | UI thread only: `WriteJsonData` (`OBSBasicSettings.cpp:3384-3398`), `OBSBasic::Save` (`OBSBasic_SceneCollections.cpp:806-990`), `saveModules_` (`PluginManager.cpp:190-210`), `Config::Save` (`SettingsDialog.cpp:210`; at startup, `Config.cpp:87,92`), output dialogs (`DecklinkOutputUI.cpp:59,95`, `AJAOutputUI.cpp:82`) | tmp + `.bak`; plain `ofstream` for `modules.json` and the websocket `config.json` (`Json.cpp:214`) | UI turn |
 | `global.ini` | exit and migrations (UI; `OBSBasic.cpp:1759`, `OBSApp.cpp:570`); websocket migration (`Config.cpp:189`) | `config_save_safe`, `config_save` | config lock (keys only) |
 | `persistent_data.json`, `vst3list.json` | obs-websocket worker (`RequestHandler_Config.cpp:109`); scanner process (`vst3-scanner.cpp:646`) | plain; tmp + `.bak` | not captured |
 
 A writer found later that bypasses `config_t` and `SaveService()` either joins the protocol or
-makes capture refuse while it can run. Without `config_lock` (owner decision 1: approved, not yet implemented), capture would refuse
+makes capture refuse while it can run. `config_lock` (owner decision 1) exists in libobs since S1-PR4a; without it capture would have to refuse
 while obs-websocket's server is enabled.
 
 ## 11. Durability and recovery (S2 implements; fixed now)
@@ -606,14 +607,14 @@ non-ASCII letters.
 
 Tests run under ctest with a small in-tree `jw_test.hpp`. A test framework would be a new
 third-party dependency, which is owner-merged ([DECISIONS](DECISIONS.md) gate item 1). The
-inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/test-input`, so
-`test/CMakeLists.txt:13-14` is skipped.
+inherited cmocka setup was never built until S1-PR4a added `test/cmocka` behind `ENABLE_UNIT_TESTS`;
+no CI job runs it yet.
 
 | Slice | Contents | Merge |
 | --- | --- | --- |
 | PR1 | this document; `Limits`, `PathRules`, `Hash`, `Manifest` (parse, validate, child-writer extension rules, `ProjectForExport`). Synthetic fixtures: valid local and export manifests, unknown fields at each level, future minor, future major (read-only), unknown `incompat` and `ro_compat`, duplicate key, invalid UTF-8, NUL, `1e400`, depth 65, oversize input, every path rule, an undecided `opaque-unreviewed` entry | self-merge gate; persistence format, so review rounds repeat until one finds no blocker or major |
 | CI | `.github/workflows/jeiobs-workspace.yaml`: build and ctest on ubuntu, macos, windows | owner (`.github/`) |
-| PR2 | bounded JSON scanner with byte positions; INI reader that keeps BOM (written on Windows, `config-file.c:378-381`), CRLF and duplicates; redactor with per-kind placeholders. Fixtures: rtmp_common, custom RTMP with auth, WHIP, Twitch/YouTube/Restream tokens, websocket placeholder with forced auth, URL rule; a scan proving no secret bytes remain; a fuzz target | self-merge gate |
+| PR2 | bounded JSON scanner with byte positions; INI reader that keeps BOM (written on Windows by `config_save`), CRLF and duplicates; redactor with per-kind placeholders. Fixtures: rtmp_common, custom RTMP with auth, WHIP, Twitch/YouTube/Restream tokens, websocket placeholder with forced auth, URL rule; a scan proving no secret bytes remain; a fuzz target | self-merge gate |
 | PR3 | `Fs` (`MemFs`, `RealFs`), `CapturePlanner` (allowlist, omit-by-default, `.bak` pairs, symlinks, unrepresentable names, collisions, limits), identity against a parent revision, `ReviewRules` (table starts with `scene` and `group`), `jw-check plan`; synthetic root trees with custom locations. Not yet: capture of file contents, real Windows/macOS trees (CI runs the synthetic ones) | self-merge gate |
 | PR4 | frontend capture host: save result, `StageWindowState`, `persistMutex`, root gate, Windows sharing, coordinator. Tests: an off-thread `config_save` blocks instead of tearing a read; an out-of-protocol writer makes capture refuse; `ReplaceFileW` succeeds during a capture read; a failed save yields no result | self-merge gate with decision 1 already made; it changes libobs public API, so review rounds repeat until one finds no Blocker or Major |
 | S2 | store writer, recovery, history, restore, and the purge (delete a revision or a workspace; remove unreferenced blobs) that decision 2 depends on | — |
@@ -623,9 +624,11 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 
 Decided 2026-11-16. The owner's words, verbatim: "will go with all you recs for all 3".
 
-- **Decision 1: add `config_lock()` / `config_unlock()` to libobs util.** Approved; not yet
-  implemented. PR4 may now implement it. It is a new public libobs API, so PR4 must also show the
-  lock-order proof and hold times described in section 10.
+- **Decision 1: add `config_lock()` / `config_unlock()` to libobs util.** Approved. Added in
+  S1-PR4a (`libobs/util/config-file.{c,h}`, a recursive lock over the config's own mutex, with a
+  cmocka test that an off-thread writer blocks and that the file is not rewritten while the lock is
+  held). It is a new public libobs API, so PR4 (the capture host) must still show the lock-order
+  proof and hold times described in section 10.
   - Why: it is the only mechanism found that serializes obs-websocket's pool writes and
     third-party `config_t` writers without changing them.
   - Flex: reopen if the lock-order proof fails, if hold times starve the audio or video threads,

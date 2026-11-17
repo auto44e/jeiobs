@@ -322,10 +322,16 @@ int config_open_string(config_t **config, const char *str)
 
 int config_open_defaults(config_t *config, const char *file)
 {
+	int ret;
+
 	if (!config)
 		return CONFIG_ERROR;
 
-	return config_parse_file(&config->defaults, file, false);
+	pthread_mutex_lock(&config->mutex);
+	ret = config_parse_file(&config->defaults, file, false);
+	pthread_mutex_unlock(&config->mutex);
+
+	return ret;
 }
 
 int config_save(config_t *config)
@@ -336,13 +342,17 @@ int config_save(config_t *config)
 
 	if (!config)
 		return CONFIG_ERROR;
-	if (!config->file)
-		return CONFIG_ERROR;
 
 	dstr_init(&str);
 	dstr_init(&tmp);
 
 	pthread_mutex_lock(&config->mutex);
+
+	/* config_save_safe swaps config->file under this lock, so test it only while holding it. */
+	if (!config->file) {
+		pthread_mutex_unlock(&config->mutex);
+		return CONFIG_ERROR;
+	}
 
 	f = os_fopen(config->file, "wb");
 	if (!f) {
@@ -395,11 +405,23 @@ cleanup:
 	return ret;
 }
 
+void config_lock(config_t *config)
+{
+	if (config)
+		pthread_mutex_lock(&config->mutex);
+}
+
+void config_unlock(config_t *config)
+{
+	if (config)
+		pthread_mutex_unlock(&config->mutex);
+}
+
 int config_save_safe(config_t *config, const char *temp_ext, const char *backup_ext)
 {
 	struct dstr temp_file = {0};
 	struct dstr backup_file = {0};
-	char *file = config->file;
+	char *file;
 	int ret;
 
 	if (!temp_ext || !*temp_ext) {
@@ -409,6 +431,10 @@ int config_save_safe(config_t *config, const char *temp_ext, const char *backup_
 	}
 
 	pthread_mutex_lock(&config->mutex);
+
+	/* Read the file name only under the lock: another config_save_safe call swaps config->file to
+	 * its temporary name while it holds the lock. */
+	file = config->file;
 
 	dstr_copy(&temp_file, config->file);
 	if (*temp_ext != '.')
@@ -468,7 +494,13 @@ void config_close(config_t *config)
 
 size_t config_num_sections(config_t *config)
 {
-	return HASH_CNT(hh, config->sections);
+	size_t count;
+
+	pthread_mutex_lock(&config->mutex);
+	count = HASH_CNT(hh, config->sections);
+	pthread_mutex_unlock(&config->mutex);
+
+	return count;
 }
 
 const char *config_get_section(config_t *config, size_t idx)

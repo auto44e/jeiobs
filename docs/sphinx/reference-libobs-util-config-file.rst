@@ -102,6 +102,33 @@ Config File Functions
 
 ----------------------
 
+.. function:: void config_lock(config_t *config)
+
+   Takes the configuration object's own lock, the one that every getter,
+   setter and save function takes. While it is held, no other thread can
+   change or save this configuration object, so a file read in the meantime
+   is not rewritten by it. The lock is recursive: the holding thread may
+   call any other *config_* function except :c:func:`config_close`. Does nothing for *NULL*.
+
+   Release it with :c:func:`config_unlock` on the same thread. Keep it short,
+   because every other thread that uses the object waits, and do not wait for
+   another thread that may be using the object while you hold it. If you also
+   take your own locks, use one fixed order relative to this lock everywhere.
+   Do not call :c:func:`config_close` while any thread holds or waits for it.
+
+   :param config:     Configuration object
+
+----------------------
+
+.. function:: void config_unlock(config_t *config)
+
+   Releases one hold taken with :c:func:`config_lock`. Does nothing for
+   *NULL*.
+
+   :param config:     Configuration object
+
+----------------------
+
 .. function:: size_t config_num_sections(config_t *config)
 
    Returns the number of sections.

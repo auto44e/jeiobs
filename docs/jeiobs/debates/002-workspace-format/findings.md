@@ -269,3 +269,34 @@ codex-3 | Major | accepted-fix | codex | review-pr32-04/04-r2-codex.reply.md (FI
 codex-4 | Minor | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-4) | -
 codex-5 | Major | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-5) | -
 codex-6 | Minor | open (Minor, S1-PR4) | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-6) | -
+
+## PR #38 (S1-PR4a, `config_lock`), review `review-pr4a-01` on `c23b46031`
+
+Run 01: both peers request changes. Claude found one Major (the lock-order sentence) and raised its
+`config_save_safe` Minor to Major once Codex found the same root cause (codex-1, a pre-existing race
+in libobs: `config_save_safe` read `config->file` before taking the lock). The lead fixed all of
+them; run 02 on the fixed head checks the fixes.
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | fixed (awaiting finder) | claude | review-pr4a-01/03-r2-claude.reply.md (FINDING claude-1) | header and sphinx now say: one fixed order relative to this lock, hold short, do not wait for another user of the config
+claude-2 | Minor | fixed (awaiting finder) | claude | review-pr4a-01/03-r2-claude.reply.md (FINDING claude-2) | "any config_* function except config_close"; `config_open_defaults` and `config_num_sections` now lock
+claude-3 | Major | fixed (awaiting finder) | claude | review-pr4a-01/03-r2-claude.reply.md (FINDING claude-3) | `config_save_safe` reads the file name under the lock; a 3-thread concurrent test fails before the fix (3 of 20 runs) and passes after (0 of 60)
+claude-4 | Minor | fixed (awaiting finder) | claude | review-pr4a-01/03-r2-claude.reply.md (FINDING claude-4) | `%ignore config_lock/config_unlock` in obslua.i and obspython.i
+claude-5 | Minor | fixed (awaiting finder) | claude | review-pr4a-01/03-r2-claude.reply.md (FINDING claude-5) | `add_test(NAME ... COMMAND target)`; unused event removed; the test is Linux-only evidence and says so
+claude-6 | Minor | fixed (awaiting finder) | claude | review-pr4a-01/03-r2-claude.reply.md (FINDING claude-6) | stale statement and line citations replaced by function names
+codex-1 | Major | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-1) | as claude-3
+codex-2 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-2) | as claude-2
+codex-3 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-3) | `os_atomic_load_bool` and `os_atomic_store_bool` for the stop flag
+codex-4 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-4) | as claude-1
+codex-5 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-5) | as claude-6
+codex-6 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-6) | as claude-2
+codex-7 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-7) | as claude-5
+codex-8 | Minor | fixed (awaiting finder) | codex | review-pr4a-01/04-r2-codex.reply.md (FINDING codex-8) | as claude-6
+
+### PR #38 run 02 (`review-pr4a-02`) on `e3ecb4179`: both peers approve
+
+Every run 01 finding is `accepted-fix` by its finder (Claude and Codex both check each against the code). Three new
+Minors, all fixed in the PR after the run: `config_save` tested `config->file` before taking the lock (claude-8,
+codex-9), stale `config-file.c:` line citations in section 10 and PR2 (claude-7, codex-10), and the
+concurrent test asserted `>= 0` where it can assert the final counter 399 (claude-9, codex-11).

@@ -58,6 +58,16 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   and the PR2 review Minors (number token length and exponent clamping). Codex wrote the library and
   Claude the black-box cases blind; the cases decided four readings (contract r1). Linux (GCC):
   `jw-unit`, `jw-fuzz-smoke` and `jw-cases` (1134 case lines) pass, also under ASan and UBSan.
-- Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host). Also
+- **S1-PR4a** (2026-11-17): `config_lock()` and `config_unlock()` in libobs util (owner decision 1:
+  approved in WORKSPACE_FORMAT section 14), with sphinx docs and a cmocka test
+  (`test/cmocka/test_config_lock.c`: recursion, an off-thread setter blocks until unlock, and the file is
+  not rewritten while the lock is held). The tree already had `test/cmocka` but never built it, so
+  the top-level CMakeLists now adds it behind `ENABLE_UNIT_TESTS`. Review also found a pre-existing race: `config_save_safe` read
+  `config->file` before taking the lock, so two concurrent calls could free the same temporary name; it
+  now reads it under the lock (a 3-thread test fails 3 of 20 runs before and 0 of 60 after).
+  `config_num_sections` and `config_open_defaults` now take the lock too, and the scripting
+  bindings ignore the two new functions. Linux: the four tests pass in 30 of 30 runs on the final code, and the
+  blocking tests fail when the lock is made a no-op. No CI job builds libobs unit tests yet.
+- Next: PR4b (the frontend capture host on top of `config_lock`). Also
   owed: an owner-merged PR that pins the Unicode Character Database and adds the generated collision
   tables (decision 3), and S2 includes a purge for local history (decision 2).
