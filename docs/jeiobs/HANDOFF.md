@@ -106,8 +106,8 @@ Open small items (2026-11-16):
 - Codex's shell sandbox works on the maintainer's host since 2026-11-16 (AppArmor
   profile for bubblewrap, see DECISIONS "Confinement history"). Earlier runs were
   unsandboxed. Read each run's `00-meta.md` for the state at that run.
-- Pin `aqtinstall` in `tools/jeiobs/linux-deps.sh` (it installs an unpinned
-  version). Dependency change, so owner-merged (review of #18, finding k10).
+- `aqtinstall` is pinned to 3.3.0 in `tools/jeiobs/linux-deps.sh`; its transitive dependencies are not
+  hash-pinned (a full `--require-hashes` requirements file is a possible follow-up).
 - Task 003 follow-up D6 is [task 005](tasks/005-vst3-skip-list.md) (remember
   failed VST3 bundles): done on Linux; Windows and macOS not compiled.
 - Task 002 S1: audit written, format design in debate.
