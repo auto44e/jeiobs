@@ -1,0 +1,34 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "DesktopAudioDevice1": {"id": "browser_source", "name": "D1", "settings": {"url": "https://SECRETvalue-all-1@h.example.com/?key=SECRETvalue-all-2"}},
+    "DesktopAudioDevice2": {"id": "ffmpeg_source", "name": "D2", "settings": {"is_local_file": true, "input": "srt://h.example.com:9000?streamid=SECRETvalue-all-3&passphrase=SECRETvalue-all-4"}},
+    "AuxAudioDevice1": {"id": "vlc_source", "name": "A1", "settings": {"playlist": [{"value": "/home/user/PLAINvalue-all-1.mkv"}, {"value": "rtsp://SECRETvalue-all-5@cam.example.com/s"}]}},
+    "AuxAudioDevice2": {"id": "ffmpeg_source", "name": "A2", "settings": {"ffmpeg_options": "http_proxy=http://SECRETvalue-all-6@proxy.example.com:3128"}},
+    "AuxAudioDevice3": {"id": "x_old_browser", "versioned_id": "browser_source", "name": "A3", "settings": {"url": "https://h.example.com/?secret=SECRETvalue-all-7"}},
+    "AuxAudioDevice4": {"id": "pulse_input_capture", "name": "A4", "settings": {"device_id": "default", "url": "https://PLAINvalue-all-2@h.example.com/"}},
+    "DesktopAudioDevice3": {"id": "browser_source", "name": "Not loaded", "settings": {"url": "https://PLAINvalue-all-3@h.example.com/"}},
+    "AuxAudioDevice0": {"id": "browser_source", "name": "Not loaded", "settings": {"url": "https://PLAINvalue-all-4@h.example.com/"}},
+    "AuxAudioDevice5": {"id": "browser_source", "name": "Not loaded", "settings": {"url": "https://PLAINvalue-all-5@h.example.com/"}},
+    "desktopaudiodevice1": {"id": "browser_source", "name": "Not loaded", "settings": {"url": "https://PLAINvalue-all-6@h.example.com/"}},
+    "x_nested": {"DesktopAudioDevice1": {"id": "browser_source", "settings": {"url": "https://PLAINvalue-all-7@h.example.com/"}}},
+    "groups": [],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        },
+        {
+            "id": "image_source",
+            "name": "Logo",
+            "settings": {"file": "/home/user/logo.png"}
+        }
+    ]
+}

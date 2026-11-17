@@ -1,0 +1,17 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [
+        {
+            "id": "vlc_source",
+            "name": "Group playlist",
+            "settings": {"playlist": [{"value": "http://SECRETvalue-gr-3@media.example.com/a.mp4?auth=SECRETvalue-gr-4", "hidden": false, "selected": false}]}
+        }
+    ]
+}

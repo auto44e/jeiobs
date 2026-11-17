@@ -1,0 +1,29 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [
+        {
+            "id": "group",
+            "name": "Group",
+            "settings": {"id_counter": 0, "custom_size": true, "cx": 100, "cy": 100, "items": []}
+        },
+        {
+            "id": "browser_source",
+            "name": "In group",
+            "settings": {"url": "https://SECRETvalue-gr-1@h.example.com/?access_token=SECRETvalue-gr-2&x=PLAINvalue-gr-1"}
+        }
+    ],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        }
+    ]
+}

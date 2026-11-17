@@ -696,6 +696,8 @@ partb-revision-app-keys | 1 | ERR E_SCHEMA app_keys | revision fixtures/rev/part
 # redact-service-rtmp-custom (opaque with redactions), redact-service-type-rtmp-custom-no-secret (opaque
 # without), redact-basic-unknown-section-and-token, redact-ws-password-number (opaque, forced edit kept)
 # and redact-invalid-encoder-* (opaque, parse invalid).
+# Not here: r3.2 item 2 (an edit that cannot be applied fails closed, never stored unredacted) needs a fault
+# inside the library, which no input reaches through the CLI. The same item has jw-fuzz-smoke check it.
 
 # ---- redact profile.service and .bak (JSON). Registry: /settings/key stream_key, /settings/bearer_token
 # bearer_token, /settings/username and /settings/password rtmp_auth, /settings/server url_credential (URL
@@ -866,6 +868,45 @@ redact-basic-r3-ffurl-srt | 0 | OK report=expected/redact/redact-basic-r3-ffurl-
 # either: r3 item 1 also says "any section whose name begins with Twitch/Restream/YouTube". OBS reads
 # neither token, so they may be kept (two unknown sections, count 2) or redacted
 redact-basic-r3-section-name-prefix | 0 | OK report=expected/redact/redact-basic-r3-section-name-prefix-alt1.json,expected/redact/redact-basic-r3-section-name-prefix-alt2.json | redact profile.basic fixtures/redact/basic/r3-section-name-prefix.ini ${OUT} ${REPORT}
+# r3.2 item 3 (claude-15, codex-4): the 1b fallback covers the whole file. Any header line that is not
+# exactly a bracketed name plus blanks trips it, also an empty header (an open and a close bracket), a lone
+# open bracket (on its own line or at the end of the file) and a header holding one blank. Then every Token
+# and RefreshToken is redacted wherever it is, also before the first header (pointer //Token, an empty
+# section). OBS stops reading at an empty or lone-bracket header (config-file.c:229-230) and never reads a
+# key before the first header, but the redactor reads on. Count 1 for the fallback.
+# either: count 1, or 2 if the keys before the first header count as an unknown (empty) section
+redact-basic-r32-token-before-first-header | 0 | OK report=expected/redact/redact-basic-r32-token-before-first-header.json,expected/redact/redact-basic-r32-token-before-first-header-alt2.json | redact profile.basic fixtures/redact/basic/r32-token-before-first-header.ini ${OUT} ${REPORT}
+# keys before the first header are read as in a section: blanks before a key are skipped, and a key
+# starting with a semicolon or # is not Token. either: count 1 or 2, as above
+redact-basic-r32-pre-header-keys | 0 | OK report=expected/redact/redact-basic-r32-pre-header-keys.json,expected/redact/redact-basic-r32-pre-header-keys-alt2.json | redact profile.basic fixtures/redact/basic/r32-pre-header-keys.ini ${OUT} ${REPORT}
+# a CR without LF ends the line before the first header: it trips the fallback, and the Token value ends there
+redact-basic-r32-pre-header-cr | 0 | OK report=expected/redact/redact-basic-r32-pre-header-cr.json,expected/redact/redact-basic-r32-pre-header-cr-alt2.json | redact profile.basic fixtures/redact/basic/r32-pre-header-cr.ini ${OUT} ${REPORT}
+# no fallback: a Token before the first header is not a registry key (OBS never reads it) and stays.
+# either: redacted, or opaque-unreviewed count 1 if those keys count as an unknown section
+redact-basic-r32-sure-file-pre-header-token | 0 | OK report=expected/redact/redact-basic-r32-sure-file-pre-header-token.json,expected/redact/redact-basic-r32-sure-file-pre-header-token-alt2.json | redact profile.basic fixtures/redact/basic/r32-sure-file-pre-header-token.ini ${OUT} ${REPORT}
+# an empty header first, then Token lines in later sections. either: count 1, or 2 if the empty name counts
+redact-basic-r32-empty-header-first | 0 | OK report=expected/redact/redact-basic-r32-empty-header-first.json,expected/redact/redact-basic-r32-empty-header-first-alt2.json | redact profile.basic fixtures/redact/basic/r32-empty-header-first.ini ${OUT} ${REPORT}
+# the rest of an empty header line is read as keys (r3 item 1), as after any header
+redact-basic-r32-empty-header-key-on-line | 0 | OK report=expected/redact/redact-basic-r32-empty-header-key-on-line.json,expected/redact/redact-basic-r32-empty-header-key-on-line-alt2.json | redact profile.basic fixtures/redact/basic/r32-empty-header-key-on-line.ini ${OUT} ${REPORT}
+# the claude-15 and codex-4 repro. either: the Token after the empty header stays in Twitch (a malformed
+# header changes no section, r3 item 1), count 1, or it is in the empty-named section, count 1 or 2
+redact-basic-r32-empty-header-after-twitch | 0 | OK report=expected/redact/redact-basic-r32-empty-header-after-twitch.json,expected/redact/redact-basic-r32-empty-header-after-twitch-alt2.json,expected/redact/redact-basic-r32-empty-header-after-twitch-alt3.json | redact profile.basic fixtures/redact/basic/r32-empty-header-after-twitch.ini ${OUT} ${REPORT}
+# a lone open bracket first, and one at the end of the file (it trips the fallback for the keys before it).
+# either: count 1, or 2 if the empty name counts
+redact-basic-r32-lone-bracket-first | 0 | OK report=expected/redact/redact-basic-r32-lone-bracket-first.json,expected/redact/redact-basic-r32-lone-bracket-first-alt2.json | redact profile.basic fixtures/redact/basic/r32-lone-bracket-first.ini ${OUT} ${REPORT}
+redact-basic-r32-bracket-at-eof | 0 | OK report=expected/redact/redact-basic-r32-bracket-at-eof.json,expected/redact/redact-basic-r32-bracket-at-eof-alt2.json | redact profile.basic fixtures/redact/basic/r32-bracket-at-eof.ini ${OUT} ${REPORT}
+# libobs reads a header holding one blank as the section named by that blank: pointer "/ /Token". Count 2:
+# fallback, and that unknown section
+redact-basic-r32-blank-header | 0 | OK report=expected/redact/redact-basic-r32-blank-header.json | redact profile.basic fixtures/redact/basic/r32-blank-header.ini ${OUT} ${REPORT}
+# r3.2 item 1 (claude-3): in a section whose name is over 1,024 bytes a pointer is /~section-N/KEY, N the
+# 0-based ordinal of the section header (here 1: General is 0), and the file counts 1 more. A name of
+# exactly 1,024 bytes stays in its pointers, and a section named ~section-1 is escaped to /~0section-1/,
+# so the two cannot collide. Fallback from a Video header with a comment, three unknown sections.
+# either: count 5 (the long name counts 1 besides its unknown section) or 4 (its unknown section is the 1)
+redact-basic-r32-long-section-pointer | 0 | OK report=expected/redact/redact-basic-r32-long-section-pointer.json,expected/redact/redact-basic-r32-long-section-pointer-alt2.json | redact profile.basic fixtures/redact/basic/r32-long-section-pointer.ini ${OUT} ${REPORT}
+# two long names, ordinals 0 and 2, fallback from a CR without LF, 2 unknown sections. either: count 4
+# (long names count 1 for the file), 5 (1 each) or 3 (their unknown sections are the 1s)
+redact-basic-r32-two-long-sections | 0 | OK report=expected/redact/redact-basic-r32-two-long-sections.json,expected/redact/redact-basic-r32-two-long-sections-alt2.json,expected/redact/redact-basic-r32-two-long-sections-alt3.json | redact profile.basic fixtures/redact/basic/r32-two-long-sections.ini ${OUT} ${REPORT}
 
 # ---- redact module.obs-websocket (JSON). /server_password ws_password is replaced by the placeholder (32
 # characters), a literal false at /auth_required by true (forced, was false). Unreviewed: each top-level key
@@ -943,6 +984,32 @@ redact-collection-versioned-id-empty-string | 0 | OK report=expected/redact/opaq
 redact-collection-nonstring-registry-values-counted | 0 | OK report=expected/redact/redact-collection-nonstring-registry-values-counted.json | redact collection fixtures/redact/collection/nonstring-values.json ${OUT} ${REPORT}
 # r3 item 9: the URL rule runs on the whole string, the authority ends only at / ? # or the end
 redact-collection-ffmpeg-options-quoted-proxy | 0 | OK report=expected/redact/redact-collection-ffmpeg-options-quoted-proxy.json out=expected/redact/redact-collection-ffmpeg-options-quoted-proxy.out | redact collection fixtures/redact/collection/ffmpeg-options-quoted-proxy.json ${OUT} ${REPORT}
+# r3.2 item 4 (claude-6): OBS also loads the top-level objects DesktopAudioDevice1, DesktopAudioDevice2 and
+# AuxAudioDevice1 to AuxAudioDevice4 with obs_load_source (OBSBasic_SceneCollections.cpp:1007-1014,
+# 1259-1264), and the items of the top-level groups array, which it appends to sources (:1222, 1270-1274).
+# The source rules apply to each: pointers into the object or the groups item. With one counted object
+# outside sources and none in it, the count is 1 whether or not such objects are counted.
+redact-collection-r32-desktop-audio-browser | 0 | OK report=expected/redact/redact-collection-r32-desktop-audio-browser.json | redact collection fixtures/redact/collection/r32-desktop-audio-browser.json ${OUT} ${REPORT}
+redact-collection-r32-aux-audio-ffmpeg | 0 | OK report=expected/redact/redact-collection-r32-aux-audio-ffmpeg.json | redact collection fixtures/redact/collection/r32-aux-audio-ffmpeg.json ${OUT} ${REPORT}
+redact-collection-r32-groups-browser | 0 | OK report=expected/redact/redact-collection-r32-groups-browser.json | redact collection fixtures/redact/collection/r32-groups-browser.json ${OUT} ${REPORT}
+redact-collection-bak-r32-groups-browser | 0 | OK report=expected/redact/redact-collection-r32-groups-browser.json | redact collection.bak fixtures/redact/collection/r32-groups-browser.json ${OUT} ${REPORT}
+# without a sources array OBS loads groups as the sources
+redact-collection-r32-groups-without-sources | 0 | OK report=expected/redact/redact-collection-r32-groups-without-sources.json | redact collection fixtures/redact/collection/r32-groups-without-sources.json ${OUT} ${REPORT}
+# all six names (one typed by versioned_id), an audio capture device with a url member (kept: not a URL
+# source type), and names OBS does not load (DesktopAudioDevice3, AuxAudioDevice0, AuxAudioDevice5, lower
+# case, nested): kept. either: count 1 (sources items only, as the PR2 contract counts) or 7 (the six
+# devices counted like sources items)
+redact-collection-r32-all-audio-devices | 0 | OK report=expected/redact/redact-collection-r32-all-audio-devices.json,expected/redact/redact-collection-r32-all-audio-devices-alt2.json | redact collection fixtures/redact/collection/r32-all-audio-devices.json ${OUT} ${REPORT}
+# several groups items: a group and three typed sources (an image source url kept), and groups nested
+# elsewhere (kept). either: count 1 (sources items only) or 4 (the three groups items whose id is not
+# group counted like sources items)
+redact-collection-r32-groups-several | 0 | OK report=expected/redact/redact-collection-r32-groups-several.json,expected/redact/redact-collection-r32-groups-several-alt2.json | redact collection fixtures/redact/collection/r32-groups-several.json ${OUT} ${REPORT}
+# OBS loads no device whose value is not an object, and no groups member that is not an array: kept. One
+# such value per file, with only a scene in sources, so the count is 1 whether or not it is counted
+redact-collection-r32-device-not-an-object | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/r32-device-not-an-object.json ${OUT} ${REPORT}
+redact-collection-r32-device-array | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/r32-device-array.json ${OUT} ${REPORT}
+# either: count 1, or 2 if a groups member that is not an array counts 1 as a value of the wrong type
+redact-collection-r32-groups-not-an-array | 0 | OK report=expected/redact/opaque-1.json,expected/redact/opaque-2.json | redact collection fixtures/redact/collection/r32-groups-not-an-array.json ${OUT} ${REPORT}
 
 # ---- redact roles without secrets: profile.encoder.stream, .record and their .bak, app.modules (JSON) and
 # app.user (INI). Nothing is edited, PLAINvalue markers included. app.user is opaque-unreviewed (count 1)
@@ -1134,12 +1201,31 @@ redact-perf-key-4kib-100000-values-service | 0 | OK report=expected/redact/opaqu
 redact-perf-key-4kib-100000-values-collection | 0 | OK report=expected/redact/opaque-1.json timeout=60 | redact collection ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
 redact-perf-key-4kib-100000-values-websocket | 0 | OK report=expected/redact/opaque-1.json timeout=60 | redact module.obs-websocket ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
 redact-perf-key-4kib-100000-values-modules | 0 | OK report=expected/redact/exact.json timeout=60 | redact app.modules ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
-redact-perf-ini-header-1mib-100000-keys-basic | 0 | OK report=expected/redact/opaque-1.json timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-header-1mib.ini ${OUT} ${REPORT}
-redact-perf-ini-header-1mib-100000-keys-user | 0 | OK report=expected/redact/exact.json timeout=60 | redact app.user ${WORK}/redact/perf-ini-header-1mib.ini ${OUT} ${REPORT}
+# r3.2 item 1: a section name over 1,024 bytes makes the file opaque-unreviewed with 1 more. either: count 2
+# (the unknown section and the long name) or 1 (the unknown section is the long name's 1)
+redact-perf-ini-header-1mib-100000-keys-basic | 0 | OK report=expected/redact/opaque-2.json,expected/redact/opaque-1.json timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-header-1mib.ini ${OUT} ${REPORT}
+# either: exact (only ExtraBrowserDocks makes app.user opaque), or count 1 if the long name counts for app.user too
+redact-perf-ini-header-1mib-100000-keys-user | 0 | OK report=expected/redact/exact.json,expected/redact/opaque-1.json timeout=60 | redact app.user ${WORK}/redact/perf-ini-header-1mib.ini ${OUT} ${REPORT}
 # REPORT and OUTFILE generated by run-cases.cmake: 20,000 url_credential ranges, count 10,000
 redact-perf-sources-10000 | 0 | OK report=${WORK}/redact/perf-sources-10000.report.json out=${WORK}/redact/perf-sources-10000.out timeout=60 | redact collection ${WORK}/redact/perf-sources-10000.json ${OUT} ${REPORT}
 redact-perf-url-1048576-parameters | 0 | OK report=expected/redact/redact-perf-url-1048576-parameters.json timeout=60 | redact profile.service ${WORK}/redact/perf-url-params.json ${OUT} ${REPORT}
 redact-perf-url-1048576-schemes | 0 | OK report=expected/redact/redact-perf-url-1048576-schemes.json timeout=60 | redact profile.service ${WORK}/redact/perf-url-schemes.json ${OUT} ${REPORT}
+# r3.2 item 1 (claude-3): INI pointers never copy a long section name. A header of about 1 MiB over 100,000
+# Token lines in a file that trips the 1b fallback (a header with a comment at the end): every Token is
+# redacted at /~section-0/Token. REPORT and OUTFILE are generated by run-cases.cmake. Count 3 (fallback,
+# long name, unknown section) or 2 (the unknown section is the long name's 1), as for
+# redact-basic-r32-long-section-pointer. either: stored, or omitted if the implementation bounds the REPORT
+# (this one is about 8 MB, over the 4 MiB manifest limit). Copying the name would need about 100 GiB.
+redact-perf-ini-long-section-100000-tokens | 0 | OK report=${WORK}/redact/perf-ini-long-section-100000.report.json,${WORK}/redact/perf-ini-long-section-100000.report-alt2.json,expected/redact/omitted-unparseable.json out=${WORK}/redact/perf-ini-long-section-100000.out timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-long-section-100000.ini ${OUT} ${REPORT}
+# the first 20,000 Token lines of the same layout: a REPORT of about 1.6 MB, stored. Count 3 or 2
+redact-perf-ini-long-section-20000-tokens | 0 | OK report=${WORK}/redact/perf-ini-long-section-20000.report.json,${WORK}/redact/perf-ini-long-section-20000.report-alt2.json out=${WORK}/redact/perf-ini-long-section-20000.out timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-long-section-20000.ini ${OUT} ${REPORT}
+# r3.2 item 1 (claude-3): URL scanning is linear in the value length, with no scan to the document end. A
+# 64 MiB collection, about 54 MiB of it blanks after the document, with 114,001 sources and 152,001 values
+# under the URL rule: 2 ranges in the first url, count 114,001. One scan to the document end per value
+# takes minutes.
+redact-perf-collection-64mib-urls | 0 | OK report=expected/redact/redact-perf-collection-64mib-urls.json timeout=60 | redact collection ${WORK}/redact/perf-collection-64mib.json ${OUT} ${REPORT}
+# the same for INI: 900,000 FFURL values (29 MB), 2 ranges in the first, count 1
+redact-perf-ini-ffurl-900000 | 0 | OK report=expected/redact/redact-perf-ini-ffurl-900000.json timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-ffurl-900000.ini ${OUT} ${REPORT}
 
 # ---- redact: roles. Only the twelve roles of the contract. Any other role is ERR E_SCHEMA role, including
 # allowlist roles without a redact rule (decklink, AJA). The --ws-placeholder value must be exactly 32

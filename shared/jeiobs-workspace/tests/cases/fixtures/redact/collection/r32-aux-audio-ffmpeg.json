@@ -1,0 +1,24 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        },
+        {
+            "id": "group",
+            "name": "Group",
+            "settings": {"id_counter": 0, "custom_size": true, "cx": 100, "cy": 100, "items": []}
+        }
+    ],
+    "AuxAudioDevice1": {"id": "ffmpeg_source", "name": "Mic/Aux", "settings": {"is_local_file": false, "input": "rtmp://SECRETvalue-ad-4@relay.example.com/live?key=SECRETvalue-ad-5", "ffmpeg_options": "rtsp_transport=tcp http_proxy=http://SECRETvalue-ad-6@proxy.example.com:3128 headers=PLAINvalue-ad-2"}}
+}
