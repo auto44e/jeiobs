@@ -209,7 +209,9 @@ A13. **Grants.** Peer grants and trust overrides are machine-local state in `gra
      capture, export and import, so an old snapshot cannot re-grant a revoked peer and an imported
      mapping cannot widen trust. UDP source addresses are spoofable: a UDP peer allowlist is
      advisory, and no grant over UDP can give `output-control`, `profile` or `meta`. Only an
-     authenticated, confidential, connection-oriented transport can hold those classes: an OSC/TCP
+     authenticated, confidential, connection-oriented transport can hold those classes for a
+     NETWORK peer (this rule is about network principals only; `hw` and `virtual` endpoints follow
+     A1's policy table, so a USB MCU or HUI surface can be granted `output-control` locally): an OSC/TCP
      session that proves a secret from `secrets.json` by challenge-response with a per-session nonce
      (the secret is never sent), and that runs over TLS, or over loopback TCP that passes A14's
      checks. K4 specifies the handshake, replay protection and the TLS choice; until it does, no
@@ -260,27 +262,29 @@ A17. **A7 corrected.** The balance field is READ on whichever thread pushes audi
      obs-websocket, observed through the signals) arrived meanwhile; a newer observed write wins and
      the shadow is dropped.
 A18. **Record, who settled what** (sources: the debate transcript `02`, the review transcripts
-     `review-01` to `review-04`, and the ledger).
-     - Items 1-4 (values, applying commands, arbitration, loops): Claude proposed, Codex disputed
-       in the debate's round 2, and the lead adopted Codex's positions where they differed:
-       exact tagged values (not a `double` view), adapters own application with the graph emitting
-       commands, explicit merge policies (not equal-priority rejection), and layered loop
-       protection. Claude's address-path idea was kept.
-     - Items 5-7 and 9 (targets by UUID, queues, library layout, security basics): both agreed in the
-       debate; the review rounds then added A1-A7 and A9, each accepted by the finder that raised it
-       (the ledger lists the acceptances).
-     - Item 8 (persistence layout): the debate had Claude and Codex want bindings outside the
-       portable workspace; review rounds 1 and 2 (both peers) asked for capture instead; the lead
-       chose capture as `local-only` with no export path (A12), and Codex accepted A12
-       (`review-03/04-r2-codex.reply.md`).
-     - Item 10 and A10: the lead's outline of transform, bank, layer, modifier, learn and device
-       identity scope; PR1 fixes the exact types. A11 (routes): the lead's definition, in answer to
-       Claude's finding; A15-A17: the lead, accepted by Codex (A15, A16) and open on A17's factual
-       wording until this head.
+     `review-01` to `review-05`, and the ledger; item numbers are those of "K1 design" above).
+     - Items 1 (values), 3 (applying commands), 4 (arbitration) and 5 (loops): Claude proposed in
+       the debate's round 2 (Codex's round-1 skeleton came first; Claude's round-1 answer timed out),
+       Codex disputed them in its round-2 reply, and the lead adopted Codex's positions where they
+       differed: exact tagged values, adapters own application with the graph emitting commands,
+       explicit merge policies, and layered loop protection. Claude's address-path idea was kept.
+     - Items 2 (targets by UUID), 6 (threads and queues), 7 (library layout) and 9 (security
+       basics): agreed by both in the debate; the review rounds then added A1-A7 and A9, each accepted
+       by the finder that raised it (the ledger lists the acceptances).
+     - Item 8 (persistence): Claude's round-2 proposal captured `bindings.json` as
+       `opaque-unreviewed`; Codex wanted bindings outside capture and export; the first draft took
+       Codex's position; review rounds 1 and 2 asked for capture; the lead chose capture as
+       `local-only` with no export path (A12), and Codex accepted A12 (`review-03/04-r2-codex.reply.md`).
+     - Item 10 (slices): Claude proposed a large PR1 (all types, validator, compiler, transforms);
+       Codex disputed its size; the lead took Codex's narrower PR1. A10: the lead's outline of
+       transform, bank, layer, modifier, learn and device-identity scope; PR1 fixes the exact types.
+     - A11 (routes): the lead's definition, in answer to Claude's finding. A15 and A16: the lead,
+       accepted by Codex in review-03. A17: the lead, corrected after both peers' findings and
+       accepted by Codex in review-04.
      - A13 (grants machine-local, UDP and Network MIDI 2.0 never privileged) and A14 (listener
-       checks): proposed by the lead, tested by Claude's reviews (Claude's `claude-13`, `claude-14`,
-       `claude-19`, `claude-20`); Codex confirmed `claude-14` as Major and raised `codex-10`,
-       `codex-11` but has not stated acceptance of A13 or A14 as a whole.
+       checks): proposed by the lead and tested by Claude's reviews; Codex confirmed `claude-14` as
+       Major and raised `codex-10` and `codex-11`, but has not stated acceptance of A13 or A14 as a
+       whole.
      **Every decision above that has no flex bullet is firm.**
 
 **Additional if-otherwise and flex.**
@@ -292,8 +296,8 @@ A18. **Record, who settled what** (sources: the debate transcript `02`, the revi
   bugs show up in real use.
 - Capture of `bindings.json` was reversed from the first draft: leaving it out of snapshots breaks
   M1's "restores a machine's setup". Reopen if `local-only` restores prove fragile.
-- PR1 scope (types, validator, minimal compiler only) was narrowed from the first draft so the
-  foundation stays reviewable; reopen if PR2 keeps changing PR1's types.
+- PR1 scope (types, validator, minimal compiler only) follows Codex's narrower proposal over
+  Claude's larger PR1, so the foundation stays reviewable; reopen if PR2 keeps changing PR1's types.
 - Loopback TCP/HTTP read-only by default costs convenience for local web controllers; reopen with a
   Host/Origin-checked transport and measured misuse resistance.
 
