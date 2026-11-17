@@ -1,0 +1,5 @@
+FINDING codex-1 | Major | open | Public `"ParseMappingInternal(bytes, false)"` permits missing `enabled` and empty addresses, contrary to r1 requirements (Mapping.cpp:878-912,1455,1470-1473; 07-k1pr1-contract.md:115-118).
+FINDING codex-2 | Minor | open | `"has_non_ascii"` makes `requires:["café"]` valid despite the required `[a-z0-9_.]{1,64}` regex (Mapping.cpp:332-349; 07-k1pr1-contract.md:115-116).
+FINDING codex-3 | Major | open | Target-key escaping omits `\`, and slash-joined emit addresses collide (`[t:"a/s:b"]` equals `[t:"a",s:"b"]`), violating “distinct targets never share a key” (Mapping.cpp:1041-1063,1324-1333,1378-1380,1513-1516; 07-k1pr1-contract.md:119).
+FINDING codex-4 | Major | open | `MakeInt` masks invalid high raw bits after validation—width-7 raw `0x80` becomes zero—and `MakeFloatBits` truncates 32-bit raw values, violating exact constructors (Value.cpp:234-243,286-310,424-446; 07-k1pr1-contract.md:20-34).
+VERDICT: request changes

@@ -1,0 +1,18 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "a", "requires": []},
+    {"id": "0", "requires": []},
+    {"id": "_", "requires": []},
+    {"id": "9999999999999999999999999999999999999999999999999999999999999999", "requires": []}
+  ],
+  "routes": [
+    {"id": "a", "enabled": true, "match": {"slot": "a", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}},
+    {"id": "0", "enabled": true, "match": {"slot": "0", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m0", "field": "mute"}},
+    {"id": "_", "enabled": true, "match": {"slot": "_", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m1", "field": "mute"}},
+    {"id": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "enabled": true, "match": {"slot": "9999999999999999999999999999999999999999999999999999999999999999", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m2", "field": "mute"}},
+    {"id": "a_0_z", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m3", "field": "mute"}}
+  ]
+}

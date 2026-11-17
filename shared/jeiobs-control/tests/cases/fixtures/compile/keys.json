@@ -1,0 +1,19 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "a_slot", "requires": ["x"]},
+    {"id": "b_slot", "requires": []}
+  ],
+  "routes": [
+    {"id": "sp", "enabled": true, "match": {"slot": "a_slot", "address": [{"s": "k"}, {"i": 0}]}, "target": {"kind": "source-property", "id": "src_a", "field": "opacity"}},
+    {"id": "fp", "enabled": true, "match": {"slot": null, "address": [{"s": "k"}, {"i": 1}]}, "target": {"kind": "filter-property", "id": "flt_a", "field": "gain_db"}},
+    {"id": "sc", "enabled": true, "match": {"slot": "a_slot", "address": [{"s": "k"}, {"i": 2}]}, "target": {"kind": "scene", "id": "scn_a"}},
+    {"id": "tr", "enabled": true, "match": {"slot": null, "address": [{"s": "k"}, {"i": 3}]}, "target": {"kind": "transition", "name": "Fade"}},
+    {"id": "pr", "enabled": true, "match": {"slot": "a_slot", "address": [{"s": "k"}, {"i": 4}]}, "target": {"kind": "profile", "name": "Main"}},
+    {"id": "pp", "enabled": true, "match": {"slot": null, "address": [{"s": "k"}, {"i": 5}]}, "target": {"kind": "plugin-param", "instance": "vst_1", "param": "gain"}},
+    {"id": "pe", "enabled": true, "match": {"slot": "a_slot", "address": [{"s": "k"}, {"i": 6}]}, "target": {"kind": "plugin-event", "instance": "vst_1"}},
+    {"id": "gr", "enabled": true, "match": {"slot": null, "address": [{"s": "k"}, {"i": 7}]}, "target": {"kind": "graph", "node": "bus_1", "port": "send_2"}}
+  ]
+}

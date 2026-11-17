@@ -1,0 +1,1 @@
+{"routes":[{"class":"scene","enabled":true,"fanout":1,"id":"r1","merge":{"policy":"last-writer","priority":0},"target_key":"scene-item|item_id=7|scene_id=scn_a"}],"slots":["main_surface"]}

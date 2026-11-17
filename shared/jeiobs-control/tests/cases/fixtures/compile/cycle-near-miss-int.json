@@ -1,0 +1,12 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "a", "enabled": true, "match": {"slot": null, "address": [{"s": "a"}, {"i": 1}]}, "target": {"kind": "emit", "address": [{"s": "b"}, {"i": 1}]}},
+    {"id": "b", "enabled": true, "match": {"slot": null, "address": [{"s": "b"}, {"i": 1}]}, "target": {"kind": "emit", "address": [{"s": "a"}, {"i": 2}]}}
+  ]
+}

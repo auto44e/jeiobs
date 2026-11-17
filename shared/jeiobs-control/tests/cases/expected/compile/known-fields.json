@@ -1,0 +1,1 @@
+{"routes":[{"class":"source-property","enabled":true,"fanout":12,"id":"r1","merge":{"policy":"priority","priority":3},"target_key":"source-property|field=opacity|id=src_a"}],"slots":["main_surface"]}

@@ -1,0 +1,14 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "p1", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}, "merge": {"policy": "priority", "priority": 1}},
+    {"id": "p2", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "a"}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}, "merge": {"policy": "priority", "priority": 2}},
+    {"id": "p3", "enabled": false, "match": {"slot": "main_surface", "address": [{"s": "b"}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}, "merge": {"policy": "priority", "priority": 1}},
+    {"id": "p4", "enabled": false, "match": {"slot": "main_surface", "address": [{"s": "c"}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}}
+  ]
+}

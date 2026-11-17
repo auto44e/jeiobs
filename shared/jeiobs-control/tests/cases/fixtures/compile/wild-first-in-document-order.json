@@ -1,0 +1,13 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "ok", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 1}]}, "target": {"kind": "output", "output": "stream", "action": "start"}},
+    {"id": "zz", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"any": true}]}, "target": {"kind": "profile", "name": "Streaming"}},
+    {"id": "aa", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"r": [0, 1]}]}, "target": {"kind": "output", "output": "record", "action": "stop"}}
+  ]
+}

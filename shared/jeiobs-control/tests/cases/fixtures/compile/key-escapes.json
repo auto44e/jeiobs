@@ -1,0 +1,20 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "sp", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 0}]}, "target": {"kind": "source-property", "id": "a\\b", "field": "c|d"}},
+    {"id": "fp", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 1}]}, "target": {"kind": "filter-property", "id": "e=f", "field": "g/h"}},
+    {"id": "sc", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 2}]}, "target": {"kind": "scene", "id": "Scene/1"}},
+    {"id": "si", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 3}]}, "target": {"kind": "scene-item", "scene_id": "S|1=2", "item_id": 5}},
+    {"id": "mx", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 4}]}, "target": {"kind": "mixer", "id": "Mic\\Aux/1", "field": "volume"}},
+    {"id": "tr", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 5}]}, "target": {"kind": "transition", "name": "Fade/Cut"}},
+    {"id": "pr", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 6}]}, "target": {"kind": "profile", "name": "A=B"}},
+    {"id": "pp", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 7}]}, "target": {"kind": "plugin-param", "instance": "vst/1", "param": "p|q"}},
+    {"id": "pe", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 8}]}, "target": {"kind": "plugin-event", "instance": "x\\\\y"}},
+    {"id": "gr", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "k"}, {"i": 9}]}, "target": {"kind": "graph", "node": "bus=1", "port": "\\|=/"}}
+  ]
+}

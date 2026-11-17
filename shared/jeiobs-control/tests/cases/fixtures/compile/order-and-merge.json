@@ -1,0 +1,15 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "zz", "enabled": true, "match": {"slot": null, "address": [{"s": "a"}]}, "target": {"kind": "scene", "id": "s1"}, "merge": {"policy": "priority", "priority": 2}},
+    {"id": "aa", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "b"}, {"r": [1, 4]}, {"in": [1, 2, 3]}]}, "target": {"kind": "scene", "id": "s1"}, "merge": {"policy": "priority"}},
+    {"id": "mm", "enabled": false, "match": {"slot": null, "address": [{"s": "c"}, {"any": true}]}, "target": {"kind": "scene", "id": "s1"}},
+    {"id": "bb", "enabled": true, "match": {"slot": null, "address": [{"s": "d"}, {"in": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]}]}, "target": {"kind": "scene", "id": "s2"}, "merge": {"policy": "boolean-or", "priority": -3}},
+    {"id": "cc", "enabled": true, "match": {"slot": null, "address": [{"s": "e"}]}, "target": {"kind": "scene", "id": "s3"}, "merge": {"policy": "sum"}}
+  ]
+}

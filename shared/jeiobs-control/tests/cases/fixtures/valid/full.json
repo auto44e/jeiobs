@@ -1,0 +1,33 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]},
+    {"id": "pad_2", "requires": ["midi.note"]}
+  ],
+  "routes": [
+    {"id": "fader_volume", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"r": [0, 7]}, {"s": "fader"}]}, "guard": {"all": [{"value": {"min": 0, "max": 16383}}, {"modifier": "shift"}, {"layer": "mix"}, {"bank": 0}]}, "transforms": [{"op": "scale", "in": [0, 16383], "out": [0, 1]}, {"op": "curve", "kind": "log"}, {"op": "clamp", "min": 0, "max": 1}], "target": {"kind": "mixer", "id": "mic", "field": "volume"}, "merge": {"policy": "touch-lease", "priority": 0}},
+    {"id": "tablet_volume", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/mic/volume"}]}, "transforms": [{"op": "deadzone", "width": 0.05}], "target": {"kind": "mixer", "id": "mic", "field": "volume"}, "merge": {"policy": "touch-lease", "priority": 1}},
+    {"id": "mute_button", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"in": [16, 17]}, {"s": "button"}]}, "transforms": [{"op": "threshold", "at": 0.5}, {"op": "toggle"}], "target": {"kind": "mixer", "id": "mic", "field": "mute"}},
+    {"id": "scene_pad", "enabled": true, "match": {"slot": "pad_2", "address": [{"s": "midi"}, {"i": 0}, {"s": "note"}, {"i": 36}]}, "transforms": [{"op": "momentary"}], "target": {"kind": "scene", "id": "5b1c8a0e-2f3d-4c6b-9a7e-1d2c3b4a5f60"}, "merge": {"policy": "last-writer"}},
+    {"id": "item_toggle", "enabled": true, "match": {"slot": "pad_2", "address": [{"s": "midi"}, {"i": 0}, {"s": "note"}, {"i": 37}]}, "transforms": [{"op": "toggle"}], "target": {"kind": "scene-item", "scene_id": "5b1c8a0e-2f3d-4c6b-9a7e-1d2c3b4a5f60", "item_id": 3}},
+    {"id": "transition_knob", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/transition"}]}, "target": {"kind": "transition", "name": "Fade"}},
+    {"id": "filter_gain", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "vpot"}, {"i": 2}]}, "transforms": [{"op": "relative", "encoding": "twos_complement", "step": 0.5}, {"op": "clamp", "min": -30, "max": 30}], "target": {"kind": "filter-property", "id": "0e5c1d2a-7b3f-4a9e-8c6d-2f1e0a9b8c7d", "field": "gain_db"}, "merge": {"policy": "sum"}},
+    {"id": "source_opacity", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/opacity"}]}, "transforms": [{"op": "invert"}, {"op": "quantize", "steps": 16}], "target": {"kind": "source-property", "id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a", "field": "opacity"}, "merge": {"policy": "max"}},
+    {"id": "plugin_cutoff", "enabled": true, "match": {"slot": null, "address": [{"s": "midi2"}, {"i": 0}, {"i": 0}, {"s": "cc"}, {"i": 74}]}, "transforms": [{"op": "join14"}, {"op": "scale", "in": [0, 16383], "out": [20, 20000]}], "target": {"kind": "plugin-param", "instance": "vst3_eq_1", "param": "cutoff"}, "merge": {"policy": "priority", "priority": 10}},
+    {"id": "plugin_notes", "enabled": true, "match": {"slot": "pad_2", "address": [{"s": "midi"}, {"i": 0}, {"s": "note"}, {"any": true}]}, "target": {"kind": "plugin-event", "instance": "vst3_synth_1"}},
+    {"id": "graph_send", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/send"}, {"i": 2}]}, "transforms": [{"op": "split14"}, {"op": "curve", "kind": "exp"}], "target": {"kind": "graph", "node": "bus_1", "port": "send_2"}, "merge": {"policy": "min"}},
+    {"id": "hotkey_scene", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "button"}, {"i": 40}]}, "target": {"kind": "hotkey", "registerer_kind": "frontend", "registerer_id": "obs-frontend", "name": "OBSBasic.Transition", "effect": "scene"}},
+    {"id": "stream_start", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "button"}, {"i": 41}]}, "target": {"kind": "output", "output": "stream", "action": "start"}, "merge": {"policy": "boolean-or"}},
+    {"id": "record_toggle", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "button"}, {"i": 42}]}, "target": {"kind": "output", "output": "record", "action": "toggle"}},
+    {"id": "profile_switch", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "button"}, {"i": 43}]}, "target": {"kind": "profile", "name": "Streaming"}},
+    {"id": "thru_out", "enabled": true, "match": {"slot": null, "address": [{"s": "midi"}, {"i": 1}, {"any": true}, {"any": true}]}, "target": {"kind": "egress", "endpoint": "midi_out_1", "trust": "hw"}},
+    {"id": "echo_in", "enabled": true, "match": {"slot": null, "address": [{"s": "loop"}, {"s": "a"}]}, "target": {"kind": "emit", "address": [{"s": "loop"}, {"s": "b"}]}},
+    {"id": "echo_out", "enabled": true, "match": {"slot": null, "address": [{"s": "loop"}, {"s": "b"}]}, "target": {"kind": "mixer", "id": "aux", "field": "balance"}},
+    {"id": "old_fader", "enabled": false, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}},
+    {"id": "desk_offset", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/desk/offset"}]}, "transforms": [{"op": "curve", "kind": "linear"}, {"op": "relative", "encoding": "sign_magnitude", "step": 1}, {"op": "relative", "encoding": "binary_offset", "step": 2}, {"op": "deadzone", "width": 0}], "target": {"kind": "mixer", "id": "desk", "field": "sync_offset"}},
+    {"id": "desk_monitoring", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/desk/monitoring"}]}, "target": {"kind": "mixer", "id": "desk", "field": "monitoring"}},
+    {"id": "desk_tracks", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/desk/tracks"}]}, "target": {"kind": "mixer", "id": "desk", "field": "mixers"}}
+  ]
+}

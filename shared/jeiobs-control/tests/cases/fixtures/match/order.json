@@ -1,0 +1,15 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": []},
+    {"id": "pad_2", "requires": []}
+  ],
+  "routes": [
+    {"id": "zz", "enabled": true, "match": {"slot": null, "address": [{"s": "x"}]}, "target": {"kind": "mixer", "id": "m01", "field": "volume"}},
+    {"id": "aa", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "x"}]}, "target": {"kind": "mixer", "id": "m02", "field": "volume"}},
+    {"id": "qq", "enabled": true, "match": {"slot": null, "address": [{"s": "y"}]}, "target": {"kind": "mixer", "id": "m03", "field": "volume"}},
+    {"id": "mm", "enabled": true, "match": {"slot": null, "address": [{"any": true}]}, "target": {"kind": "mixer", "id": "m04", "field": "volume"}}
+  ]
+}
