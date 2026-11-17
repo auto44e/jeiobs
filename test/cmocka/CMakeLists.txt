@@ -28,3 +28,10 @@ target_include_directories(test_os_path PRIVATE ${CMOCKA_INCLUDE_DIR})
 target_link_libraries(test_os_path PRIVATE OBS::libobs ${CMOCKA_LIBRARIES})
 
 add_test(test_os_path ${CMAKE_CURRENT_BINARY_DIR}/test_os_path)
+
+# config_lock test (JeiOBS)
+add_executable(test_config_lock test_config_lock.c)
+target_include_directories(test_config_lock PRIVATE ${CMOCKA_INCLUDE_DIR})
+target_link_libraries(test_config_lock PRIVATE OBS::libobs ${CMOCKA_LIBRARIES})
+
+add_test(test_config_lock ${CMAKE_CURRENT_BINARY_DIR}/test_config_lock)

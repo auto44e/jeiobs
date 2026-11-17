@@ -492,7 +492,7 @@ Writer inventory (audit section 2, re-checked):
 | `persistent_data.json`, `vst3list.json` | obs-websocket worker (`RequestHandler_Config.cpp:109`); scanner process (`vst3-scanner.cpp:646`) | plain; tmp + `.bak` | not captured |
 
 A writer found later that bypasses `config_t` and `SaveService()` either joins the protocol or
-makes capture refuse while it can run. Without `config_lock` (owner decision 1: approved, not yet implemented), capture would refuse
+makes capture refuse while it can run. `config_lock` (owner decision 1) exists in libobs since S1-PR4a; without it capture would have to refuse
 while obs-websocket's server is enabled.
 
 ## 11. Durability and recovery (S2 implements; fixed now)
@@ -623,9 +623,11 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 
 Decided 2026-11-16. The owner's words, verbatim: "will go with all you recs for all 3".
 
-- **Decision 1: add `config_lock()` / `config_unlock()` to libobs util.** Approved; not yet
-  implemented. PR4 may now implement it. It is a new public libobs API, so PR4 must also show the
-  lock-order proof and hold times described in section 10.
+- **Decision 1: add `config_lock()` / `config_unlock()` to libobs util.** Approved. Added in
+  S1-PR4a (`libobs/util/config-file.{c,h}`, a recursive lock over the config's own mutex, with a
+  cmocka test that an off-thread writer blocks and that the file is not rewritten while the lock is
+  held). It is a new public libobs API, so PR4 (the capture host) must still show the lock-order
+  proof and hold times described in section 10.
   - Why: it is the only mechanism found that serializes obs-websocket's pool writes and
     third-party `config_t` writers without changing them.
   - Flex: reopen if the lock-order proof fails, if hold times starve the audio or video threads,

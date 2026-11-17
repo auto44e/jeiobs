@@ -395,6 +395,18 @@ cleanup:
 	return ret;
 }
 
+void config_lock(config_t *config)
+{
+	if (config)
+		pthread_mutex_lock(&config->mutex);
+}
+
+void config_unlock(config_t *config)
+{
+	if (config)
+		pthread_mutex_unlock(&config->mutex);
+}
+
 int config_save_safe(config_t *config, const char *temp_ext, const char *backup_ext)
 {
 	struct dstr temp_file = {0};

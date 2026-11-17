@@ -48,6 +48,16 @@ EXPORT int config_save(config_t *config);
 EXPORT int config_save_safe(config_t *config, const char *temp_ext, const char *backup_ext);
 EXPORT void config_close(config_t *config);
 
+/*
+ * Holds the configuration's own lock, the one every getter, setter and save call takes. While a
+ * thread holds it, no other thread can change or save this config_t, so a file that is read in the
+ * meantime is not rewritten. The lock is recursive: the holder may call any config_* function.
+ * Always release with config_unlock() on the same thread. Take it before any other lock the caller
+ * owns and keep the hold short: every other thread that touches this config_t waits.
+ */
+EXPORT void config_lock(config_t *config);
+EXPORT void config_unlock(config_t *config);
+
 EXPORT size_t config_num_sections(config_t *config);
 EXPORT const char *config_get_section(config_t *config, size_t idx);
 
