@@ -156,3 +156,13 @@ NOT in the merge (4) or cycle (5) checks.
 4. `hotkey` target keys use registerer_kind, registerer_id and name only; `effect` is NOT part of
    `target_key` (A15: identity is registerer + name). The Claude worker's `key-hotkey-with-effect.json`
    expected file is changed by the lead to match.
+
+## r4 (review run 02 of PR #33)
+1. (claude-11, Major) JSON parser: never `reserve(size_t(-1))` (lead did the fix: guard in start_object); check
+   `start_array` and any other reserve with parser-supplied counts.
+2. (claude-12) `Value::intRaw()` and `MakeInt` agree: `MakeInt(w, v.intRaw())` succeeds for every valid Int
+   (negatives included); define the raw as sign-extended in one place.
+3. (codex-6) remove the unused `std::string bytes;` in jc-check.
+4. (claude-9, Minor) emit-to-emit cycle graph: avoid storing 25M edges; use an index keyed by the first
+   concrete segment or compute reachability lazily; behaviour unchanged.
+5. (claude-7) docs only (lead).

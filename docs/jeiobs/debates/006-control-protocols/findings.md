@@ -224,3 +224,31 @@ codex-1 | Major | open → fixed (awaiting finder) | codex | review-pr33-01/04-r
 codex-2 | Minor | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-2) | contract r2/r3
 codex-3 | Major | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-3) | contract r2/r3
 codex-4 | Major | open → fixed (awaiting finder) | codex | review-pr33-01/04-r2-codex.reply.md (FINDING codex-4) | contract r2/r3
+
+## PR #33 (K1-PR1), review `review-pr33-02` on `80ceecf62`
+
+Fixed per contract r4: `reserve(size_t(-1))` in the JSON parser (the Windows CI run showed every document
+failing with E_JSON, confirming claude-11), sign-extended Int raw, the unused variable, the hotkey key
+expectation without `effect`, a bounded emit-to-emit graph.
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-1) | contract r4 and the Windows fix
+claude-2 | Major | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-2) | contract r4 and the Windows fix
+claude-3 | Major | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-3) | contract r4 and the Windows fix
+claude-4 | Major | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-4) | contract r4 and the Windows fix
+claude-5 | Major | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-5) | contract r4 and the Windows fix
+claude-6 | Major | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-6) | contract r4 and the Windows fix
+claude-7 | Minor | open → fixed (awaiting finder) | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-7) | contract r4 and the Windows fix
+claude-8 | Minor | open → fixed (awaiting finder) | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-8) | contract r4 and the Windows fix
+claude-9 | Minor | open → fixed (awaiting finder) | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-9) | contract r4 and the Windows fix
+claude-10 | Minor | accepted-fix | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-10) | contract r4 and the Windows fix
+claude-11 | Major | open → fixed (awaiting finder) | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-11) | contract r4 and the Windows fix
+claude-12 | Minor | open → fixed (awaiting finder) | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-12) | contract r4 and the Windows fix
+claude-13 | Minor | open → fixed (awaiting finder) | claude | review-pr33-02/03-r2-claude.reply.md (FINDING claude-13) | contract r4 and the Windows fix
+codex-1 | Major | accepted-fix | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-1) | contract r4 and the Windows fix
+codex-2 | Minor | accepted-fix | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-2) | contract r4 and the Windows fix
+codex-3 | Major | accepted-fix | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-3) | contract r4 and the Windows fix
+codex-4 | Major | accepted-fix | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-4) | contract r4 and the Windows fix
+codex-5 | Minor | open → fixed (awaiting finder) | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-5) | contract r4 and the Windows fix
+codex-6 | Minor | open → fixed (awaiting finder) | codex | review-pr33-02/04-r2-codex.reply.md (FINDING codex-6) | contract r4 and the Windows fix
