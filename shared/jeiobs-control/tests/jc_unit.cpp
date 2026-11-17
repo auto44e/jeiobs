@@ -418,6 +418,133 @@ void TestTransformStages()
 	JC_CHECK(invalid_parameter_pipeline.error.code == Jeiobs::Control::ErrorCode::Schema);
 }
 
+void TestTransformExtraCoverage()
+{
+	using Jeiobs::Control::TransformState;
+	using Jeiobs::Control::ValueKind;
+
+	// deadzone: inside the zone is 0, outside rescales to keep the sign.
+	auto deadzone = MakeStage("deadzone");
+	deadzone.numbers = {0.25};
+	const auto deadzone_pipeline = CompileStages({deadzone});
+	JC_CHECK(deadzone_pipeline.ok());
+	// threshold: x >= at.
+	auto threshold = MakeStage("threshold");
+	threshold.numbers = {0.5};
+	const auto threshold_pipeline = CompileStages({threshold});
+	JC_CHECK(threshold_pipeline.ok());
+	if (!deadzone_pipeline.ok() || !threshold_pipeline.ok()) {
+		return;
+	}
+	struct Case {
+		double input;
+		double expected;
+	};
+	for (const Case &item : {Case{0.0, 0.0}, Case{0.25, 0.0}, Case{-0.25, 0.0}, Case{0.5, 1.0 / 3.0},
+				 Case{-0.5, -1.0 / 3.0}, Case{1.0, 1.0}, Case{-1.0, -1.0}}) {
+		const auto input = FloatValue(item.input);
+		JC_CHECK(input.ok());
+		TransformState state;
+		bool has_output = false;
+		const double actual = AppliedNumber(*deadzone_pipeline.value, *input.value, state, has_output);
+		JC_CHECK(has_output);
+		JC_CHECK(std::abs(actual - item.expected) < 1e-15);
+	}
+	for (const Case &item : {Case{0.49, 0.0}, Case{0.5, 1.0}, Case{0.51, 1.0}, Case{-3.0, 0.0}}) {
+		const auto input = FloatValue(item.input);
+		JC_CHECK(input.ok());
+		TransformState state;
+		const auto applied = threshold_pipeline.value->Apply(*input.value, state);
+		JC_CHECK(applied.ok());
+		JC_CHECK(applied.value->value->kind() == ValueKind::Bool);
+		JC_CHECK_EQ(applied.value->value->boolValue(), item.expected != 0.0);
+	}
+
+	// Negative zero never leaves a stage: clamp to [-1, -0.0] gives +0.0.
+	auto clamp = MakeStage("clamp");
+	clamp.numbers = {-1.0, -0.0};
+	const auto clamp_pipeline = CompileStages({clamp});
+	JC_CHECK(clamp_pipeline.ok());
+	const auto five = FloatValue(5.0);
+	const auto negative_zero = FloatValue(-0.0);
+	JC_CHECK(five.ok());
+	JC_CHECK(negative_zero.ok());
+	if (clamp_pipeline.ok() && five.ok() && negative_zero.ok()) {
+		for (const auto *input : {&five, &negative_zero}) {
+			TransformState state;
+			const auto applied = clamp_pipeline.value->Apply(*input->value, state);
+			JC_CHECK(applied.ok());
+			JC_CHECK(applied.ok() && !std::signbit(applied.value->value->AsDouble()));
+			JC_CHECK(applied.ok() && applied.value->value->AsDouble() == 0.0);
+		}
+	}
+
+	// Properties with the same fixed-seed generator family (different seed): quantize over many step
+	// counts, relative position bounds, and error calls leaving the state alone.
+	Xorshift64Star random;
+	random.state = 0x0123456789abcdefULL;
+	for (int round = 0; round < 2000; ++round) {
+		const std::int64_t steps = 2 + static_cast<std::int64_t>(random.next() % 63U);
+		auto quantize = MakeStage("quantize");
+		quantize.integer = steps;
+		const auto pipeline = CompileStages({quantize});
+		JC_CHECK(pipeline.ok());
+		if (!pipeline.ok()) {
+			continue;
+		}
+		const double x = -0.5 + 2.0 * random.unit();
+		const auto input = FloatValue(x);
+		JC_CHECK(input.ok());
+		TransformState state;
+		bool has_output = false;
+		const double y = AppliedNumber(*pipeline.value, *input.value, state, has_output);
+		JC_CHECK(has_output);
+		const double n = static_cast<double>(steps - 1);
+		const double level = std::nearbyint(y * n);
+		JC_CHECK(std::abs(y * n - level) < 1e-9); // an exact level k / n
+		JC_CHECK(level >= 0.0 && level <= n);
+		const auto again = FloatValue(y);
+		JC_CHECK(again.ok());
+		TransformState second_state;
+		JC_CHECK_EQ(AppliedNumber(*pipeline.value, *again.value, second_state, has_output), y); // idempotent
+	}
+
+	const char *encodings[] = {"twos_complement", "sign_magnitude", "binary_offset"};
+	for (const char *encoding : encodings) {
+		auto relative = MakeStage("relative");
+		relative.text = encoding;
+		relative.numbers = {0.03};
+		const auto pipeline = CompileStages({relative});
+		JC_CHECK(pipeline.ok());
+		if (!pipeline.ok()) {
+			continue;
+		}
+		TransformState state;
+		for (int round = 0; round < 2000; ++round) {
+			const unsigned int width = round % 2 == 0 ? 7U : 14U;
+			const std::uint64_t code = random.next() & ((std::uint64_t(1U) << width) - 1U);
+			const auto input = Jeiobs::Control::Value::MakeUInt(width, {0U, code});
+			JC_CHECK(input.ok());
+			if (!input.ok()) {
+				continue;
+			}
+			bool has_output = false;
+			const double position = AppliedNumber(*pipeline.value, *input.value, state, has_output);
+			JC_CHECK(has_output);
+			JC_CHECK(position >= 0.0 && position <= 1.0);
+			JC_CHECK_EQ(position, state.position);
+			// A call that errors (wrong kind) leaves the state exactly as it was.
+			const auto bad = Jeiobs::Control::Value::MakeText("x");
+			JC_CHECK(bad.ok());
+			const TransformState before = state;
+			const auto failed = pipeline.value->Apply(*bad.value, state);
+			JC_CHECK(!failed.ok());
+			JC_CHECK_EQ(state.position, before.position);
+			JC_CHECK_EQ(state.toggled, before.toggled);
+		}
+	}
+}
+
 void TestTransformRollback()
 {
 	auto toggle = MakeStage("toggle");
@@ -747,6 +874,7 @@ int main()
 		TestMapping();
 		TestCompileChecks();
 		TestTransformStages();
+		TestTransformExtraCoverage();
 		TestTransformRollback();
 		TestTransformProperties();
 	} catch (...) {

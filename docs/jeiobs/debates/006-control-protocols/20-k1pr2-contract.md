@@ -135,9 +135,17 @@ formatted with `snprintf` in the "C" numeric conventions (no locale dependence: 
 ## r1 (integration decisions after the first run; they win over the text above)
 1. `scale` is the literal formula, evaluated left to right as `((x - a) * (d - c)) / (b - a) + c`, with no
    special case for `x == a` or `x == b`. A span that overflows (`d - c` or the product) gives `E_VALUE nonfinite`.
-   The property "scale maps a to c" is exact; "maps b to d" holds within 4 epsilon of (|c| + |d|) (the rounding of the span).
+   The property "scale maps a to c" is exact; "maps b to d" holds within 4 epsilon of (|c| + |d|) (the rounding of the span; with a span that underflows the bound does not apply and the test uses inputs with |c|, |d| >= 1e-3).
 2. Position rules run in `ValidateMapping` AFTER the whole file parsed: any parse or schema error anywhere in
    the file (an unknown `op` is `E_SCHEMA op`, a bad target `E_SCHEMA target`, in any route) is reported before
    a position error. Position errors are then reported for the first offending route in document order.
 3. `jc-check transform`: an `--position` value that is not a finite decimal number in [0,1] is a usage error
    (usage line on stderr, exit 2); so is an unknown option or a missing argument.
+4. A `float` inside a Tuple (reachable only through the empty pipeline, which returns its input unchanged) keeps its
+   existing value JSON form with `bits_hex`; only top-level float elements of `outputs` print `number`.
+5. `Compile(stages)` reports an unknown `op` (`E_SCHEMA op`) and bad parameters (`E_SCHEMA transforms`) before any
+   position error, the same order as `ValidateMapping` (review run 01, codex-2 and claude-3).
+6. `--position` accepts only a plain decimal number (digits, sign, point, exponent): no hexadecimal float, `inf`,
+   `nan` or whitespace (review run 01, codex-3 and claude-4).
+7. No allocation beyond the output Value: a join14 or split14 output is moved, not copied, into the result
+   (review run 01, codex-1).

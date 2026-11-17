@@ -1310,9 +1310,10 @@ value-fromdouble-i128-nan | 1 | ERR E_VALUE | value fromdouble {"type":"int","bi
 # with one fresh state (position 0, toggled false) and prints {"outputs":[...]}: null for NoOutput,
 # {"error":"E_VALUE <detail>"} for an error (exit 0, the run goes on), value JSON otherwise, a float
 # as {"format","number","type"} with number = %.9g of the double. Written from the K1-PR2 contract,
-# not from the library, and checked against an independent model of it (the authoring script and
-# one line per case are kept with the PR notes). Every float result prints the same with libm off by
-# 2 ulps, with or without fused multiply-add, and with inexact operations off by 1 ulp.
+# not from the library, and checked by the worker against its own model of the contract (its notes are
+# in docs/jeiobs/debates/006-control-protocols/24-k1pr2-tests-claude.md). Every float result is meant to
+# print the same with libm off by 2 ulps, with or without fused multiply-add, and with inexact
+# operations off by 1 ulp.
 # An output holding only null, bool and error elements is matched as text (one serialization). Any
 # other output is compared as JSON with member order free (@FILE): the contract fixes the members
 # of a float, not their order. Readings, each stated at its case: a route without a transforms
@@ -1321,7 +1322,12 @@ value-fromdouble-i128-nan | 1 | ERR E_VALUE | value fromdouble {"type":"int","bi
 # (E_JSON, E_DUPKEY, E_IO) or be E_SCHEMA inputs, and --position with a non-number is usage.
 # Not here: unit and Relative metadata (not in the value JSON, left to jc-unit), --position with
 # --toggled (seven arguments, the runner passes six), non-finite floats into relative, join14 or
-# split14 (E_VALUE type or nonfinite is not settled), floats nested in a tuple of the empty pipeline.
+# split14 (E_VALUE type or nonfinite is not settled), floats nested in a tuple of the empty pipeline
+# (the lead's reading, contract r1.4: a float inside a tuple keeps `bits_hex` in the value JSON).
+# Lead's integration changes (contract r1): the scale cases that assumed endpoint special handling or
+# an evaluation order other than the literal formula were adjusted by the implementation (the literal
+# formula won), and transform-pos-before-target-error and transform-pos-before-unknown-op expect
+# the other error first (r1.2), where the worker had expected E_SCHEMA transforms.
 
 # ---- transform: entry conversion of the input (through clamp [-DBL_MAX, DBL_MAX])
 transform-run-convert-numbers | 0 | @expected/transform/convert-numbers.json | transform fixtures/transform/convert.json pass fixtures/transform/inputs/convert-numbers.json
@@ -1482,6 +1488,7 @@ transform-pos-disabled-route-validate | 1 | ERR E_SCHEMA transforms | validate f
 transform-pos-disabled-route-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/disabled-route.json r1 fixtures/transform/inputs/one-trigger.json
 transform-pos-second-route-validate | 1 | ERR E_SCHEMA transforms | validate fixtures/transform/position/second-route.json
 transform-pos-second-route-transform | 1 | ERR E_SCHEMA transforms | transform fixtures/transform/position/second-route.json r1 fixtures/transform/inputs/one-trigger.json
+# r1.2: a target error elsewhere in the file is reported before a position error
 transform-pos-before-target-error | 1 | ERR E_SCHEMA target | validate fixtures/transform/position/before-target-error.json
 transform-pos-after-target-error | 1 | ERR E_SCHEMA target | validate fixtures/transform/position/after-target-error.json
 transform-pos-before-unknown-op | 1 | ERR E_SCHEMA op | validate fixtures/transform/position/before-unknown-op.json
