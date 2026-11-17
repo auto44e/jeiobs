@@ -1,0 +1,27 @@
+name: jeiobs macos probe (temporary, not for main)
+on:
+  push:
+    branches: ['jeiobs/macos-probe']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.repository == 'auto44e/jeiobs'
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - run: brew install nlohmann-json ninja
+      - run: tools/jeiobs/unicode/fetch-ucd.sh "$RUNNER_TEMP/ucd" || true
+      - name: workspace
+        run: |
+          cmake -S shared/jeiobs-workspace -B bw -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build bw
+          ctest --test-dir bw --output-on-failure
+      - name: control
+        run: |
+          cmake -S shared/jeiobs-control -B bc -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build bc
+          ctest --test-dir bc --output-on-failure
