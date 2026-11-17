@@ -1,0 +1,4 @@
+FINDING codex-1 | Major | open | Nested URLs create overlapping ranges (`ranges.push_back(...)`, Redactor.cpp:281-285); `ApplyEdits` returns false on overlap (Redactor.cpp:597-603), yielding `E_JSON` for valid input (Redactor.cpp:687-690).
+FINDING codex-2 | Major | open | JSON string limits are checked after `value.append`/`AppendCodePoint` allocation (JsonScan.cpp:232,298,305-307), violating the pre-allocation requirement (WORKSPACE_FORMAT.md:511-513).
+FINDING codex-3 | Minor | open | Export `target.audio.explicit/src` errors return `E_SCHEMA target`, but the contract requires `E_SCHEMA target.audio` (Manifest.cpp:483-491; 14-pr2-contract.md:110-112).
+VERDICT: request changes

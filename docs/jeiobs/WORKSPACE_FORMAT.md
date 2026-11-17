@@ -95,7 +95,7 @@ One UTF-8 JSON object, no BOM. Writers choose key order and whitespace; nothing 
 - `target.audio` = `{sample_rate, channels, explicit, src: {entry}}`. The values come from the
   active profile's `basic.ini [Audio] SampleRate` and `ChannelSetup`
   (`OBSBasicSettings.cpp:3646,3650`). `explicit` is false when OBS's defaults apply (48000,
-  `Stereo`; `OBSBasic.cpp:758-759`). From PR2 the validator checks these values against the blob.
+  `Stereo`; `OBSBasic.cpp:758-759`). The validator checks the shape of `target.audio` (PR2); comparing it with the blob needs the INI scan and arrives with PR3.
 - `target.devices` lists the devices present at capture and stays local. Bindings inside documents
   (`device_id` in source settings, `[Audio] MonitoringDeviceId`) are document content and travel
   unchanged.
@@ -285,14 +285,14 @@ Section 8 lists every secret key.
 | File | Root | Role | Captured | Secret keys | Fidelity |
 | --- | --- | --- | --- | --- | --- |
 | `global.ini` | config | — | reviewed keys only, as `app_keys` (below) | legacy `[OBSWebSocket] ServerPassword` | — |
-| `user.ini` | user | `app.user` | whole file | dock URLs in `ExtraBrowserDocks` (flagged, not redacted) | `exact`; `opaque-unreviewed` with unknown sections or a non-empty `[BasicWindow] ExtraBrowserDocks` |
+| `user.ini` | user | `app.user` | whole file | dock URLs in `ExtraBrowserDocks` (flagged, not redacted) | `exact`; `opaque-unreviewed` with a non-empty `[BasicWindow] ExtraBrowserDocks` (PR2). Unknown sections follow in PR3 with the reviewed section list |
 | `basic/scenes/<f>.json`, `<f>.json.bak` | scenes | `collection`, `collection.bak` | whole file | browser-source, media-source and VLC playlist URL credentials | `opaque-unreviewed` until every field is reviewed |
 | `basic/profiles/<d>/basic.ini` | profiles | `profile.basic` | whole file | OAuth `Token`, `RefreshToken`; `[AdvOut] FFURL` credentials | `exact` or `redacted`; `opaque-unreviewed` with unknown sections or a set `FFURL` |
 | `basic/profiles/<d>/service.json`, `.bak` | profiles | `profile.service`, `profile.service.bak` | whole file | `key`, `bearer_token`, `username`, `password`; `server` credentials | `exact` or `redacted`; `opaque-unreviewed` for `rtmp_custom` and `whip_custom` (typed URL) and third-party types |
 | `basic/profiles/<d>/streamEncoder.json`, `recordEncoder.json`, `.bak` | profiles | `profile.encoder.stream`, `profile.encoder.record`, `.bak` | whole file | — | `exact` |
 | `plugin_manager/modules.json` | plugin_manager | `app.modules` | whole file | — | `exact` |
 | `plugin_config/obs-websocket/config.json` | config | `module.obs-websocket` | whole file | `server_password` | `redacted` |
-| `plugin_config/decklink-output-ui/decklink{,Preview}OutputProps.json` | config | `module.decklink-output-ui` | whole file | — | `exact` |
+| `plugin_config/decklink-output-ui/decklink{,Preview}OutputProps.json` | config | `module.decklink-output-ui` | whole file | — | `exact` (the redactor has no role for it until PR3; `jw-check redact` answers `E_SCHEMA role`) |
 | `plugin_config/aja-output-ui/aja{Output,PreviewOutput,Misc}Props.json` | config | `module.aja-output-ui` | whole file | — | `exact` |
 
 | Omitted, `reason` | Files |

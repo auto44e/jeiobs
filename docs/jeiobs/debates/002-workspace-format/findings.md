@@ -43,3 +43,28 @@ ID | severity | status | finder | source | lead's note
 --- | --- | --- | --- | --- | ---
 claude-7 | Minor | open → fixed (awaiting finder) | claude | review-decisions-3/03-r2-claude.reply.md (FINDING claude-7) | wording now "the owner's answer"
 claude-2 to claude-6, codex-1 | Major or Minor | accepted-fix | claude, codex | review-decisions-3 | all accepted by their finders in run 3
+
+## PR #28 (S1-PR2), review `review-pr2-01` on `5bdc30e12`
+
+The run failed closed in round 2 after Claude's replies (the lead created a branch in a shared
+worktree during a turn, which the tamper check caught); Codex's round-2 reply is missing. The
+findings below are from Claude's round-2 reply and Codex's round-1 reply. The lead's fixes are
+`0a809589c` and `a2a90344a` with cases `7c2d9f50e`; libobs's parser served as the oracle for INI
+sections (`26-libobs-ini-oracle.c`).
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-1) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-2 | Major | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-2) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-3 | Major | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-3) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-4 | Major | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-4) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-5 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-5) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-6 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-6) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-7 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-7) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-8 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-8) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-9 | Major | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-9) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-10 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-10) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+claude-11 | Minor | open → fixed (awaiting finder) | claude | review-pr2-01/03-r2-claude.reply.md (FINDING claude-11) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+codex-1 | Major | open → fixed (awaiting finder) | codex | review-pr2-01/02-r1-codex.reply.md (FINDING codex-1) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+codex-2 | Major | open → fixed (awaiting finder) | codex | review-pr2-01/02-r1-codex.reply.md (FINDING codex-2) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
+codex-3 | Minor | open → fixed (awaiting finder) | codex | review-pr2-01/02-r1-codex.reply.md (FINDING codex-3) | fixed per contract r3 / r3.1 (19-pr2-contract-r3.md)
