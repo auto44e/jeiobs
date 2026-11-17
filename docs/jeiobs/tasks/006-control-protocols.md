@@ -340,8 +340,9 @@ preallocation for VST3 is sized (A7); the policy table defaults beyond the ones 
   all-or-nothing state on error, `jc-check transform`, and the position rules (`join14` and `relative`
   first, `split14` last) in the validator. Property tests with a fixed-seed generator (monotonicity,
   curve round trip, quantize levels and idempotence, all 16384 join/split codes, toggle parity, relative
-  encodings agreeing). Codex wrote the library, Claude the 164 black-box case lines blind; the cases decided
-  three readings (contract r1: literal `scale` formula, position rules run after parsing, `--position`
-  misuse is a usage error). The position rules tighten the v1.0 format: the one existing fixture that broke
+  encodings agreeing). Codex wrote the library, Claude the 164 black-box case lines blind. Three readings were decided
+  when the two met (contract r1: literal `scale` formula, position rules run after parsing, `--position`
+  misuse is a usage error): two of the blind expectations were flipped and the implementation dropped a
+  `scale` endpoint special case. The position rules tighten the v1.0 format: the one existing fixture that broke
   the order (`valid/full.json`) was fixed.
 - Next: PR3 (headless runtime).
