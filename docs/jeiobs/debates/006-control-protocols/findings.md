@@ -296,3 +296,12 @@ claude-5 | Minor | fixed (awaiting finder) | claude | review-pr37-01/03-r2-claud
 codex-1 | Major | fixed (awaiting finder) | codex | review-pr37-01/04-r2-codex.reply.md (FINDING codex-1) | join14 and split14 output is moved out, not copied (contract r1.7)
 codex-2 | Minor | fixed (awaiting finder) | codex | review-pr37-01/04-r2-codex.reply.md (FINDING codex-2) | as claude-3
 codex-3 | Minor | fixed (awaiting finder) | codex | review-pr37-01/04-r2-codex.reply.md (FINDING codex-3) | as claude-4
+
+### PR #37 run 02 (`review-pr37-02`) on `215c476d2`: both peers approve
+
+Codex's Major (codex-1) and every Minor of run 01 are `accepted-fix` by their finders, except claude-1 (the
+unit tests) and claude-5 (documentation accuracy), which stay Minor: claude-1 found that the "errors keep the
+state" property could not fail (the error came before any state change), and claude-5 that contract r1.1
+overstated the unit test's input range and a case-file comment misdescribed the blind cases. The lead fixed both
+after the run: the property now errors after `relative` has moved the position (a mutation that writes the
+state early makes it fail), and the contract and comments say what the tests do.

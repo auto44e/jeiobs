@@ -135,7 +135,7 @@ formatted with `snprintf` in the "C" numeric conventions (no locale dependence: 
 ## r1 (integration decisions after the first run; they win over the text above)
 1. `scale` is the literal formula, evaluated left to right as `((x - a) * (d - c)) / (b - a) + c`, with no
    special case for `x == a` or `x == b`. A span that overflows (`d - c` or the product) gives `E_VALUE nonfinite`.
-   The property "scale maps a to c" is exact; "maps b to d" holds within 4 epsilon of (|c| + |d|) (the rounding of the span; with a span that underflows the bound does not apply and the test uses inputs with |c|, |d| >= 1e-3).
+   The property "scale maps a to c" is exact; "maps b to d" holds within 4 epsilon of (|c| + |d|) (the rounding of the span; the bound is not meant for spans that underflow, and the unit test uses spans of at least 0.01).
 2. Position rules run in `ValidateMapping` AFTER the whole file parsed: any parse or schema error anywhere in
    the file (an unknown `op` is `E_SCHEMA op`, a bad target `E_SCHEMA target`, in any route) is reported before
    a position error. Position errors are then reported for the first offending route in document order.

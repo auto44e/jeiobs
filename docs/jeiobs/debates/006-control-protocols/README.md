@@ -10,7 +10,7 @@
   report, written without reading the library).
 
 - `13`–`17`: K1-PR1 fix rounds 2 and 3 (contract r2, r3); `review-pr33-01/`: the first PR #33 review run.
-- `20`–`24`, `review-pr37-01/`: K1-PR2 (transform execution): contract (with r1 decisions at the end), Codex brief and report,
+- `20`–`24`, `review-pr37-01/`, `review-pr37-02/`: K1-PR2 (transform execution): contract (with r1 decisions at the end), Codex brief and report,
   Claude blind-case brief and report with its per-case notes.
 
 Transcripts are verbatim except that trailing whitespace was stripped, the home directory is shown

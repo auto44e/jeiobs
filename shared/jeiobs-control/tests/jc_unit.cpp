@@ -533,14 +533,23 @@ void TestTransformExtraCoverage()
 			JC_CHECK(has_output);
 			JC_CHECK(position >= 0.0 && position <= 1.0);
 			JC_CHECK_EQ(position, state.position);
-			// A call that errors (wrong kind) leaves the state exactly as it was.
-			const auto bad = Jeiobs::Control::Value::MakeText("x");
-			JC_CHECK(bad.ok());
-			const TransformState before = state;
-			const auto failed = pipeline.value->Apply(*bad.value, state);
-			JC_CHECK(!failed.ok());
-			JC_CHECK_EQ(state.position, before.position);
-			JC_CHECK_EQ(state.toggled, before.toggled);
+			// A call that errors after an earlier stage changed the working state leaves the state
+			// exactly as it was: relative moves the position, then a scale overflows.
+			auto overflow = MakeStage("scale");
+			overflow.numbers = {0.0, 2.0, -std::numeric_limits<double>::max(),
+					    std::numeric_limits<double>::max()};
+			auto failing_stage = MakeStage("relative");
+			failing_stage.text = encoding;
+			failing_stage.numbers = {0.03};
+			const auto failing_pipeline = CompileStages({failing_stage, overflow});
+			JC_CHECK(failing_pipeline.ok());
+			if (failing_pipeline.ok()) {
+				const TransformState before = state;
+				const auto failed = failing_pipeline.value->Apply(*input.value, state);
+				JC_CHECK(!failed.ok());
+				JC_CHECK_EQ(state.position, before.position);
+				JC_CHECK_EQ(state.toggled, before.toggled);
+			}
 		}
 	}
 }
