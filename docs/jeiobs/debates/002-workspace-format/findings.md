@@ -237,3 +237,35 @@ codex-2 | Major | accepted-fix | codex | review-pr32-03/04-r2-codex.reply.md (FI
 codex-3 | Major | accepted-fix | codex | review-pr32-03/04-r2-codex.reply.md (FINDING codex-3) | -
 codex-4 | Minor | withdrawn | codex | review-pr32-03/04-r2-codex.reply.md (FINDING codex-4) | -
 codex-5 | Major | withdrawn | codex | review-pr32-03/04-r2-codex.reply.md (FINDING codex-5) | -
+
+## Review run 04 (PR #32): both peers approve
+
+Open Minors go to S1-PR4: a symlinked `basic.ini` (claude-13), `lstat` errors other than "missing" on app
+dirs (claude-14), and the documented exception that an unreadable folder with an unrepresentable name
+is reported only through a `listing-error` warning on its container (codex-6).
+
+ID | severity | status | finder | source | lead's note
+--- | --- | --- | --- | --- | ---
+claude-1 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-1) | -
+claude-2 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-2) | -
+claude-3 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-3) | -
+claude-4 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-4) | -
+claude-5 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-5) | -
+claude-6 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-6) | -
+claude-7 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-7) | -
+claude-8 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-8) | -
+claude-9 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-9) | -
+claude-10 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-10) | -
+claude-11 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-11) | -
+claude-12 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-12) | -
+claude-13 | Minor | open (Minor, S1-PR4) | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-13) | -
+claude-14 | Minor | open (Minor, S1-PR4) | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-14) | -
+claude-15 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-15) | -
+claude-16 | Minor | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-16) | -
+claude-17 | Major | accepted-fix | claude | review-pr32-04/03-r2-claude.reply.md (FINDING claude-17) | -
+codex-1 | Major | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-1) | -
+codex-2 | Major | accepted-fix | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-2) | -
+codex-3 | Major | accepted-fix | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-3) | -
+codex-4 | Minor | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-4) | -
+codex-5 | Major | withdrawn | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-5) | -
+codex-6 | Minor | open (Minor, S1-PR4) | codex | review-pr32-04/04-r2-codex.reply.md (FINDING codex-6) | -
