@@ -50,7 +50,14 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   (`config_open_string`) served as the oracle for INI sections. Linux (GCC): `jw-unit`,
   `jw-fuzz-smoke` and `jw-cases` (994 case lines) pass, also under ASan and UBSan. Windows and
   macOS CI run these through `jeiobs-workspace.yaml`.
-- Next: PR3 (CapturePlanner, identity, review rules for the first-party source list) and PR4
-  (`config_lock`, approved: WORKSPACE_FORMAT section 14). Also owed: an owner-merged PR that pins
-  the Unicode Character Database and adds the generated collision tables (decision 3), and S2
-  includes a purge for local history (decision 2).
+- **S1-PR3**: the capture planner (`jw-check plan`): allowlist-bound stored entries, every omitted
+  reason, the 100-file collapse, symlinks never followed, `.bak` pairs, unrepresentable names as one
+  counted entry per folder, case collisions flagged, each root scanning only the subpaths it owns;
+  collection and profile identity against a parent manifest (same path, then a unique scene-UUID
+  set); the optional `scene_uuids` manifest field; the first-party review table (`scene`, `group`);
+  and the PR2 review Minors (number token length and exponent clamping). Codex wrote the library and
+  Claude the black-box cases blind; the cases decided four readings (contract r1). Linux (GCC):
+  `jw-unit`, `jw-fuzz-smoke` and `jw-cases` (1095 case lines) pass, also under ASan and UBSan.
+- Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host). Also
+  owed: an owner-merged PR that pins the Unicode Character Database and adds the generated collision
+  tables (decision 3), and S2 includes a purge for local history (decision 2).

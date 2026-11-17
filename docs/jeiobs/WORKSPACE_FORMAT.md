@@ -679,18 +679,23 @@ The options and costs as they were put to the owner. The "Decided:" labels were 
 
 ## 15. Not done
 
-- Only the PR1 slice is built (`shared/jeiobs-workspace/`), and only on Linux. Sections 2, 6
-  (capture), 7–11 and the ZIP rules are design only.
-- The library builds and passes its tests on Windows and Linux in CI (Ubuntu and Windows runners;
-  `jw-check` uses `wmain` and UTF-8 paths on Windows). The macOS runner has not run yet.
+- Built so far in `shared/jeiobs-workspace/`: limits, path rules, hashing, manifests and export
+  projection (PR1), the JSON and INI scanners and the redactor (PR2), the capture planner and
+  identity (PR3). Sections 2, 6 (capture), 8's live capture hooks, 10 and 11 (store, coherence,
+  durability) and the ZIP rules are design only.
+- The library builds and passes its tests in CI on Ubuntu, macOS and Windows
+  (`.github/workflows/jeiobs-workspace.yaml`). Apple's libc++ differs from libstdc++ (no
+  floating-point `std::from_chars` for older deployment targets, O(n) insertion of equal keys into
+  `unordered_multimap`): both bit PR2, so new code avoids those.
 - Power-loss durability cannot be shown in CI.
-- Until PR3 reviews the first-party source list, every collection is `opaque-unreviewed`.
+- Every real collection is `opaque-unreviewed`: the reviewed first-party source table starts with
+  `scene` and `group` only. Adding a source type means enumerating its settings keys and showing that
+  none is a secret, URL, path or user text.
 - Two cases are not detected: tokens inside URL paths, and plugins that write OBS files directly
   instead of through `config_t` or `SaveService()`.
-- Open for PR3 (CapturePlanner): live OBS states that PathRules rejects. On Linux, profiles `Main`
-  and `main` can both exist (OBS checks for an existing folder case-sensitively,
-  `OBSBasic_Profiles.cpp:146-160`), and a stray file named `What?.txt`, `notes .txt` or with a
-  name that is not UTF-8 can sit in a captured folder. Options: record such names as one omitted
-  entry per folder with a count and no names, and record case collisions as a flag that blocks
-  restore onto a case-insensitive filesystem instead of rejecting the manifest. Also open: 8.3
-  short names, HFS+ normalization and file-versus-folder clashes.
+- Live OBS states that PathRules rejects are handled by the planner: names that are not UTF-8 or
+  break a rule become one omitted `kind: "names"` entry per folder with a count and no names;
+  case-only clashes (profiles `Main` and `main` on Linux, `OBSBasic_Profiles.cpp:146-160`) are
+  planned with `collision: true` and a warning, and capture (PR4) blocks restore onto a
+  case-insensitive filesystem instead of rejecting the manifest. Still open: 8.3 short names, HFS+
+  normalization and file-versus-folder clashes.
