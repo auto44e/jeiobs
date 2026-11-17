@@ -439,18 +439,18 @@ std::vector<DecodedRange> UrlRanges(std::string_view value)
 
 	const std::size_t size = value.size();
 	std::vector<Offset> next_stop(size + 1U, static_cast<Offset>(size));
-	std::vector<Offset> next_query_hash(size + 1U, static_cast<Offset>(size));
+	std::vector<Offset> next_question(size + 1U, static_cast<Offset>(size));
 	std::vector<Offset> next_ampersand(size + 1U, static_cast<Offset>(size));
 	std::vector<Offset> last_at(size + 1U, kNoOffset);
 	for (std::size_t index = size; index-- > 0U;) {
 		next_stop[index] = next_stop[index + 1U];
-		next_query_hash[index] = next_query_hash[index + 1U];
+		next_question[index] = next_question[index + 1U];
 		next_ampersand[index] = next_ampersand[index + 1U];
 		if (value[index] == '/' || value[index] == '?' || value[index] == '#') {
 			next_stop[index] = static_cast<Offset>(index);
 		}
-		if (value[index] == '?' || value[index] == '#') {
-			next_query_hash[index] = static_cast<Offset>(index);
+		if (value[index] == '?') {
+			next_question[index] = static_cast<Offset>(index);
 		}
 		if (value[index] == '&') {
 			next_ampersand[index] = static_cast<Offset>(index);
@@ -484,13 +484,13 @@ std::vector<DecodedRange> UrlRanges(std::string_view value)
 			ranges.push_back({authority_start, static_cast<std::size_t>(at)});
 		}
 
-		const std::size_t query_or_hash = next_query_hash[authority_start] == static_cast<Offset>(size)
-							  ? size
-							  : static_cast<std::size_t>(next_query_hash[authority_start]);
-		if (query_or_hash < size && value[query_or_hash] == '?' &&
-		    (authority_end == size || query_or_hash == authority_end ||
-		     (authority_end < size && value[authority_end] == '/'))) {
-			query_starts[query_or_hash] = 1U;
+		const std::size_t question = next_question[authority_start] == static_cast<Offset>(size)
+						     ? size
+						     : static_cast<std::size_t>(next_question[authority_start]);
+		if (question < size &&
+		    (authority_end == size || question == authority_end ||
+		     (authority_end < size && (value[authority_end] == '/' || value[authority_end] == '#')))) {
+			query_starts[question] = 1U;
 		}
 		if (position <= scheme_end_start) {
 			++position;
@@ -666,14 +666,8 @@ std::string_view SourceType(const JsonScanResult &scan, const JsonIndex &index, 
 	}
 	const std::string id_pointer = JsonPointer(scan, source_index) + "/id";
 	const JsonValueOccurrence *id = FindFirstValue(index, id_pointer);
-	if (versioned != nullptr) {
-		if (versioned->kind == JsonValueKind::String) {
-			if (id != nullptr && id->kind != JsonValueKind::String) {
-				non_string_registry = true;
-			}
-			return versioned->string_value;
-		}
-		non_string_registry = true;
+	if (versioned != nullptr && versioned->kind == JsonValueKind::String && !versioned->string_value.empty()) {
+		return versioned->string_value;
 	}
 	if (id == nullptr || id->kind != JsonValueKind::String) {
 		if (id != nullptr) {
@@ -840,6 +834,9 @@ void RedactBasic(std::vector<Edit> &edits, std::string_view bytes, const IniScan
 
 void RedactUser(std::string_view bytes, const IniScanResult &scan, std::size_t &unreviewed)
 {
+	if (scan.uncertain) {
+		++unreviewed;
+	}
 	for (const IniKeyOccurrence &key : scan.keys) {
 		if (IniSection(scan, key) == "BasicWindow" && IniKey(bytes, key) == "ExtraBrowserDocks" &&
 		    key.value_start != key.value_end) {

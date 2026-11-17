@@ -890,11 +890,11 @@ Error ValidateExportObjects(const Json &document, ManifestMode mode)
 	}
 	if (target.contains("audio")) {
 		if (!target.at("audio").is_object()) {
-			return Schema("target");
+			return Schema("target.audio");
 		}
 		for (const auto &[key, ignored] : target.at("audio").items()) {
 			if (key != "sample_rate" && key != "channels") {
-				return Schema("target");
+				return Schema("target.audio");
 			}
 		}
 	}

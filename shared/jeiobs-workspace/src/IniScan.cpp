@@ -68,15 +68,6 @@ bool IsValidUtf8(std::string_view bytes)
 	return true;
 }
 
-std::size_t TrimLeft(std::string_view line)
-{
-	std::size_t offset = 0U;
-	while (offset < line.size() && (line[offset] == ' ' || line[offset] == '\t')) {
-		++offset;
-	}
-	return offset;
-}
-
 bool IsNewline(char character)
 {
 	return character == '\r' || character == '\n';
@@ -101,16 +92,8 @@ IniScanResult IniScan::Scan(std::string_view bytes)
 			return result;
 		}
 
-		std::size_t offset = 0U;
-		if (bytes.size() >= 3U && static_cast<unsigned char>(bytes[0]) == 0xefU &&
-		    static_cast<unsigned char>(bytes[1]) == 0xbbU && static_cast<unsigned char>(bytes[2]) == 0xbfU) {
-			result.has_bom = true;
-			offset = 3U;
-		}
-		std::size_t section_index = kNoIndex;
-		while (offset < bytes.size() || (offset == 0U && bytes.empty())) {
-			const std::size_t line_start = offset;
-			std::size_t line_end = offset;
+		for (std::size_t line_start = 0U; line_start < bytes.size();) {
+			std::size_t line_end = line_start;
 			while (line_end < bytes.size() && !IsNewline(bytes[line_end])) {
 				++line_end;
 			}
@@ -118,90 +101,147 @@ IniScanResult IniScan::Scan(std::string_view bytes)
 				result.error = MakeError(ErrorCode::Limit, "line");
 				return result;
 			}
-
-			const std::string_view line = bytes.substr(line_start, line_end - line_start);
-			const std::size_t first = TrimLeft(line);
-			std::size_t parse_start = first;
-			if (first < line.size() && line[first] == '[') {
-				const std::size_t close = line.find(']', first + 1U);
-				bool exact_header = false;
-				if (close != std::string_view::npos && close > first + 1U) {
-					std::size_t trailing = close + 1U;
-					while (trailing < line.size() &&
-					       (line[trailing] == ' ' || line[trailing] == '\t')) {
-						++trailing;
-					}
-					exact_header = trailing == line.size() || line[trailing] == ';' ||
-						       line[trailing] == '#';
-				}
-				if (!exact_header) {
-					result.uncertain = true;
-				}
-				if (exact_header) {
-					if (result.sections.size() >= Limits::kIniSections) {
-						result.error = MakeError(ErrorCode::Limit, "values");
-						return result;
-					}
-					const std::size_t name_start = line_start + first + 1U;
-					const std::size_t name_end = line_start + close;
-					IniSectionOccurrence section;
-					section.name.assign(bytes.substr(name_start, name_end - name_start));
-					section.start = name_start;
-					section.end = name_end;
-					result.sections.push_back(std::move(section));
-					section_index = result.sections.size() - 1U;
-					parse_start = close + 1U;
-				} else {
-					parse_start = first;
-				}
-			}
-
-			const std::size_t key_first = TrimLeft(line.substr(parse_start));
-			const std::size_t key_begin = parse_start + key_first;
-			if (key_begin < line.size() && line[key_begin] != ';' && line[key_begin] != '#') {
-				const std::size_t equals = line.find('=', key_begin);
-				if (equals != std::string_view::npos) {
-					const std::size_t key_end = equals;
-					if (key_end > key_begin) {
-						if (result.keys.size() >= Limits::kIniKeys) {
-							result.error = MakeError(ErrorCode::Limit, "values");
-							return result;
-						}
-						const std::size_t key_start_offset = line_start + key_begin;
-						const std::size_t key_end_offset = line_start + key_end;
-						const std::size_t value_start = line_start + equals + 1U;
-						const std::size_t value_end = line_start + line.size();
-						IniKeyOccurrence key;
-						key.start = value_start;
-						key.end = value_end;
-						key.value_start = value_start;
-						key.value_end = value_end;
-						key.section_index = section_index;
-						key.key_start = key_start_offset;
-						key.key_end = key_end_offset;
-
-						result.keys.push_back(std::move(key));
-					}
-				}
-			}
-
 			if (line_end == bytes.size()) {
 				break;
 			}
-			const char newline = bytes[line_end];
-			if (newline == '\r') {
-				if (line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\n') {
-					offset = line_end + 2U;
-				} else if (line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\r') {
-					offset = line_end + 1U;
-				} else {
-					result.uncertain = true;
-					offset = line_end + 1U;
-				}
-			} else if (line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\r') {
-				offset = line_end + 2U;
+			if (bytes[line_end] == '\r' && line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\n') {
+				line_start = line_end + 2U;
+			} else if (bytes[line_end] == '\n' && line_end + 1U < bytes.size() &&
+				   bytes[line_end + 1U] == '\r') {
+				result.uncertain = true;
+				line_start = line_end + 2U;
 			} else {
-				offset = line_end + 1U;
+				if (bytes[line_end] == '\r') {
+					result.uncertain = true;
+				}
+				line_start = line_end + 1U;
+			}
+		}
+
+		std::size_t offset = 0U;
+		if (bytes.size() >= 3U && static_cast<unsigned char>(bytes[0]) == 0xefU &&
+		    static_cast<unsigned char>(bytes[1]) == 0xbbU && static_cast<unsigned char>(bytes[2]) == 0xbfU) {
+			result.has_bom = true;
+			offset = 3U;
+		}
+		std::size_t section_index = kNoIndex;
+		const auto consume_newline = [&bytes](std::size_t &position) {
+			if (position >= bytes.size() || !IsNewline(bytes[position])) {
+				return;
+			}
+			if (position + 1U < bytes.size() &&
+			    ((bytes[position] == '\r' && bytes[position + 1U] == '\n') ||
+			     (bytes[position] == '\n' && bytes[position + 1U] == '\r'))) {
+				position += 2U;
+			} else {
+				++position;
+			}
+		};
+		const auto skip_whitespace = [&bytes, &consume_newline](std::size_t &position) {
+			while (position < bytes.size()) {
+				if (bytes[position] == ' ' || bytes[position] == '\t') {
+					++position;
+				} else if (IsNewline(bytes[position])) {
+					consume_newline(position);
+				} else {
+					break;
+				}
+			}
+		};
+		const auto skip_to_newline = [&bytes, &consume_newline](std::size_t &position) {
+			while (position < bytes.size() && !IsNewline(bytes[position])) {
+				++position;
+			}
+			consume_newline(position);
+		};
+
+		while (offset < bytes.size()) {
+			skip_whitespace(offset);
+			if (offset >= bytes.size()) {
+				break;
+			}
+			if (bytes[offset] != '[') {
+				skip_to_newline(offset);
+				continue;
+			}
+
+			++offset;
+			const std::size_t name_start = offset;
+			while (offset < bytes.size() && bytes[offset] != ']' && !IsNewline(bytes[offset])) {
+				++offset;
+			}
+			const std::size_t name_end = offset;
+			const bool has_close = offset < bytes.size() && bytes[offset] == ']';
+			if (name_start == name_end) {
+				return result;
+			}
+			if (result.sections.size() >= Limits::kIniSections) {
+				result.error = MakeError(ErrorCode::Limit, "values");
+				return result;
+			}
+			IniSectionOccurrence section;
+			section.name.assign(bytes.substr(name_start, name_end - name_start));
+			section.start = name_start;
+			section.end = name_end;
+			result.sections.push_back(std::move(section));
+			section_index = result.sections.size() - 1U;
+
+			bool exact_header = has_close;
+			if (has_close) {
+				++offset;
+			}
+			for (std::size_t trailing = offset; trailing < bytes.size() && !IsNewline(bytes[trailing]);
+			     ++trailing) {
+				if (bytes[trailing] != ' ' && bytes[trailing] != '\t') {
+					exact_header = false;
+					break;
+				}
+			}
+			if (!exact_header) {
+				result.uncertain = true;
+			}
+
+			while (offset < bytes.size()) {
+				skip_whitespace(offset);
+				if (offset >= bytes.size() || bytes[offset] == '[') {
+					break;
+				}
+				if (bytes[offset] == '#') {
+					skip_to_newline(offset);
+					continue;
+				}
+
+				const std::size_t key_start = offset;
+				while (offset < bytes.size() && bytes[offset] != '=' && !IsNewline(bytes[offset])) {
+					++offset;
+				}
+				if (offset >= bytes.size() || IsNewline(bytes[offset])) {
+					consume_newline(offset);
+					continue;
+				}
+
+				const std::size_t equals = offset++;
+				const std::size_t value_start = offset;
+				while (offset < bytes.size() && !IsNewline(bytes[offset])) {
+					++offset;
+				}
+				const std::size_t value_end = offset;
+				if (key_start < equals) {
+					if (result.keys.size() >= Limits::kIniKeys) {
+						result.error = MakeError(ErrorCode::Limit, "values");
+						return result;
+					}
+					IniKeyOccurrence key;
+					key.start = value_start;
+					key.end = value_end;
+					key.value_start = value_start;
+					key.value_end = value_end;
+					key.section_index = section_index;
+					key.key_start = key_start;
+					key.key_end = equals;
+					result.keys.push_back(std::move(key));
+				}
+				consume_newline(offset);
 			}
 		}
 	} catch (...) {
