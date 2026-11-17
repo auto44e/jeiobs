@@ -52,8 +52,11 @@ EXPORT void config_close(config_t *config);
  * Holds the configuration's own lock, the one every getter, setter and save call takes. While a
  * thread holds it, no other thread can change or save this config_t, so a file that is read in the
  * meantime is not rewritten. The lock is recursive: the holder may call any config_* function.
- * Always release with config_unlock() on the same thread. Take it before any other lock the caller
- * owns and keep the hold short: every other thread that touches this config_t waits.
+ * Release with config_unlock() on the same thread, and keep the hold short: every other thread that
+ * touches this config_t waits. Do not wait for another thread that may be using this config_t while
+ * you hold it. If you also take your own locks, use one fixed order relative to this lock everywhere
+ * (the JeiOBS capture host takes its own persist mutex first and this lock second). Do not call
+ * config_close() while any thread holds or waits for the lock.
  */
 EXPORT void config_lock(config_t *config);
 EXPORT void config_unlock(config_t *config);

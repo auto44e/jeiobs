@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,7 +48,7 @@ struct writer {
 	config_t *config;
 	os_event_t *started;
 	os_event_t *finished;
-	volatile int stop;
+	volatile bool stop;
 	pthread_t thread;
 };
 
@@ -65,11 +66,60 @@ static void *save_loop(void *param)
 	struct writer *writer = param;
 	os_event_signal(writer->started);
 	int i = 0;
-	while (!writer->stop) {
+	while (!os_atomic_load_bool(&writer->stop)) {
 		config_set_int(writer->config, "A", "counter", ++i);
 		config_save(writer->config);
 	}
 	return NULL;
+}
+
+struct saver {
+	config_t *config;
+	volatile long failures;
+	pthread_t thread;
+};
+
+static void *save_safe_loop(void *param)
+{
+	struct saver *saver = param;
+	for (int i = 0; i < 400; ++i) {
+		config_set_int(saver->config, "A", "counter", i);
+		if (config_save_safe(saver->config, "tmp", "bak") != CONFIG_SUCCESS)
+			os_atomic_inc_long(&saver->failures);
+	}
+	return NULL;
+}
+
+static void test_concurrent_save_safe(void **state)
+{
+	(void)state;
+	struct path path;
+	make_path(&path, "safe");
+	config_t *config = config_create(path.text);
+	assert_non_null(config);
+
+	struct saver savers[3] = {{.config = config}, {.config = config}, {.config = config}};
+	for (int i = 0; i < 3; ++i)
+		assert_int_equal(pthread_create(&savers[i].thread, NULL, save_safe_loop, &savers[i]), 0);
+	for (int i = 0; i < 3; ++i) {
+		pthread_join(savers[i].thread, NULL);
+		assert_int_equal(os_atomic_load_long(&savers[i].failures), 0);
+	}
+
+	/* The real file holds a complete config, and no temporary file is left behind. */
+	config_t *reopened = NULL;
+	assert_int_equal(config_open(&reopened, path.text, CONFIG_OPEN_EXISTING), CONFIG_SUCCESS);
+	assert_true(config_get_int(reopened, "A", "counter") >= 0);
+	config_close(reopened);
+	char temporary[560];
+	snprintf(temporary, sizeof(temporary), "%s.tmp", path.text);
+	assert_false(os_file_exists(temporary));
+
+	config_close(config);
+	char backup[560];
+	snprintf(backup, sizeof(backup), "%s.bak", path.text);
+	os_unlink(backup);
+	os_unlink(path.text);
 }
 
 static void test_recursive_and_null(void **state)
@@ -168,7 +218,7 @@ static void test_file_not_rewritten_while_held(void **state)
 	/* the writer runs again after the last unlock */
 	assert_true((int)config_get_int(config, "A", "counter") > before);
 
-	writer.stop = 1;
+	os_atomic_store_bool(&writer.stop, true);
 	pthread_join(writer.thread, NULL);
 	os_event_destroy(writer.started);
 	os_event_destroy(writer.finished);
@@ -180,6 +230,7 @@ int main(void)
 {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_recursive_and_null),
+		cmocka_unit_test(test_concurrent_save_safe),
 		cmocka_unit_test(test_other_thread_waits),
 		cmocka_unit_test(test_file_not_rewritten_while_held),
 	};

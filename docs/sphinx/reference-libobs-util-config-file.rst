@@ -110,9 +110,11 @@ Config File Functions
    is not rewritten by it. The lock is recursive: the holding thread may
    call any other *config_* function. Does nothing for *NULL*.
 
-   Release it with :c:func:`config_unlock` on the same thread. Take it before
-   any other lock that you own, and keep it short, because every other
-   thread that uses the object waits.
+   Release it with :c:func:`config_unlock` on the same thread. Keep it short,
+   because every other thread that uses the object waits, and do not wait for
+   another thread that may be using the object while you hold it. If you also
+   take your own locks, use one fixed order relative to this lock everywhere.
+   Do not call :c:func:`config_close` while any thread holds or waits for it.
 
    :param config:     Configuration object
 

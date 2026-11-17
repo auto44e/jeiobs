@@ -606,8 +606,8 @@ non-ASCII letters.
 
 Tests run under ctest with a small in-tree `jw_test.hpp`. A test framework would be a new
 third-party dependency, which is owner-merged ([DECISIONS](DECISIONS.md) gate item 1). The
-inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/test-input`, so
-`test/CMakeLists.txt:13-14` is skipped.
+inherited cmocka setup was never built until S1-PR4a added `test/cmocka` behind `ENABLE_UNIT_TESTS`;
+no CI job runs it yet.
 
 | Slice | Contents | Merge |
 | --- | --- | --- |

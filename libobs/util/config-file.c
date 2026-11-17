@@ -411,7 +411,7 @@ int config_save_safe(config_t *config, const char *temp_ext, const char *backup_
 {
 	struct dstr temp_file = {0};
 	struct dstr backup_file = {0};
-	char *file = config->file;
+	char *file;
 	int ret;
 
 	if (!temp_ext || !*temp_ext) {
@@ -421,6 +421,10 @@ int config_save_safe(config_t *config, const char *temp_ext, const char *backup_
 	}
 
 	pthread_mutex_lock(&config->mutex);
+
+	/* Read the file name only under the lock: another config_save_safe call swaps config->file to
+	 * its temporary name while it holds the lock. */
+	file = config->file;
 
 	dstr_copy(&temp_file, config->file);
 	if (*temp_ext != '.')
@@ -480,7 +484,13 @@ void config_close(config_t *config)
 
 size_t config_num_sections(config_t *config)
 {
-	return HASH_CNT(hh, config->sections);
+	size_t count;
+
+	pthread_mutex_lock(&config->mutex);
+	count = HASH_CNT(hh, config->sections);
+	pthread_mutex_unlock(&config->mutex);
+
+	return count;
 }
 
 const char *config_get_section(config_t *config, size_t idx)
