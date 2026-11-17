@@ -406,6 +406,11 @@ void TestTransformStages()
 	const auto invalid_split = CompileStages({MakeStage("split14"), MakeStage("invert")});
 	JC_CHECK(!invalid_split.ok());
 	JC_CHECK(invalid_split.error.code == Jeiobs::Control::ErrorCode::Schema);
+	// An unknown operation is reported before a position error (contract r1).
+	const auto unknown_after_bad_position =
+		CompileStages({MakeStage("invert"), MakeStage("join14"), MakeStage("nope")});
+	JC_CHECK(!unknown_after_bad_position.ok());
+	JC_CHECK_EQ(unknown_after_bad_position.error.detail, "op");
 	auto invalid_parameters = MakeStage("invert");
 	invalid_parameters.numbers = {1.0};
 	const auto invalid_parameter_pipeline = CompileStages({invalid_parameters});

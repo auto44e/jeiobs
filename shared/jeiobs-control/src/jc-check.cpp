@@ -657,6 +657,23 @@ bool ParseDoubleArgument(std::string_view argument, double &result)
 	return end != text.c_str() && end == text.c_str() + text.size();
 }
 
+// A plain decimal number: digits, one optional sign, a decimal point and an exponent. No hexadecimal
+// floats, "inf" or "nan" (strtod accepts those).
+bool IsPlainDecimal(std::string_view text)
+{
+	if (text.empty()) {
+		return false;
+	}
+	for (const char character : text) {
+		const bool digit = character >= '0' && character <= '9';
+		if (!digit && character != '.' && character != '+' && character != '-' && character != 'e' &&
+		    character != 'E') {
+			return false;
+		}
+	}
+	return true;
+}
+
 std::string UInt128Decimal(Jeiobs::Control::UInt128 value)
 {
 	if (value.high == 0U && value.low == 0U) {
@@ -989,7 +1006,8 @@ int Run(int argc, char **argv)
 					continue;
 				}
 				if (option == "--position" && argument + 1 < argc) {
-					if (!ParseDoubleArgument(argv[argument + 1], position) ||
+					if (!IsPlainDecimal(argv[argument + 1]) ||
+					    !ParseDoubleArgument(argv[argument + 1], position) ||
 					    !std::isfinite(position) || position < 0.0 || position > 1.0) {
 						PrintUsage();
 						return 2;

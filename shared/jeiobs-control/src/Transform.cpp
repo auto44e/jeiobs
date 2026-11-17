@@ -377,7 +377,7 @@ Result<Signal> ApplyStage(const TransformSpec &stage, std::size_t index, std::si
 	return {{}, Schema("op")};
 }
 
-Result<Value> OutputValue(const Signal &signal)
+Result<Value> OutputValue(const Signal &signal, std::optional<Value> &owned)
 {
 	switch (signal.kind) {
 	case SignalKind::Number:
@@ -388,6 +388,9 @@ Result<Value> OutputValue(const Signal &signal)
 	case SignalKind::Tuple:
 		if (signal.value == nullptr) {
 			return {{}, ValueError("type")};
+		}
+		if (owned.has_value() && signal.value == &*owned) {
+			return {std::move(*owned), {}}; // built by join14 or split14: hand it over, no second copy
 		}
 		return {*signal.value, {}};
 	case SignalKind::NoOutput:
@@ -404,9 +407,6 @@ Result<TransformPipeline> TransformPipeline::Compile(const std::vector<Transform
 		if (stages.size() > Limits::kTransforms) {
 			return {{}, MakeError(ErrorCode::Limit, "transforms")};
 		}
-		if (HasInvalidPosition(stages)) {
-			return {{}, Schema("transforms")};
-		}
 		for (const TransformSpec &stage : stages) {
 			if (!IsKnownOperation(stage.op)) {
 				return {{}, Schema("op")};
@@ -414,6 +414,9 @@ Result<TransformPipeline> TransformPipeline::Compile(const std::vector<Transform
 			if (!IsValidStage(stage)) {
 				return {{}, Schema("transforms")};
 			}
+		}
+		if (HasInvalidPosition(stages)) {
+			return {{}, Schema("transforms")};
 		}
 		return {TransformPipeline(std::vector<TransformSpec>(stages)), {}};
 	} catch (...) {
@@ -453,7 +456,7 @@ Result<TransformPipeline::Applied> TransformPipeline::Apply(const Value &input, 
 			}
 		}
 
-		auto output = OutputValue(working_signal);
+		auto output = OutputValue(working_signal, owned);
 		if (!output.ok()) {
 			return {{}, output.error};
 		}

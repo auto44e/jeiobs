@@ -1502,6 +1502,8 @@ transform-cli-usage-no-inputs | 2 | * | transform fixtures/transform/scale.json 
 transform-cli-usage-position-alone | 2 | * | transform --position
 transform-cli-usage-position-no-inputs | 2 | * | transform --position 0.5 fixtures/transform/scale.json identity
 transform-cli-usage-position-not-a-number | 2 | * | transform --position abc fixtures/transform/scale.json identity fixtures/transform/inputs/one-trigger.json
+transform-cli-usage-position-hex-float | 2 | * | transform --position 0x1p-1 fixtures/transform/scale.json identity fixtures/transform/inputs/one-trigger.json
+transform-cli-usage-position-nan | 2 | * | transform --position nan fixtures/transform/scale.json identity fixtures/transform/inputs/one-trigger.json
 transform-cli-usage-toggled-no-inputs | 2 | * | transform --toggled fixtures/transform/toggle.json t
 transform-cli-unknown-route | 1 | ERR E_REF route | transform fixtures/transform/scale.json nope fixtures/transform/inputs/one-trigger.json
 transform-cli-unknown-route-case | 1 | ERR E_REF route | transform fixtures/transform/scale.json IDENTITY fixtures/transform/inputs/one-trigger.json
