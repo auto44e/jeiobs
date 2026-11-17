@@ -143,9 +143,12 @@ struct ArrayLookupHash {
 
 class JsonIndex final {
 	const JsonScanResult &scan_;
-	std::unordered_multimap<MemberLookupKey, std::size_t, MemberLookupHash> members_;
+	// One entry per (parent, key); duplicate keys append to the vector (see array_children_).
+	std::unordered_map<MemberLookupKey, std::vector<std::size_t>, MemberLookupHash> members_;
 	std::unordered_map<ArrayLookupKey, std::size_t, ArrayLookupHash> arrays_;
-	std::unordered_multimap<std::size_t, std::size_t> array_children_;
+	// Children of each array, in document order. Not an unordered_multimap: libc++ inserts each
+	// equal key at the end of its group by walking it, which is quadratic for one large array.
+	std::unordered_map<std::size_t, std::vector<std::size_t>> array_children_;
 
 	static bool DecodeToken(std::string_view encoded, std::string &decoded)
 	{
@@ -172,13 +175,11 @@ class JsonIndex final {
 
 	std::vector<std::size_t> FindChildren(std::size_t parent, std::string_view key) const
 	{
-		std::vector<std::size_t> result;
-		const MemberLookupKey lookup{parent, key};
-		const auto range = members_.equal_range(lookup);
-		for (auto iterator = range.first; iterator != range.second; ++iterator) {
-			result.push_back(iterator->second);
+		const auto found = members_.find(MemberLookupKey{parent, key});
+		if (found == members_.end()) {
+			return {};
 		}
-		return result;
+		return found->second;
 	}
 
 public:
@@ -195,16 +196,16 @@ public:
 		}
 		if (array_value_count != 0U) {
 			arrays_.reserve(array_value_count * 2U + 1U);
-			array_children_.reserve(array_value_count * 2U + 1U);
+			array_children_.reserve(64U);
 		}
 		for (const JsonMemberOccurrence &member : scan.members) {
-			members_.emplace(MemberLookupKey{member.parent_index, member.key}, member.value_index);
+			members_[MemberLookupKey{member.parent_index, member.key}].push_back(member.value_index);
 		}
 		for (std::size_t index = 0U; index < scan.values.size(); ++index) {
 			const JsonValueOccurrence &value = scan.values[index];
 			if (value.parent_index != kJsonNoIndex && value.array_index != kJsonNoIndex) {
 				arrays_.emplace(ArrayLookupKey{value.parent_index, value.array_index}, index);
-				array_children_.emplace(value.parent_index, index);
+				array_children_[value.parent_index].push_back(index);
 			}
 		}
 	}
@@ -272,15 +273,11 @@ public:
 
 	std::vector<std::size_t> ArrayChildren(std::size_t array_index) const
 	{
-		std::vector<std::size_t> result;
-		const auto range = array_children_.equal_range(array_index);
-		for (auto iterator = range.first; iterator != range.second; ++iterator) {
-			result.push_back(iterator->second);
+		const auto found = array_children_.find(array_index);
+		if (found == array_children_.end()) {
+			return {};
 		}
-		std::sort(result.begin(), result.end(), [this](std::size_t left, std::size_t right) {
-			return scan_.values[left].array_index < scan_.values[right].array_index;
-		});
-		return result;
+		return found->second; // scan order is document order, so already sorted by array index
 	}
 };
 
