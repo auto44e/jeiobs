@@ -50,8 +50,11 @@ bool ReadFile(const std::filesystem::path &path, std::string &bytes)
 
 bool CheckResult(std::string_view input, const Jeiobs::Workspace::RedactResult &result)
 {
-	if (!result.ok() || result.report.outcome != Jeiobs::Workspace::RedactOutcome::Stored) {
-		return true;
+	if (!result.ok()) {
+		return false;
+	}
+	if (result.report.outcome != Jeiobs::Workspace::RedactOutcome::Stored) {
+		return result.bytes.empty();
 	}
 	std::size_t expected = input.size();
 	std::size_t previous_end = 0U;

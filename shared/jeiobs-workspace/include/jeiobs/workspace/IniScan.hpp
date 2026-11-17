@@ -26,6 +26,8 @@ struct IniSectionOccurrence {
 };
 
 struct IniKeyOccurrence {
+	// Compatibility fields remain available but are intentionally empty. Use
+	// byte offsets and section_index to avoid per-key string materialization.
 	std::string section;
 	std::string key;
 	std::string pointer;
@@ -33,10 +35,14 @@ struct IniKeyOccurrence {
 	std::size_t end = 0U;
 	std::size_t value_start = 0U;
 	std::size_t value_end = 0U;
+	std::size_t section_index = static_cast<std::size_t>(-1);
+	std::size_t key_start = 0U;
+	std::size_t key_end = 0U;
 };
 
 struct IniScanResult {
 	bool has_bom = false;
+	bool uncertain = false;
 	std::vector<IniSectionOccurrence> sections;
 	std::vector<IniKeyOccurrence> keys;
 	Error error;

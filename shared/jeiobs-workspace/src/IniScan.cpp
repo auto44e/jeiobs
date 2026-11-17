@@ -13,12 +13,15 @@
 #include "jeiobs/workspace/Limits.hpp"
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace Jeiobs::Workspace {
 namespace {
+
+constexpr std::size_t kNoIndex = std::numeric_limits<std::size_t>::max();
 
 Error MakeError(ErrorCode code, std::string detail = {})
 {
@@ -74,28 +77,9 @@ std::size_t TrimLeft(std::string_view line)
 	return offset;
 }
 
-std::size_t TrimRight(std::string_view line, std::size_t begin, std::size_t end)
+bool IsNewline(char character)
 {
-	while (end > begin && (line[end - 1U] == ' ' || line[end - 1U] == '\t')) {
-		--end;
-	}
-	return end;
-}
-
-std::string EscapePointerToken(std::string_view token)
-{
-	std::string escaped;
-	escaped.reserve(token.size());
-	for (const char character : token) {
-		if (character == '~') {
-			escaped += "~0";
-		} else if (character == '/') {
-			escaped += "~1";
-		} else {
-			escaped.push_back(character);
-		}
-	}
-	return escaped;
+	return character == '\r' || character == '\n';
 }
 
 } // namespace
@@ -123,55 +107,102 @@ IniScanResult IniScan::Scan(std::string_view bytes)
 			result.has_bom = true;
 			offset = 3U;
 		}
-		std::string current_section;
-		while (offset <= bytes.size()) {
+		std::size_t section_index = kNoIndex;
+		while (offset < bytes.size() || (offset == 0U && bytes.empty())) {
 			const std::size_t line_start = offset;
-			const std::size_t newline = bytes.find('\n', offset);
-			const std::size_t line_end = newline == std::string_view::npos ? bytes.size() : newline;
-			std::size_t content_end = line_end;
-			if (content_end > line_start && bytes[content_end - 1U] == '\r') {
-				--content_end;
+			std::size_t line_end = offset;
+			while (line_end < bytes.size() && !IsNewline(bytes[line_end])) {
+				++line_end;
 			}
-			if (content_end - line_start > Limits::kIniLineBytes) {
+			if (line_end - line_start > Limits::kIniLineBytes) {
 				result.error = MakeError(ErrorCode::Limit, "line");
 				return result;
 			}
 
-			const std::string_view line = bytes.substr(line_start, content_end - line_start);
+			const std::string_view line = bytes.substr(line_start, line_end - line_start);
 			const std::size_t first = TrimLeft(line);
-			if (first < line.size() && line[first] != ';' && line[first] != '#') {
-				const std::size_t trimmed_end = TrimRight(line, first, line.size());
-				if (trimmed_end > first + 1U && line[first] == '[' && line[trimmed_end - 1U] == ']') {
-					const std::size_t name_start = first + 1U;
-					const std::size_t name_end = TrimRight(line, name_start, trimmed_end - 1U);
-					const std::size_t name_offset = line_start + name_start;
-					const std::size_t name_length = name_end - name_start;
-					current_section.assign(line.substr(name_start, name_length));
-					result.sections.push_back(
-						{current_section, name_offset, name_offset + name_length});
+			std::size_t parse_start = first;
+			if (first < line.size() && line[first] == '[') {
+				const std::size_t close = line.find(']', first + 1U);
+				bool exact_header = false;
+				if (close != std::string_view::npos && close > first + 1U) {
+					std::size_t trailing = close + 1U;
+					while (trailing < line.size() &&
+					       (line[trailing] == ' ' || line[trailing] == '\t')) {
+						++trailing;
+					}
+					exact_header = trailing == line.size() || line[trailing] == ';' ||
+						       line[trailing] == '#';
+				}
+				if (!exact_header) {
+					result.uncertain = true;
+				}
+				if (exact_header) {
+					if (result.sections.size() >= Limits::kIniSections) {
+						result.error = MakeError(ErrorCode::Limit, "values");
+						return result;
+					}
+					const std::size_t name_start = line_start + first + 1U;
+					const std::size_t name_end = line_start + close;
+					IniSectionOccurrence section;
+					section.name.assign(bytes.substr(name_start, name_end - name_start));
+					section.start = name_start;
+					section.end = name_end;
+					result.sections.push_back(std::move(section));
+					section_index = result.sections.size() - 1U;
+					parse_start = close + 1U;
 				} else {
-					const std::size_t equals = line.find('=', first);
-					if (equals != std::string_view::npos) {
-						const std::size_t key_end = TrimRight(line, first, equals);
-						const std::string key(line.substr(first, key_end - first));
+					parse_start = first;
+				}
+			}
+
+			const std::size_t key_first = TrimLeft(line.substr(parse_start));
+			const std::size_t key_begin = parse_start + key_first;
+			if (key_begin < line.size() && line[key_begin] != ';' && line[key_begin] != '#') {
+				const std::size_t equals = line.find('=', key_begin);
+				if (equals != std::string_view::npos) {
+					const std::size_t key_end = equals;
+					if (key_end > key_begin) {
+						if (result.keys.size() >= Limits::kIniKeys) {
+							result.error = MakeError(ErrorCode::Limit, "values");
+							return result;
+						}
+						const std::size_t key_start_offset = line_start + key_begin;
+						const std::size_t key_end_offset = line_start + key_end;
 						const std::size_t value_start = line_start + equals + 1U;
 						const std::size_t value_end = line_start + line.size();
-						std::string pointer;
-						pointer.reserve(current_section.size() + key.size() + 2U);
-						pointer.push_back('/');
-						pointer += EscapePointerToken(current_section);
-						pointer.push_back('/');
-						pointer += EscapePointerToken(key);
-						result.keys.push_back({current_section, key, std::move(pointer),
-								       value_start, value_end, value_start, value_end});
+						IniKeyOccurrence key;
+						key.start = value_start;
+						key.end = value_end;
+						key.value_start = value_start;
+						key.value_end = value_end;
+						key.section_index = section_index;
+						key.key_start = key_start_offset;
+						key.key_end = key_end_offset;
+
+						result.keys.push_back(std::move(key));
 					}
 				}
 			}
 
-			if (newline == std::string_view::npos) {
+			if (line_end == bytes.size()) {
 				break;
 			}
-			offset = newline + 1U;
+			const char newline = bytes[line_end];
+			if (newline == '\r') {
+				if (line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\n') {
+					offset = line_end + 2U;
+				} else if (line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\r') {
+					offset = line_end + 1U;
+				} else {
+					result.uncertain = true;
+					offset = line_end + 1U;
+				}
+			} else if (line_end + 1U < bytes.size() && bytes[line_end + 1U] == '\r') {
+				offset = line_end + 2U;
+			} else {
+				offset = line_end + 1U;
+			}
 		}
 	} catch (...) {
 		result.error = MakeError(ErrorCode::Json);

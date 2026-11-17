@@ -89,6 +89,75 @@ bool ContainsNul(std::string_view value)
 	return value.find('\0') != std::string_view::npos;
 }
 
+bool StringsWithinLimit(std::string_view bytes, std::size_t limit)
+{
+	for (std::size_t index = 0U; index < bytes.size(); ++index) {
+		if (bytes[index] != '"') {
+			continue;
+		}
+		std::size_t decoded = 0U;
+		++index;
+		while (index < bytes.size()) {
+			const unsigned char character = static_cast<unsigned char>(bytes[index]);
+			if (character == '"') {
+				break;
+			}
+			std::size_t width = 1U;
+			if (character == '\\') {
+				if (index + 1U >= bytes.size()) {
+					break;
+				}
+				if (bytes[index + 1U] == 'u' && index + 6U <= bytes.size()) {
+					unsigned int code_unit = 0U;
+					for (std::size_t offset = 0U; offset < 4U; ++offset) {
+						const char digit = bytes[index + 2U + offset];
+						if (!((digit >= '0' && digit <= '9') ||
+						      (digit >= 'a' && digit <= 'f') ||
+						      (digit >= 'A' && digit <= 'F'))) {
+							code_unit = 0U;
+							break;
+						}
+						code_unit = (code_unit << 4U) |
+							    static_cast<unsigned int>(
+								    digit >= '0' && digit <= '9'
+									    ? digit - '0'
+									    : (digit >= 'a' && digit <= 'f'
+										       ? digit - 'a' + 10
+										       : digit - 'A' + 10));
+					}
+					width = code_unit <= 0x7fU ? 1U : (code_unit <= 0x7ffU ? 2U : 3U);
+					if (code_unit >= 0xd800U && code_unit <= 0xdbffU &&
+					    index + 12U <= bytes.size() && bytes[index + 6U] == '\\' &&
+					    bytes[index + 7U] == 'u') {
+						width = 4U;
+						index += 6U;
+					}
+					index += 6U;
+				} else {
+					width = 1U;
+					index += 2U;
+				}
+			} else if (character >= 0x80U) {
+				if (character >= 0xc2U && character <= 0xdfU) {
+					width = 2U;
+				} else if (character >= 0xe0U && character <= 0xefU) {
+					width = 3U;
+				} else if (character >= 0xf0U && character <= 0xf4U) {
+					width = 4U;
+				}
+				index += width;
+			} else {
+				++index;
+			}
+			if (width > limit - decoded) {
+				return false;
+			}
+			decoded += width;
+		}
+	}
+	return true;
+}
+
 class BoundedSax final : public JsonSax {
 	struct Frame {
 		enum class Kind {
@@ -299,6 +368,9 @@ JsonResult ParseJsonInternal(std::string_view bytes)
 	if (!IsValidUtf8(bytes)) {
 		return {std::nullopt, MakeError(ErrorCode::Utf8)};
 	}
+	if (!StringsWithinLimit(bytes, Limits::kStringBytes)) {
+		return {std::nullopt, MakeError(ErrorCode::Limit, "string")};
+	}
 
 	BoundedSax sax;
 	bool parsed = false;
@@ -482,13 +554,13 @@ Error ValidateTargetAudio(const Json &document, ManifestMode mode)
 	}
 	if (audio.contains("explicit")) {
 		if (mode == ManifestMode::Export || !audio.at("explicit").is_boolean()) {
-			return Schema(mode == ManifestMode::Export ? "target" : "target.audio");
+			return Schema("target.audio");
 		}
 	}
 	if (audio.contains("src")) {
 		if (mode == ManifestMode::Export || !audio.at("src").is_object() ||
 		    !IsObjectWithString(audio.at("src"), "entry")) {
-			return Schema(mode == ManifestMode::Export ? "target" : "target.audio");
+			return Schema("target.audio");
 		}
 	}
 	return {};

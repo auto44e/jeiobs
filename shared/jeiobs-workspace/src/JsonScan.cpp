@@ -12,10 +12,9 @@
 
 #include "jeiobs/workspace/Limits.hpp"
 
-#include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -74,30 +73,6 @@ bool IsValidUtf8(std::string_view bytes)
 	return true;
 }
 
-std::string EscapePointerToken(std::string_view token)
-{
-	std::string escaped;
-	escaped.reserve(token.size());
-	for (const char character : token) {
-		if (character == '~') {
-			escaped += "~0";
-		} else if (character == '/') {
-			escaped += "~1";
-		} else {
-			escaped.push_back(character);
-		}
-	}
-	return escaped;
-}
-
-std::string ChildPointer(std::string_view parent, std::string_view token)
-{
-	std::string result(parent);
-	result.push_back('/');
-	result += EscapePointerToken(token);
-	return result;
-}
-
 bool IsHex(char character)
 {
 	return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') ||
@@ -113,6 +88,20 @@ unsigned int HexValue(char character)
 		return static_cast<unsigned int>(character - 'a' + 10);
 	}
 	return static_cast<unsigned int>(character - 'A' + 10);
+}
+
+std::size_t CodePointWidth(std::uint32_t value)
+{
+	if (value <= 0x7fU) {
+		return 1U;
+	}
+	if (value <= 0x7ffU) {
+		return 2U;
+	}
+	if (value <= 0xffffU) {
+		return 3U;
+	}
+	return 4U;
 }
 
 void AppendCodePoint(std::string &output, std::uint32_t value)
@@ -152,7 +141,6 @@ class Parser final {
 	struct Frame {
 		FrameKind kind = FrameKind::Object;
 		FrameState state = FrameState::ObjectKeyOrEnd;
-		std::string pointer;
 		std::size_t value_index = kNoIndex;
 		std::size_t pending_member = kNoIndex;
 		std::size_t next_array_index = 0U;
@@ -165,7 +153,9 @@ class Parser final {
 	std::size_t value_count_ = 0U;
 	bool root_done_ = false;
 	bool expect_value_ = true;
-	std::string next_pointer_;
+	std::size_t next_parent_index_ = kNoIndex;
+	std::size_t next_member_index_ = kNoIndex;
+	std::size_t next_array_index_ = kNoIndex;
 	std::vector<Frame> stack_;
 	JsonScanResult result_;
 
@@ -193,10 +183,21 @@ class Parser final {
 		++position_;
 		content_start = position_;
 		value.clear();
-		while (position_ < bytes_.size()) {
-			if (position_ - content_start > Limits::kDocumentStringBytes) {
+		const auto append_bytes = [&](std::string_view bytes) {
+			if (bytes.size() > Limits::kDocumentStringBytes - value.size()) {
 				return Fail(MakeError(ErrorCode::Limit, "string"));
 			}
+			value.append(bytes);
+			return true;
+		};
+		const auto append_character = [&](char character) {
+			if (value.size() >= Limits::kDocumentStringBytes) {
+				return Fail(MakeError(ErrorCode::Limit, "string"));
+			}
+			value.push_back(character);
+			return true;
+		};
+		while (position_ < bytes_.size()) {
 			const unsigned char character = static_cast<unsigned char>(bytes_[position_]);
 			if (character == '"') {
 				content_end = position_;
@@ -229,7 +230,9 @@ class Parser final {
 						}
 					}
 				}
-				value.append(bytes_.substr(position_, width));
+				if (!append_bytes(bytes_.substr(position_, width))) {
+					return false;
+				}
 				position_ += width;
 			} else {
 				++position_;
@@ -241,22 +244,34 @@ class Parser final {
 				case '"':
 				case '\\':
 				case '/':
-					value.push_back(escape);
+					if (!append_character(escape)) {
+						return false;
+					}
 					break;
 				case 'b':
-					value.push_back('\b');
+					if (!append_character('\b')) {
+						return false;
+					}
 					break;
 				case 'f':
-					value.push_back('\f');
+					if (!append_character('\f')) {
+						return false;
+					}
 					break;
 				case 'n':
-					value.push_back('\n');
+					if (!append_character('\n')) {
+						return false;
+					}
 					break;
 				case 'r':
-					value.push_back('\r');
+					if (!append_character('\r')) {
+						return false;
+					}
 					break;
 				case 't':
-					value.push_back('\t');
+					if (!append_character('\t')) {
+						return false;
+					}
 					break;
 				case 'u': {
 					if (position_ + 4U > bytes_.size()) {
@@ -295,6 +310,10 @@ class Parser final {
 					if (code_point == 0U) {
 						return Fail(MakeError(ErrorCode::Nul));
 					}
+					const std::size_t width = CodePointWidth(code_point);
+					if (width > Limits::kDocumentStringBytes - value.size()) {
+						return Fail(MakeError(ErrorCode::Limit, "string"));
+					}
 					AppendCodePoint(value, code_point);
 					break;
 				}
@@ -302,23 +321,25 @@ class Parser final {
 					return Fail(MakeError(ErrorCode::Json));
 				}
 			}
-			if (value.size() > Limits::kDocumentStringBytes) {
-				return Fail(MakeError(ErrorCode::Limit, "string"));
-			}
 		}
 		return Fail(MakeError(ErrorCode::Json));
 	}
 
-	bool BeginValue(const std::string &pointer, JsonValueKind kind, std::size_t &value_index)
+	bool BeginValue(JsonValueKind kind, std::size_t &value_index)
 	{
 		++value_count_;
 		if (value_count_ > Limits::kDocumentValues) {
 			return Fail(MakeError(ErrorCode::Limit, "values"));
 		}
 		JsonValueOccurrence value;
-		value.pointer = pointer;
 		value.kind = kind;
 		value.start = position_;
+		value.parent_index = next_parent_index_;
+		value.member_index = next_member_index_;
+		value.array_index = next_array_index_;
+		next_parent_index_ = kNoIndex;
+		next_member_index_ = kNoIndex;
+		next_array_index_ = kNoIndex;
 		value_index = result_.values.size();
 		result_.values.push_back(std::move(value));
 		return true;
@@ -399,18 +420,19 @@ class Parser final {
 			}
 		}
 
-		const std::string token(bytes_.substr(start, position_ - start));
-		errno = 0;
-		char *parse_end = nullptr;
-		const double number = std::strtod(token.c_str(), &parse_end);
-		if (parse_end == nullptr || *parse_end != '\0' || !std::isfinite(number)) {
+		double number = 0.0;
+		const std::string_view token = bytes_.substr(start, position_ - start);
+		const std::from_chars_result parsed =
+			std::from_chars(token.data(), token.data() + token.size(), number, std::chars_format::general);
+		if (parsed.ec == std::errc::result_out_of_range || parsed.ptr != token.data() + token.size() ||
+		    !std::isfinite(number)) {
 			return Fail(MakeError(ErrorCode::Nonfinite));
 		}
 		end = position_;
 		return true;
 	}
 
-	bool ParsePrimitive(const std::string &pointer)
+	bool ParsePrimitive()
 	{
 		const std::size_t start = position_;
 		JsonValueKind kind = JsonValueKind::Null;
@@ -433,7 +455,7 @@ class Parser final {
 			}
 		}
 		std::size_t value_index = kNoIndex;
-		if (!BeginValue(pointer, kind, value_index)) {
+		if (!BeginValue(kind, value_index)) {
 			return false;
 		}
 		JsonValueOccurrence &value = result_.values[value_index];
@@ -449,7 +471,6 @@ class Parser final {
 		if (position_ >= bytes_.size()) {
 			return Fail(MakeError(ErrorCode::Json));
 		}
-		const std::string pointer = next_pointer_;
 		const char character = bytes_[position_];
 		if (character == '{' || character == '[') {
 			const JsonValueKind kind = character == '{' ? JsonValueKind::Object : JsonValueKind::Array;
@@ -457,13 +478,12 @@ class Parser final {
 				return Fail(MakeError(ErrorCode::Limit, "depth"));
 			}
 			std::size_t value_index = kNoIndex;
-			if (!BeginValue(pointer, kind, value_index)) {
+			if (!BeginValue(kind, value_index)) {
 				return false;
 			}
 			Frame frame;
 			frame.kind = character == '{' ? FrameKind::Object : FrameKind::Array;
 			frame.state = character == '{' ? FrameState::ObjectKeyOrEnd : FrameState::ArrayValueOrEnd;
-			frame.pointer = pointer;
 			frame.value_index = value_index;
 			stack_.push_back(std::move(frame));
 			++position_;
@@ -479,7 +499,7 @@ class Parser final {
 				return false;
 			}
 			std::size_t value_index = kNoIndex;
-			if (!BeginValue(pointer, JsonValueKind::String, value_index)) {
+			if (!BeginValue(JsonValueKind::String, value_index)) {
 				return false;
 			}
 			JsonValueOccurrence &value = result_.values[value_index];
@@ -487,12 +507,11 @@ class Parser final {
 			value.end = position_;
 			value.content_start = content_start;
 			value.content_end = content_end;
-			value.string_value = value_string;
-			result_.strings.push_back(
-				{pointer, content_start, content_end, std::move(value_string), value_index});
+			value.string_value = std::move(value_string);
+			result_.strings.push_back({{}, content_start, content_end, value.string_value, value_index});
 			return CompleteValue(value_index);
 		}
-		return ParsePrimitive(pointer);
+		return ParsePrimitive();
 	}
 
 	bool ProcessObject(Frame &frame)
@@ -524,9 +543,9 @@ class Parser final {
 			}
 			JsonMemberOccurrence member;
 			member.key = key;
-			member.pointer = ChildPointer(frame.pointer, key);
 			member.key_start = key_start;
 			member.key_end = key_end;
+			member.parent_index = frame.value_index;
 			const std::size_t member_index = result_.members.size();
 			result_.members.push_back(std::move(member));
 			frame.pending_member = member_index;
@@ -548,7 +567,9 @@ class Parser final {
 			}
 			frame.state = FrameState::ObjectCommaOrEnd;
 			result_.members[frame.pending_member].start = position_;
-			next_pointer_ = result_.members[frame.pending_member].pointer;
+			next_parent_index_ = frame.value_index;
+			next_member_index_ = frame.pending_member;
+			next_array_index_ = kNoIndex;
 			expect_value_ = true;
 			return true;
 		case FrameState::ObjectCommaOrEnd:
@@ -587,7 +608,9 @@ class Parser final {
 			}
 			frame.after_comma = false;
 			frame.state = FrameState::ArrayCommaOrEnd;
-			next_pointer_ = ChildPointer(frame.pointer, std::to_string(frame.next_array_index));
+			next_parent_index_ = frame.value_index;
+			next_member_index_ = kNoIndex;
+			next_array_index_ = frame.next_array_index;
 			++frame.next_array_index;
 			expect_value_ = true;
 			return true;
@@ -622,8 +645,7 @@ public:
 		}
 		if (bytes_.size() >= 3U && static_cast<unsigned char>(bytes_[0]) == 0xefU &&
 		    static_cast<unsigned char>(bytes_[1]) == 0xbbU && static_cast<unsigned char>(bytes_[2]) == 0xbfU) {
-			result_.error = MakeError(ErrorCode::Bom);
-			return std::move(result_);
+			position_ = 3U;
 		}
 		if (bytes_.find('\0') != std::string_view::npos) {
 			result_.error = MakeError(ErrorCode::Nul);
