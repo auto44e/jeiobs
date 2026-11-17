@@ -65,7 +65,13 @@ void TestValues()
 	JC_CHECK_EQ(int8_fraction.value->intRaw().low, 127U);
 	const auto int8_negative_fraction = Jeiobs::Control::Value::FromDoubleInCodeSpace(*int8.value, -128.5);
 	JC_CHECK(int8_negative_fraction.ok());
-	JC_CHECK_EQ(int8_negative_fraction.value->intRaw().low, 0x80U);
+	JC_CHECK_EQ(int8_negative_fraction.value->intRaw().high, std::numeric_limits<std::uint64_t>::max());
+	JC_CHECK_EQ(int8_negative_fraction.value->intRaw().low,
+		    std::numeric_limits<std::uint64_t>::max() - std::uint64_t(127U));
+	const auto int8_roundtrip = Jeiobs::Control::Value::MakeInt(int8_negative_fraction.value->widthBits(),
+								    int8_negative_fraction.value->intRaw());
+	JC_CHECK(int8_roundtrip.ok());
+	JC_CHECK(*int8_roundtrip.value == *int8_negative_fraction.value);
 
 	const auto uint7_relative =
 		uint7.value->WithRelative({Jeiobs::Control::RelativeEncoding::TwosComplement, "0.5"});
@@ -81,7 +87,8 @@ void TestValues()
 	const auto int_min =
 		Jeiobs::Control::Value::FromDoubleInCodeSpace(*int8.value, -std::numeric_limits<double>::infinity());
 	JC_CHECK(int_min.ok());
-	JC_CHECK_EQ(int_min.value->intRaw().low, 0x80U);
+	JC_CHECK_EQ(int_min.value->intRaw().high, std::numeric_limits<std::uint64_t>::max());
+	JC_CHECK_EQ(int_min.value->intRaw().low, std::numeric_limits<std::uint64_t>::max() - std::uint64_t(127U));
 	const auto nan_result =
 		Jeiobs::Control::Value::FromDoubleInCodeSpace(*uint7.value, std::numeric_limits<double>::quiet_NaN());
 	JC_CHECK(nan_result.error.code == Jeiobs::Control::ErrorCode::Value);

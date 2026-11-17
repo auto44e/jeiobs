@@ -159,7 +159,6 @@ int CheckMatch(const std::string &mapping_path, const std::string &event_path)
 		PrintError(compiled.error);
 		return 1;
 	}
-	std::string bytes;
 	auto event_bytes = ReadFile(event_path);
 	if (!event_bytes.ok()) {
 		PrintError(event_bytes.error);

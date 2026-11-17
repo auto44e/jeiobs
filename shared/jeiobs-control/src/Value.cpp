@@ -251,6 +251,17 @@ bool HasSignBit(Int128 raw, unsigned int bits) noexcept
 	return (raw.high & (std::uint64_t(1U) << (bits - 65U))) != 0U;
 }
 
+Int128 SignExtended(Int128 raw, unsigned int bits) noexcept
+{
+	const UInt128 mask = BitMask(bits);
+	UInt128 value{raw.high & mask.high, raw.low & mask.low};
+	if (HasSignBit({value.high, value.low}, bits)) {
+		value.high |= ~mask.high;
+		value.low |= ~mask.low;
+	}
+	return {value.high, value.low};
+}
+
 UInt128 IntMagnitude(Int128 raw, unsigned int bits) noexcept
 {
 	UInt128 value{raw.high, raw.low};
@@ -453,7 +464,7 @@ Result<Value> Value::MakeInt(unsigned int width_bits, Int128 raw, std::string un
 	Value value;
 	value.kind_ = ValueKind::Int;
 	value.width_bits_ = width_bits;
-	value.int_raw_ = {raw.high & BitMask(width_bits).high, raw.low & BitMask(width_bits).low};
+	value.int_raw_ = SignExtended(raw, width_bits);
 	return Finish(std::move(value), std::move(unit));
 }
 

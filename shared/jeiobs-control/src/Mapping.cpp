@@ -1161,7 +1161,6 @@ bool ValidateModel(const Mapping &mapping, Error &error)
 Error FindCycleError(const Mapping &mapping)
 {
 	const std::size_t route_count = mapping.routes.size();
-	std::vector<std::vector<std::size_t>> edges(route_count);
 
 	struct FirstSegmentIndex {
 		std::map<std::string, std::vector<std::size_t>> exact;
@@ -1192,38 +1191,73 @@ Error FindCycleError(const Mapping &mapping)
 		}
 	}
 
-	for (std::size_t source = 0U; source < route_count; ++source) {
+	struct EdgeCursor {
+		const std::vector<std::size_t> *exact = nullptr;
+		std::size_t exact_index = 0U;
+		std::size_t any_index = 0U;
+		std::size_t integer_index = 0U;
+		bool active = false;
+		bool include_integer = false;
+	};
+
+	const auto make_cursor = [&](std::size_t source) {
+		EdgeCursor cursor;
 		const Route &source_route = mapping.routes[source];
 		if (!source_route.enabled || source_route.target.kind != TargetKind::Emit ||
 		    source_route.target.emit_address.segments.empty()) {
-			continue;
+			return cursor;
 		}
+		cursor.active = true;
 		const AddressSegment &first = source_route.target.emit_address.segments.front();
-		std::vector<std::size_t> candidates;
 		const auto exact = first_segment_index.exact.find(SegmentKey(first));
 		if (exact != first_segment_index.exact.end()) {
-			candidates.insert(candidates.end(), exact->second.begin(), exact->second.end());
+			cursor.exact = &exact->second;
 		}
-		candidates.insert(candidates.end(), first_segment_index.any.begin(), first_segment_index.any.end());
-		if (first.kind == AddressSegmentKind::Int) {
-			candidates.insert(candidates.end(), first_segment_index.integer_wildcards.begin(),
-					  first_segment_index.integer_wildcards.end());
+		cursor.include_integer = first.kind == AddressSegmentKind::Int;
+		return cursor;
+	};
+
+	const auto next_edge = [&](std::size_t source, EdgeCursor &cursor, std::size_t &target) {
+		if (!cursor.active) {
+			return false;
 		}
-		for (const std::size_t target : candidates) {
-			const Route &target_route = mapping.routes[target];
-			if (!target_route.enabled ||
-			    (target_route.match.slot.has_value() &&
-			     target_route.match.slot != source_route.match.slot) ||
-			    !Matches(target_route.match.address, source_route.target.emit_address)) {
-				continue;
+		const Route &source_route = mapping.routes[source];
+		const auto accepts = [&](std::size_t candidate) {
+			const Route &target_route = mapping.routes[candidate];
+			return target_route.enabled &&
+			       (!target_route.match.slot.has_value() ||
+				target_route.match.slot == source_route.match.slot) &&
+			       Matches(target_route.match.address, source_route.target.emit_address);
+		};
+
+		while (cursor.exact != nullptr && cursor.exact_index < cursor.exact->size()) {
+			const std::size_t candidate = (*cursor.exact)[cursor.exact_index++];
+			if (accepts(candidate)) {
+				target = candidate;
+				return true;
 			}
-			edges[source].push_back(target);
 		}
-	}
+		while (cursor.any_index < first_segment_index.any.size()) {
+			const std::size_t candidate = first_segment_index.any[cursor.any_index++];
+			if (accepts(candidate)) {
+				target = candidate;
+				return true;
+			}
+		}
+		while (cursor.include_integer && cursor.integer_index < first_segment_index.integer_wildcards.size()) {
+			const std::size_t candidate = first_segment_index.integer_wildcards[cursor.integer_index++];
+			if (accepts(candidate)) {
+				target = candidate;
+				return true;
+			}
+		}
+		return false;
+	};
 
 	std::vector<int> index(route_count, -1);
 	std::vector<int> lowlink(route_count, -1);
 	std::vector<bool> on_stack(route_count, false);
+	std::vector<bool> self_edges(route_count, false);
 	std::vector<std::size_t> stack;
 	int next_index = 0;
 	std::size_t first_cycle = route_count;
@@ -1231,7 +1265,7 @@ Error FindCycleError(const Mapping &mapping)
 	// Windows stack, or any stack under AddressSanitizer).
 	struct Frame {
 		std::size_t node;
-		std::size_t next_edge;
+		EdgeCursor edges;
 	};
 	std::vector<Frame> call_stack;
 	const auto finish = [&](std::size_t node) {
@@ -1250,8 +1284,7 @@ Error FindCycleError(const Mapping &mapping)
 				break;
 			}
 		}
-		const bool self_cycle = component_size == 1U &&
-					std::find(edges[node].begin(), edges[node].end(), node) != edges[node].end();
+		const bool self_cycle = component_size == 1U && self_edges[node];
 		if (component_size > 1U || self_cycle) {
 			first_cycle = std::min(first_cycle, component_first);
 		}
@@ -1262,7 +1295,7 @@ Error FindCycleError(const Mapping &mapping)
 		++next_index;
 		stack.push_back(node);
 		on_stack[node] = true;
-		call_stack.push_back({node, 0U});
+		call_stack.push_back({node, make_cursor(node)});
 	};
 	for (std::size_t route = 0U; route < route_count; ++route) {
 		if (index[route] != -1) {
@@ -1272,8 +1305,11 @@ Error FindCycleError(const Mapping &mapping)
 		while (!call_stack.empty()) {
 			Frame &frame = call_stack.back();
 			const std::size_t node = frame.node;
-			if (frame.next_edge < edges[node].size()) {
-				const std::size_t adjacent = edges[node][frame.next_edge++];
+			std::size_t adjacent = 0U;
+			if (next_edge(node, frame.edges, adjacent)) {
+				if (adjacent == node) {
+					self_edges[node] = true;
+				}
 				if (index[adjacent] == -1) {
 					enter(adjacent); // invalidates `frame`
 				} else if (on_stack[adjacent]) {
