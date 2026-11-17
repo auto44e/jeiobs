@@ -635,7 +635,7 @@ void TestMemFsAndPlanner()
 		const auto plan_json = Jeiobs::Workspace::PlanToJson(*planned.value);
 		if (plan_json.at("entries").size() >= 3U) {
 			JW_CHECK(plan_json.at("entries")[2].at("fidelity").is_null());
-			JW_CHECK(plan_json.at("entries")[2].at("scene_uuids").is_array());
+			JW_CHECK(plan_json.at("collections")[0].at("scene_uuids").is_array());
 		}
 
 		Json parent_document = Json::parse(kLocalManifest);
