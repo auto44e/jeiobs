@@ -1,0 +1,117 @@
+{
+ "routes": [
+  {
+   "class": "source-property",
+   "enabled": true,
+   "fanout": 1,
+   "id": "sp",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "source-property|field=c\\|d|id=a\\\\b"
+  },
+  {
+   "class": "filter",
+   "enabled": true,
+   "fanout": 1,
+   "id": "fp",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "filter-property|field=g\\/h|id=e\\=f"
+  },
+  {
+   "class": "scene",
+   "enabled": true,
+   "fanout": 1,
+   "id": "sc",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "scene|id=Scene\\/1"
+  },
+  {
+   "class": "scene",
+   "enabled": true,
+   "fanout": 1,
+   "id": "si",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "scene-item|item_id=5|scene_id=S\\|1\\=2"
+  },
+  {
+   "class": "mix",
+   "enabled": true,
+   "fanout": 1,
+   "id": "mx",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "mixer|field=volume|id=Mic\\\\Aux\\/1"
+  },
+  {
+   "class": "scene",
+   "enabled": true,
+   "fanout": 1,
+   "id": "tr",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "transition|name=Fade\\/Cut"
+  },
+  {
+   "class": "profile",
+   "enabled": true,
+   "fanout": 1,
+   "id": "pr",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "profile|name=A\\=B"
+  },
+  {
+   "class": "plugin-param",
+   "enabled": true,
+   "fanout": 1,
+   "id": "pp",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "plugin-param|instance=vst\\/1|param=p\\|q"
+  },
+  {
+   "class": "plugin-param",
+   "enabled": true,
+   "fanout": 1,
+   "id": "pe",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "plugin-event|instance=x\\\\\\\\y"
+  },
+  {
+   "class": "mix",
+   "enabled": true,
+   "fanout": 1,
+   "id": "gr",
+   "merge": {
+    "policy": "last-writer",
+    "priority": 0
+   },
+   "target_key": "graph|node=bus\\=1|port=\\\\\\|\\=\\/"
+  }
+ ],
+ "slots": [
+  "main_surface"
+ ]
+}

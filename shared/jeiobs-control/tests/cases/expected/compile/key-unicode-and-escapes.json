@@ -9,7 +9,7 @@
     "policy": "last-writer",
     "priority": 0
    },
-   "target_key": "source-property|field=x\ud83d\ude00|id=Mic \u00e9 \"1\" \\ /"
+   "target_key": "source-property|field=x\ud83d\ude00|id=Mic \u00e9 \"1\" \\\\ \\/"
   }
  ],
  "slots": [

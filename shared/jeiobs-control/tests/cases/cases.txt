@@ -1,6 +1,8 @@
 # Black-box cases for jc-check (jeiobs-control, K1-PR1), run by run-cases.cmake. Expected values come
-# from docs/jeiobs/tasks/006-control-protocols.md (K1 design, A1-A18) and the K1-PR1 contract
-# (mapping schema v1, validation errors, compile checks 1-5, the jc-check CLI), not from the code.
+# from docs/jeiobs/tasks/006-control-protocols.md (K1 design, A1-A18) and the K1-PR1 contract with
+# its addenda r1 and r2 (mapping schema v1, validation errors, compile checks 1-5, the jc-check CLI),
+# not from the code. One command is not in the contract's CLI: value fromdouble (contract r2 item 1,
+# see the value helpers).
 #
 # One case per line:   NAME | EXIT | EXPECTED | ARGS
 #   NAME      letters, digits, ".", "_", "-". A name ending in "@posix" is skipped on Windows.
@@ -37,6 +39,8 @@ usage-value-unknown-op | 2 | * | value frobnicate {"type":"trigger"}
 usage-value-roundtrip-without-json | 2 | * | value roundtrip
 usage-value-double-without-json | 2 | * | value double
 usage-value-limits-without-json | 2 | * | value limits
+usage-value-fromdouble-without-json | 2 | * | value fromdouble
+usage-value-fromdouble-without-double | 2 | * | value fromdouble {"type":"uint","bits":7,"value":"0"}
 
 # ---- files and paths
 # /dev/null is not a regular file (E_IO in jeiobs-workspace) or reads as empty (E_JSON).
@@ -119,6 +123,33 @@ parse-syntax-leading-zero | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/sy
 parse-top-level-array | 1 | ~^ERR E_(JSON|SCHEMA)( .+)?$ | validate fixtures/parse/top-level-array.json
 parse-top-level-string | 1 | ~^ERR E_(JSON|SCHEMA)( .+)?$ | validate fixtures/parse/top-level-string.json
 
+# ---- one strict parser for every entry point (contract r2 item 2): compile and match reject what
+# validate rejects, with the same code (the event here is valid). The faults are those a lax
+# parser let through (missing requires or enabled, empty addresses, non-ASCII requires) and
+# byte-level ones.
+strict-compile-requires-missing | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | compile fixtures/schema/slot-requires-missing.json
+strict-compile-enabled-missing | 1 | ~^ERR E_SCHEMA (enabled|routes?)$ | compile fixtures/schema/route-enabled-missing.json
+strict-compile-address-empty | 1 | ERR E_SCHEMA address | compile fixtures/schema/seg-address-empty.json
+strict-compile-emit-address-empty | 1 | ~^ERR E_SCHEMA (target|address)$ | compile fixtures/schema/target-emit-empty.json
+strict-compile-requires-non-ascii | 1 | ERR E_SCHEMA requires | compile fixtures/schema/slot-requires-non-ascii.json
+strict-compile-dupkey | 1 | ~^ERR E_DUPKEY( .+)?$ | compile fixtures/parse/dupkey-route.json
+strict-compile-utf8 | 1 | ~^ERR E_UTF8( .+)?$ | compile ${WORK}/utf8-ff.json
+strict-compile-nul | 1 | ~^ERR E_NUL( .+)?$ | compile ${WORK}/nul-in-string.json
+strict-compile-nonfinite | 1 | ~^ERR E_NONFINITE( .+)?$ | compile fixtures/parse/nonfinite.json
+strict-compile-depth-33 | 1 | ~^ERR E_LIMIT .*depth.*$ | compile ${WORK}/depth-33.json
+strict-match-requires-missing | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | match fixtures/schema/slot-requires-missing.json fixtures/match/events/main-mcu0.json
+strict-match-enabled-missing | 1 | ~^ERR E_SCHEMA (enabled|routes?)$ | match fixtures/schema/route-enabled-missing.json fixtures/match/events/main-mcu0.json
+strict-match-address-empty | 1 | ERR E_SCHEMA address | match fixtures/schema/seg-address-empty.json fixtures/match/events/main-mcu0.json
+strict-match-emit-address-empty | 1 | ~^ERR E_SCHEMA (target|address)$ | match fixtures/schema/target-emit-empty.json fixtures/match/events/main-mcu0.json
+strict-match-requires-non-ascii | 1 | ERR E_SCHEMA requires | match fixtures/schema/slot-requires-non-ascii.json fixtures/match/events/main-mcu0.json
+strict-match-dupkey | 1 | ~^ERR E_DUPKEY( .+)?$ | match fixtures/parse/dupkey-route.json fixtures/match/events/main-mcu0.json
+strict-match-utf8 | 1 | ~^ERR E_UTF8( .+)?$ | match ${WORK}/utf8-ff.json fixtures/match/events/main-mcu0.json
+strict-match-nul | 1 | ~^ERR E_NUL( .+)?$ | match ${WORK}/nul-in-string.json fixtures/match/events/main-mcu0.json
+strict-match-nonfinite | 1 | ~^ERR E_NONFINITE( .+)?$ | match fixtures/parse/nonfinite.json fixtures/match/events/main-mcu0.json
+strict-match-depth-33 | 1 | ~^ERR E_LIMIT .*depth.*$ | match ${WORK}/depth-33.json fixtures/match/events/main-mcu0.json
+strict-match-bom | 1 | ~^ERR E_BOM( .+)?$ | match ${WORK}/bom.json fixtures/match/events/main-mcu0.json
+strict-match-size-4mib-plus-one | 1 | ~^ERR E_LIMIT( .+)?$ | match ${WORK}/size-4194305.json fixtures/match/events/main-mcu0.json
+
 # ---- limits of the mapping file (contract: <= 4 MiB, depth <= 32, slots <= 256,
 # routes <= 10,000, transforms <= 16 per route, address <= 16 segments, a symbol or text
 # segment <= 256 bytes). Depth counts as in jeiobs-workspace: the top-level object is depth 1.
@@ -158,6 +189,24 @@ perf-fanout-10000-compile | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fa
 perf-fanout-10000-match | 0 | {"matches":["f5000"]} | match ${WORK}/perf-fanout-10000.json fixtures/match/events/perf-f5000.json
 perf-chain-10000-compile | 0 | ~^{"routes":.{"class":"[a-z-]+","enabled":true,"fanout":1,"id":"c1",.*$ | compile ${WORK}/perf-chain-10000.json
 perf-cycle-10000 | 1 | ERR E_CYCLE c1 | compile ${WORK}/perf-cycle-10000.json
+# Contract r2 item 5: an unknown member holding one object of 499,201 members (about 4 MB) parses
+# in near-linear time, and a copy of its first key at its very end is still a duplicate. So do
+# 499,200 unknown members of the mapping object itself. A parser inserting members by a linear
+# scan takes minutes and fails on the case timeout.
+perf-wide-object-validate | 0 | OK | validate ${WORK}/wide-object.json
+perf-wide-object-compile | 0 | =expected/compile/minimal.json | compile ${WORK}/wide-object.json
+perf-wide-object-match | 0 | {"matches":["r1"]} | match ${WORK}/wide-object.json fixtures/match/events/main-mcu0.json
+perf-wide-object-dupkey | 1 | ~^ERR E_DUPKEY( .+)?$ | validate ${WORK}/wide-object-dupkey.json
+perf-wide-top-level-validate | 0 | OK | validate ${WORK}/wide-top-level.json
+# Contract r2 item 8: 10,000 routes on one target with distinct priorities (a check comparing
+# every pair of the group is quadratic), then with the last priority equal to the first, and
+# 5,000 emit routes into one address that 5,000 other routes match (edges to routes without an
+# emit target cannot be on a cycle: keeping them stores 25 million), then with the last of those
+# emitting back into x1. These are guards for the case timeout, not timing tests.
+perf-merge-10000-one-target | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"p1","merge":{"policy":"priority","priority":1},"target_key":"scene[|]id=s"},.*,{"class":"scene","enabled":true,"fanout":1,"id":"p10000","merge":{"policy":"priority","priority":10000},"target_key":"scene[|]id=s"}.,"slots":..}$ | compile ${WORK}/perf-merge-10000.json
+perf-merge-10000-one-target-clash | 1 | ERR E_AMBIGUOUS_MERGE p1 | compile ${WORK}/perf-merge-10000-clash.json
+perf-edges-5000x5000 | 0 | ~^{"routes":.{"class":"[a-z-]+","enabled":true,"fanout":1,"id":"x1",.*,{"class":"scene","enabled":true,"fanout":1,"id":"y5000",.*$ | compile ${WORK}/perf-edges-5000x5000.json
+perf-edges-5000x5000-cycle | 1 | ERR E_CYCLE x1 | compile ${WORK}/perf-edges-5000x5000-cycle.json
 
 # ---- schema: format, major, minor, slots, routes
 # A major that is not an integer is E_MAJOR or E_SCHEMA major. A major of 2 is E_MAJOR
@@ -202,6 +251,29 @@ schema-slot-not-object | 1 | ~^ERR E_SCHEMA (slots?)$ | validate fixtures/schema
 schema-slot-requires-string | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-string.json
 schema-slot-requires-number-item | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-number-item.json
 schema-slot-requires-missing | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-missing.json
+# requires holds 0..64 strings matching [a-z0-9_.]{1,64} (contract r1 item 3) and is ASCII only:
+# a non-ASCII requirement is E_SCHEMA requires (r2 item 7), raw or escaped, and also when its
+# Unicode case fold or compatibility form would be ASCII (KELVIN SIGN, fullwidth letters).
+schema-slot-requires-non-ascii | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-non-ascii.json
+schema-slot-requires-non-ascii-escaped | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-non-ascii-escaped.json
+schema-slot-requires-kelvin-sign | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-kelvin-sign.json
+schema-slot-requires-fullwidth | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-fullwidth.json
+schema-slot-requires-emoji | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-emoji.json
+schema-slot-requires-nbsp | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-nbsp.json
+schema-slot-requires-non-ascii-second-item | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-non-ascii-second-item.json
+schema-slot-requires-non-ascii-second-slot | 1 | ERR E_SCHEMA requires | validate fixtures/schema/slot-requires-non-ascii-second-slot.json
+schema-slot-requires-uppercase | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-uppercase.json
+schema-slot-requires-hyphen | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-hyphen.json
+schema-slot-requires-space | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-space.json
+schema-slot-requires-slash | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-slash.json
+schema-slot-requires-empty-string | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-empty-string.json
+schema-slot-requires-65-chars | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-65-chars.json
+schema-slot-requires-65-items | 1 | ~^ERR E_(SCHEMA (requires|slots?)|LIMIT requires)$ | validate fixtures/schema/slot-requires-65-items.json
+schema-slot-requires-null-item | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-null-item.json
+schema-slot-requires-nested-array | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-nested-array.json
+valid-requires-charset | 0 | OK | validate fixtures/valid/requires-charset.json
+valid-requires-64-chars | 0 | OK | validate fixtures/valid/requires-64-chars.json
+valid-requires-64-items | 0 | OK | validate fixtures/valid/requires-64-items.json
 schema-slot-duplicate | 1 | ERR E_DUP main_surface | validate fixtures/schema/slot-duplicate.json
 
 # ---- schema: routes (ids as for slots, enabled is a boolean, match.slot is null or a slot id)
@@ -557,9 +629,10 @@ merge-bad-priority-string | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | valida
 merge-bad-priority-true | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-priority-true.json
 
 # ---- compile check 1, E_DENIED: a source-property or filter-property field equal, ASCII
-# case-insensitively, to one of the twelve denied names. Nothing else is denied in PR1:
-# not other kinds, not ids, not near names, not Unicode case folds (U+212A KELVIN SIGN,
-# U+017F LONG S). Disabled routes are checked.
+# case-insensitively, to one of the sixteen denied names: the contract's twelve and, from
+# contract r2 item 4, the WORKSPACE_FORMAT section 8 source fields url, input, ffmpeg_options and
+# playlist. Nothing else is denied in PR1: not other kinds, not ids, not near names, not Unicode
+# case folds (U+212A KELVIN SIGN, U+017F LONG S, fullwidth letters). Disabled routes are checked.
 denied-sp-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-key.json
 denied-sp-stream-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-stream-key.json
 denied-sp-bearer-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-bearer-token.json
@@ -572,6 +645,10 @@ denied-sp-auth | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-auth.j
 denied-sp-passphrase | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-passphrase.json
 denied-sp-secret | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-secret.json
 denied-sp-streamid | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-streamid.json
+denied-sp-url | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-url.json
+denied-sp-input | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-input.json
+denied-sp-ffmpeg-options | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-ffmpeg-options.json
+denied-sp-playlist | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-playlist.json
 denied-fp-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-key.json
 denied-fp-stream-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-stream-key.json
 denied-fp-bearer-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-bearer-token.json
@@ -584,6 +661,10 @@ denied-fp-auth | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-auth.j
 denied-fp-passphrase | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-passphrase.json
 denied-fp-secret | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-secret.json
 denied-fp-streamid | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-streamid.json
+denied-fp-url | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-url.json
+denied-fp-input | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-input.json
+denied-fp-ffmpeg-options | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-ffmpeg-options.json
+denied-fp-playlist | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-playlist.json
 denied-case-sp-KEY | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-KEY.json
 denied-case-sp-Stream-Key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-Stream-Key.json
 denied-case-fp-PassWord | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-PassWord.json
@@ -591,8 +672,15 @@ denied-case-sp-STREAMID | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-
 denied-case-fp-Refresh-Token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-Refresh-Token.json
 denied-case-sp-sEcReT | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-sEcReT.json
 denied-case-fp-AUTH | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-AUTH.json
+denied-case-sp-URL | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-URL.json
+denied-case-fp-Url | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-Url.json
+denied-case-sp-INPUT | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-INPUT.json
+denied-case-fp-FFmpeg_Options | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-FFmpeg_Options.json
+denied-case-sp-PlayList | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-PlayList.json
 denied-validate-is-ok | 0 | OK | validate fixtures/compile/denied-sp-stream-key.json
 denied-match-fails | 1 | ERR E_DENIED r1 | match fixtures/compile/denied-sp-stream-key.json fixtures/match/events/main-mcu0.json
+denied-url-validate-is-ok | 0 | OK | validate fixtures/compile/denied-sp-url.json
+denied-url-match-fails | 1 | ERR E_DENIED r1 | match fixtures/compile/denied-sp-url.json fixtures/match/events/main-mcu0.json
 allowed-field-keys | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-keys.json
 allowed-field-key-frame | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-key-frame.json
 allowed-field-stream-key-hyphen | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-stream-key-hyphen.json
@@ -602,7 +690,14 @@ allowed-field-passwords | 0 | ~^{"routes":.{"class":"source-property",.*$ | comp
 allowed-field-pass | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-pass.json
 allowed-field-user | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-user.json
 allowed-field-server-url | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-server-url.json
-allowed-field-url | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-url.json
+allowed-field-urls | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-urls.json
+allowed-field-url-trailing-space | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-url-trailing-space.json
+allowed-field-fullwidth-url | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-fullwidth-url.json
+allowed-field-input-format | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-input-format.json
+allowed-field-ffmpeg-option | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-ffmpeg-option.json
+allowed-field-ffmpeg-options-hyphen | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-ffmpeg-options-hyphen.json
+allowed-field-playlists | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-playlists.json
+allowed-field-local-file | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-local-file.json
 allowed-field-tokens | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-tokens.json
 allowed-field-secret-underscore | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-secret-underscore.json
 allowed-field-leading-space | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-leading-space.json
@@ -620,12 +715,19 @@ allowed-source-id-password | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile f
 allowed-filter-id-secret | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-filter-id-secret.json
 allowed-transition-secret | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-transition-secret.json
 allowed-graph-port-auth | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-graph-port-auth.json
+allowed-plugin-param-url | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-plugin-param-url.json
+allowed-graph-port-input | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-graph-port-input.json
+allowed-scene-id-playlist | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-scene-id-playlist.json
+allowed-source-id-url | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-source-id-url.json
 denied-disabled-route | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-disabled.json
+denied-disabled-playlist | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-disabled-playlist.json
 denied-first-in-document-order | 1 | ERR E_DENIED zz | compile fixtures/compile/denied-first-in-document-order.json
+denied-url-after-allowed-field | 1 | ERR E_DENIED browser_url | compile fixtures/compile/denied-after-allowed.json
 
 # ---- compile check 2, E_WILDCARD_PRIVILEGED: an any, r or in segment on a route whose
-# class is output-control (output kind, hotkey with effect output or unknown), profile
-# or meta. Any r or in counts, even of size 1. Other classes take wildcards, privileged
+# class is output-control (output kind, and every hotkey: contract r2 item 3 makes a hotkey
+# output-control whatever its declared effect, which stays a validated hint), profile or
+# meta. Any r or in counts, even of size 1. Other classes take wildcards, privileged
 # targets take concrete addresses. Disabled routes are checked. No PR1 target kind is
 # meta for certain (emit is not classed by A15), so meta is not tested on its own.
 wild-any-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-output.json
@@ -640,31 +742,35 @@ wild-in-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wil
 wild-in-profile | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-profile.json
 wild-in-hotkey-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-output.json
 wild-in-hotkey-unknown | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-unknown.json
+wild-any-hotkey-none | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-hotkey-none.json
+wild-any-hotkey-scene | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-hotkey-scene.json
+wild-any-hotkey-mixer | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-hotkey-mixer.json
+wild-r-hotkey-none | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-hotkey-none.json
+wild-r-hotkey-scene | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-hotkey-scene.json
+wild-r-hotkey-mixer | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-hotkey-mixer.json
+wild-in-hotkey-none | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-none.json
+wild-in-hotkey-scene | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-scene.json
+wild-in-hotkey-mixer | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-mixer.json
+wild-any-hotkey-start-streaming-as-scene | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-hotkey-start-streaming-as-scene.json
+wild-hotkey-concrete-then-wildcard | 1 | ERR E_WILDCARD_PRIVILEGED start_scene | compile fixtures/compile/wild-hotkey-concrete-then-wildcard.json
+wild-disabled-hotkey-none | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-disabled-hotkey-none.json
 wild-r-size-1-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-size-1-output.json
 wild-in-size-1-profile | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-size-1-profile.json
 wild-last-of-16-hotkey-unknown | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-last-of-16-hotkey-unknown.json
 wild-disabled-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-disabled-output.json
 wild-validate-is-ok | 0 | OK | validate fixtures/compile/wild-any-output.json
+wild-hotkey-validate-is-ok | 0 | OK | validate fixtures/compile/wild-any-hotkey-scene.json
 wild-first-in-document-order | 1 | ERR E_WILDCARD_PRIVILEGED zz | compile fixtures/compile/wild-first-in-document-order.json
-wild-ok-any-hotkey-none | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-hotkey-none.json
-wild-ok-any-hotkey-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-hotkey-scene.json
-wild-ok-any-hotkey-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-hotkey-mixer.json
 wild-ok-any-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-mixer.json
 wild-ok-any-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-scene.json
 wild-ok-any-source-property | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-source-property.json
 wild-ok-any-plugin-param | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-plugin-param.json
 wild-ok-any-egress-remote-net | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-egress-remote-net.json
-wild-ok-r-hotkey-none | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-hotkey-none.json
-wild-ok-r-hotkey-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-hotkey-scene.json
-wild-ok-r-hotkey-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-hotkey-mixer.json
 wild-ok-r-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-mixer.json
 wild-ok-r-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-scene.json
 wild-ok-r-source-property | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-source-property.json
 wild-ok-r-plugin-param | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-plugin-param.json
 wild-ok-r-egress-remote-net | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-egress-remote-net.json
-wild-ok-in-hotkey-none | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-hotkey-none.json
-wild-ok-in-hotkey-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-hotkey-scene.json
-wild-ok-in-hotkey-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-hotkey-mixer.json
 wild-ok-in-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-mixer.json
 wild-ok-in-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-scene.json
 wild-ok-in-source-property | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-source-property.json
@@ -745,6 +851,20 @@ merge-egress-same-endpoint | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/c
 merge-hotkey-same | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-hotkey-same.json
 merge-plugin-param-same | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-plugin-param-same.json
 merge-extra-member-not-identity | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-extra-member-same-key.json
+# Contract r2 item 6: the key escapes the separators of emit addresses too, so distinct emit
+# addresses never share a key (a text holding a separator against more segments, a raw backslash
+# before a separator, segment kinds of equal content, a prefix), while equal targets still do.
+merge-ok-emit-slash-vs-two-segments | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-slash-vs-two-segments.json
+merge-ok-emit-slash-vs-int-segment | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-slash-vs-int-segment.json
+merge-ok-emit-backslash-vs-escaped-slash | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-backslash-vs-escaped-slash.json
+merge-ok-emit-colon-vs-two-segments | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-colon-vs-two-segments.json
+merge-ok-emit-symbol-vs-text | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-symbol-vs-text.json
+merge-ok-emit-int-vs-symbol | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-int-vs-symbol.json
+merge-ok-emit-int-vs-text | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-int-vs-text.json
+merge-ok-emit-prefix | 0 | ~^{.+}$ | compile fixtures/compile/merge-emit-prefix.json
+merge-emit-same-text-with-slash | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-emit-same-text-with-slash.json
+merge-emit-same-text-with-backslash | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-emit-same-text-with-backslash.json
+merge-source-same-id-with-slash | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-source-same-id-with-slash.json
 
 # ---- compile check 5, E_CYCLE: route A -> route B when A's target is emit E and B's
 # pattern matches E (equal length, per-segment Matches, B.slot null or equal to A.slot).
@@ -782,7 +902,9 @@ cycle-ok-wild-any-near-miss-length | 0,1 | ~^({.+}|ERR E_WILDCARD_PRIVILEGED w)$
 # or last-writer/0 when none) and fanout, then the slot ids (in document order, which is
 # also sorted order here). Readings: mixer's target_key includes field (the merge key
 # does), item_id prints as an integer. Whether hotkey effect, output action and egress trust are
-# identity fields is not settled: each has both expected files.
+# identity fields is not settled: each has both expected files. A value carries a backslash
+# before each backslash, |, = and / (contract r1 item 5, r2 item 6). Every hotkey is classed
+# output-control (r2 item 3).
 compile-minimal | 0 | =expected/compile/minimal.json | compile fixtures/valid/minimal.json
 compile-empty | 0 | {"routes":[],"slots":[]} | compile fixtures/valid/empty.json
 compile-target-keys | 0 | =expected/compile/keys.json | compile fixtures/compile/keys.json
@@ -793,6 +915,7 @@ compile-target-key-output | 0 | =expected/compile/key-output.json,expected/compi
 compile-target-key-egress | 0 | =expected/compile/key-egress.json,expected/compile/key-egress-with-trust.json | compile fixtures/compile/key-egress.json
 compile-target-key-ignores-extra-member | 0 | =expected/compile/key-extra-member.json | compile fixtures/compile/key-extra-member.json
 compile-target-key-unicode-and-escapes | 0 | @expected/compile/key-unicode-and-escapes.json | compile fixtures/compile/key-unicode-and-escapes.json
+compile-target-key-escapes-every-kind | 0 | @expected/compile/key-escapes.json | compile fixtures/compile/key-escapes.json
 compile-order-merge-fanout-disabled | 0 | =expected/compile/order-and-merge.json | compile fixtures/compile/order-and-merge.json
 compile-class-source-property | 0 | ~^{"routes":.{"class":"source-property","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-source-property.json
 compile-class-filter-property | 0 | ~^{"routes":.{"class":"filter","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-filter-property.json
@@ -800,9 +923,9 @@ compile-class-scene | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":
 compile-class-scene-item | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-scene-item.json
 compile-class-mixer-balance | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-mixer-balance.json
 compile-class-transition | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-transition.json
-compile-class-hotkey-none | 0 | ~^{"routes":.{"class":"hotkey","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-none.json
-compile-class-hotkey-scene | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-scene.json
-compile-class-hotkey-mixer | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-mixer.json
+compile-class-hotkey-none | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-none.json
+compile-class-hotkey-scene | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-scene.json
+compile-class-hotkey-mixer | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-mixer.json
 compile-class-hotkey-output | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-output.json
 compile-class-hotkey-unknown | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-unknown.json
 compile-class-output-stream-start | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-output-stream-start.json
@@ -817,7 +940,10 @@ compile-class-emit-any-name | 0 | ~^{"routes":.{"class":"[a-z-]+","enabled":true
 # ---- match: enabled routes whose slot is null or equal to the event slot and whose pattern
 # matches the event address, in document order. Equal length, symbol, int and text
 # segments compare equal bytes and never match each other, any matches one segment, r and
-# in match int segments only. A bad event is ERR E_SCHEMA event.
+# in match int segments only. A bad event is ERR E_SCHEMA event. The event file goes through
+# the mapping file's strict parser (contract r1 item 6, r2 item 2) and gets its codes and
+# limits: depth 32 parses (its array slot is then a bad event), depth 33 does not, 4 MiB
+# parses, 4 MiB + 1 does not.
 match-main-mcu0 | 0 | {"matches":["m_null","m_main","m_any","m_range","m_set"]} | match fixtures/match/basic.json fixtures/match/events/main-mcu0.json
 match-null-mcu0 | 0 | {"matches":["m_null","m_any","m_range","m_set"]} | match fixtures/match/basic.json fixtures/match/events/null-mcu0.json
 match-pad-mcu0 | 0 | {"matches":["m_null","m_pad","m_any","m_range","m_set"]} | match fixtures/match/basic.json fixtures/match/events/pad-mcu0.json
@@ -864,16 +990,29 @@ match-bad-event-17-segments | 1 | ERR E_SCHEMA event | match fixtures/match/basi
 match-bad-event-symbol-257 | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-symbol-257.json
 match-bad-event-array | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-array.json
 match-bad-event-syntax | 1 | ~^ERR E_(JSON( .+)?|SCHEMA event)$ | match fixtures/match/basic.json fixtures/match/events/bad-syntax.json
-match-bad-event-duplicate-key | 1 | ~^ERR E_(DUPKEY( .+)?|SCHEMA event)$ | match fixtures/match/basic.json fixtures/match/events/bad-duplicate-key.json
-match-bad-event-bom | 1 | ~^ERR E_(BOM( .+)?|SCHEMA event)$ | match fixtures/match/basic.json ${WORK}/bom-event.json
+match-bad-event-duplicate-key | 1 | ~^ERR E_DUPKEY( .+)?$ | match fixtures/match/basic.json fixtures/match/events/bad-duplicate-key.json
+match-bad-event-bom | 1 | ~^ERR E_BOM( .+)?$ | match fixtures/match/basic.json ${WORK}/bom-event.json
+match-bad-event-duplicate-key-in-segment | 1 | ~^ERR E_DUPKEY( .+)?$ | match fixtures/match/basic.json fixtures/match/events/bad-duplicate-key-in-segment.json
+match-bad-event-utf8 | 1 | ~^ERR E_UTF8( .+)?$ | match fixtures/match/basic.json ${WORK}/event-utf8.json
+match-bad-event-nul-raw | 1 | ~^ERR E_NUL( .+)?$ | match fixtures/match/basic.json ${WORK}/event-nul.json
+match-bad-event-nul-escape | 1 | ~^ERR E_NUL( .+)?$ | match fixtures/match/basic.json fixtures/match/events/bad-nul-escape.json
+match-bad-event-nonfinite | 1 | ~^ERR E_NONFINITE( .+)?$ | match fixtures/match/basic.json fixtures/match/events/bad-nonfinite.json
+match-bad-event-lone-surrogate | 1 | ~^ERR E_(JSON|UTF8)( .+)?$ | match fixtures/match/basic.json fixtures/match/events/bad-lone-surrogate.json
+match-bad-event-depth-32-parses | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json ${WORK}/event-depth-32.json
+match-bad-event-depth-33 | 1 | ~^ERR E_LIMIT .*depth.*$ | match fixtures/match/basic.json ${WORK}/event-depth-33.json
+match-bad-event-depth-100000 | 1 | ~^ERR E_LIMIT .*depth.*$ | match fixtures/match/basic.json ${WORK}/event-depth-100000.json
+match-event-size-4mib | 0 | {"matches":["m_null","m_any","m_range","m_set"]} | match fixtures/match/basic.json ${WORK}/event-size-4194304.json
+match-bad-event-size-4mib-plus-one | 1 | ~^ERR E_LIMIT( .+)?$ | match fixtures/match/basic.json ${WORK}/event-size-4194305.json
 
 # ---- value helpers. roundtrip is FromDoubleInCodeSpace(v, v.AsDouble()) == v, the double view
 # being the code itself (code space), rounded to nearest, ties to even, and clamped to the
 # width: exact for every code up to 2^53, and at the very top of 64 and 128 bits through
 # the clamp. double prints that view with %.17g. limits checks text <= 4,096 bytes, tuple
 # <= 256 elements and nesting <= 4 (a tuple holding scalars is depth 1), and that a uint or
-# int value fits its bits. The blob limit (65,536 bytes) needs a 128 KiB argument, more
-# than a Windows command line or one Linux argument can hold: not tested here.
+# int value fits its bits (else E_LIMIT value wherever it is nested: contract r1 item 8, r2
+# item 1, which also has every constructor reject such a value instead of masking it, so
+# double and roundtrip refuse it too). The blob limit (65,536 bytes) needs a 128 KiB
+# argument, more than a Windows command line or one Linux argument can hold: not tested here.
 # NaN and infinity round trips are not specified: OK or ERR E_VALUE. NaN prints as nan with
 # an optional sign and platform suffix.
 value-roundtrip-u1-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":1,"value":"0"}
@@ -1025,17 +1164,17 @@ value-limits-ok-tuple-256 | 0 | OK | value limits ${V_TUPLE_256}
 value-limits-ok-tuple-depth-4 | 0 | OK | value limits ${V_TUPLE_DEPTH_4}
 value-limits-ok-tuple-depth-4-wide | 0 | OK | value limits ${V_TUPLE_DEPTH_4_WIDE}
 value-limits-ok-tuple-mixed | 0 | OK | value limits {"type":"tuple","values":[{"type":"trigger"},{"type":"bool","value":true},{"type":"uint","bits":14,"value":"16383"},{"type":"int","bits":32,"value":"-1"},{"type":"float","format":"ieee32","bits_hex":"3f800000"},{"type":"text","value":"/x"},{"type":"blob","hex":"f0"}]}
-value-limits-bad-u1-2 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":1,"value":"2"}
-value-limits-bad-u7-128 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":7,"value":"128"}
-value-limits-bad-u14-16384 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":14,"value":"16384"}
-value-limits-bad-u32-2pow32 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":32,"value":"4294967296"}
-value-limits-bad-u64-2pow64 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":64,"value":"18446744073709551616"}
-value-limits-bad-u128-2pow128 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":128,"value":"340282366920938463463374607431768211456"}
-value-limits-bad-i1-1 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":1,"value":"1"}
-value-limits-bad-i7-minus-65 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":7,"value":"-65"}
-value-limits-bad-i7-64 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":7,"value":"64"}
-value-limits-bad-i128-min-minus-1 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":128,"value":"-170141183460469231731687303715884105729"}
-value-limits-bad-i128-max-plus-1 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":128,"value":"170141183460469231731687303715884105728"}
+value-limits-bad-u1-2 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":1,"value":"2"}
+value-limits-bad-u7-128 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":7,"value":"128"}
+value-limits-bad-u14-16384 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":14,"value":"16384"}
+value-limits-bad-u32-2pow32 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":32,"value":"4294967296"}
+value-limits-bad-u64-2pow64 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":64,"value":"18446744073709551616"}
+value-limits-bad-u128-2pow128 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":128,"value":"340282366920938463463374607431768211456"}
+value-limits-bad-i1-1 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":1,"value":"1"}
+value-limits-bad-i7-minus-65 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":7,"value":"-65"}
+value-limits-bad-i7-64 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":7,"value":"64"}
+value-limits-bad-i128-min-minus-1 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":128,"value":"-170141183460469231731687303715884105729"}
+value-limits-bad-i128-max-plus-1 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":128,"value":"170141183460469231731687303715884105728"}
 value-limits-bad-text-4097 | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_4097}
 value-limits-bad-text-4098-bytes-2-byte-chars | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_E9_2049}
 value-limits-bad-text-4100-bytes-4-byte-chars | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_EMOJI_1025}
@@ -1043,7 +1182,124 @@ value-limits-bad-text-4097-escaped-ascii | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | valu
 value-limits-bad-tuple-257 | 1 | ~^ERR E_LIMIT .*[Tt]uple.*$ | value limits ${V_TUPLE_257}
 value-limits-bad-tuple-depth-5 | 1 | ~^ERR E_LIMIT .*([Tt]uple|depth|nest).*$ | value limits ${V_TUPLE_DEPTH_5}
 value-limits-bad-tuple-holding-text-4097 | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TUPLE_TEXT_4097}
-value-limits-bad-tuple-holding-u7-128 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"tuple","values":[{"type":"trigger"},{"type":"uint","bits":7,"value":"128"}]}
+value-limits-bad-tuple-holding-u7-128 | 1 | ERR E_LIMIT value | value limits {"type":"tuple","values":[{"type":"trigger"},{"type":"uint","bits":7,"value":"128"}]}
 value-limits-bad-uint-bits-0 | 1 | ~^ERR E_(LIMIT|VALUE|SCHEMA)( .+)?$ | value limits {"type":"uint","bits":0,"value":"0"}
 value-limits-bad-uint-bits-129 | 1 | ~^ERR E_(LIMIT|VALUE|SCHEMA)( .+)?$ | value limits {"type":"uint","bits":129,"value":"0"}
 value-limits-bad-int-bits-0 | 1 | ~^ERR E_(LIMIT|VALUE|SCHEMA)( .+)?$ | value limits {"type":"int","bits":0,"value":"0"}
+value-limits-bad-i8-300 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":8,"value":"300"}
+value-limits-bad-i7-128 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":7,"value":"128"}
+value-limits-bad-i8-minus-129 | 1 | ERR E_LIMIT value | value limits {"type":"int","bits":8,"value":"-129"}
+value-limits-bad-u7-256 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":7,"value":"256"}
+value-limits-bad-u7-minus-1 | 1 | ERR E_LIMIT value | value limits {"type":"uint","bits":7,"value":"-1"}
+value-limits-bad-tuple-holding-u7-minus-1 | 1 | ERR E_LIMIT value | value limits {"type":"tuple","values":[{"type":"trigger"},{"type":"uint","bits":7,"value":"-1"}]}
+value-limits-bad-tuple-holding-i8-300 | 1 | ERR E_LIMIT value | value limits {"type":"tuple","values":[{"type":"tuple","values":[{"type":"int","bits":8,"value":"300"}]}]}
+value-double-bad-i8-300 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value double {"type":"int","bits":8,"value":"300"}
+value-double-bad-i7-128 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value double {"type":"int","bits":7,"value":"128"}
+value-double-bad-i8-minus-129 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value double {"type":"int","bits":8,"value":"-129"}
+value-double-bad-u7-128 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value double {"type":"uint","bits":7,"value":"128"}
+value-double-bad-u7-256 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value double {"type":"uint","bits":7,"value":"256"}
+value-roundtrip-bad-i8-300 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value roundtrip {"type":"int","bits":8,"value":"300"}
+value-roundtrip-bad-i7-128 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value roundtrip {"type":"int","bits":7,"value":"128"}
+value-roundtrip-bad-u7-256 | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value roundtrip {"type":"uint","bits":7,"value":"256"}
+# An ieee32 raw value above 32 bits (nine hex digits, the top one set) is refused (r2 item 1), a
+# 32-bit one with every bit set is a value. The code is E_LIMIT or E_VALUE.
+value-limits-ok-ieee32-ffffffff | 0 | OK | value limits {"type":"float","format":"ieee32","bits_hex":"ffffffff"}
+value-limits-ok-ieee64-ffffffffffffffff | 0 | OK | value limits {"type":"float","format":"ieee64","bits_hex":"ffffffffffffffff"}
+value-limits-bad-ieee32-100000000 | 1 | ~^ERR E_(LIMIT|VALUE)( .+)?$ | value limits {"type":"float","format":"ieee32","bits_hex":"100000000"}
+value-limits-bad-ieee32-1ffffffff | 1 | ~^ERR E_(LIMIT|VALUE)( .+)?$ | value limits {"type":"float","format":"ieee32","bits_hex":"1ffffffff"}
+value-limits-bad-ieee64-10000000000000000 | 1 | ~^ERR E_(LIMIT|VALUE)( .+)?$ | value limits {"type":"float","format":"ieee64","bits_hex":"10000000000000000"}
+value-double-bad-ieee32-100000000 | 1 | ~^ERR E_(LIMIT|VALUE)( .+)?$ | value double {"type":"float","format":"ieee32","bits_hex":"100000000"}
+value-roundtrip-bad-ieee32-100000000 | 1 | ~^ERR E_(LIMIT|VALUE)( .+)?$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"100000000"}
+
+# ---- value fromdouble (contract r2 item 1). FromDoubleInCodeSpace(template, d) rounds d to
+# nearest, ties to even, and clamps to the template's width (uint7 127.5 is 127, int8 127.5 is
+# 127, never a wrapped 0 or -128). -inf is the minimum, +inf the maximum, NaN is ERR E_VALUE.
+# The contract's CLI cannot express a fractional input (roundtrip only feeds a value its own
+# double), so these cases use a command the contract does not define yet:
+#   jc-check value fromdouble VALUE_JSON DOUBLE
+# prints the result as value JSON, compact with sorted keys. DOUBLE is a JSON number, read as
+# the nearest double, or inf, -inf or nan. Only the type and bits of VALUE_JSON count, but it
+# must itself be a valid value. Integer templates only: the clamp of a float template, and the
+# unit and Relative metadata the result keeps (not in the value JSON), are left to jc-unit.
+value-fromdouble-template-value-ignored | 0 | {"bits":7,"type":"uint","value":"1"} | value fromdouble {"type":"uint","bits":7,"value":"5"} 1
+value-fromdouble-template-u7-128-refused | 1 | ~^ERR E_(LIMIT value|VALUE)$ | value fromdouble {"type":"uint","bits":7,"value":"128"} 1
+value-fromdouble-u7-0 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 0
+value-fromdouble-u7-minus-0 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -0
+value-fromdouble-u7-0.4 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 0.4
+value-fromdouble-u7-0.5 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 0.5
+value-fromdouble-u7-0.49999999999999994 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 0.49999999999999994
+value-fromdouble-u7-0.6 | 0 | {"bits":7,"type":"uint","value":"1"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 0.6
+value-fromdouble-u7-1.5 | 0 | {"bits":7,"type":"uint","value":"2"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 1.5
+value-fromdouble-u7-2.5 | 0 | {"bits":7,"type":"uint","value":"2"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 2.5
+value-fromdouble-u7-63.5 | 0 | {"bits":7,"type":"uint","value":"64"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 63.5
+value-fromdouble-u7-126.5 | 0 | {"bits":7,"type":"uint","value":"126"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 126.5
+value-fromdouble-u7-127 | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 127
+value-fromdouble-u7-127.4 | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 127.4
+value-fromdouble-u7-127.5 | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 127.5
+value-fromdouble-u7-127.6 | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 127.6
+value-fromdouble-u7-128 | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 128
+value-fromdouble-u7-1e300 | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 1e300
+value-fromdouble-u7-inf | 0 | {"bits":7,"type":"uint","value":"127"} | value fromdouble {"type":"uint","bits":7,"value":"0"} inf
+value-fromdouble-u7-minus-0.4 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -0.4
+value-fromdouble-u7-minus-0.5 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -0.5
+value-fromdouble-u7-minus-0.6 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -0.6
+value-fromdouble-u7-minus-1 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -1
+value-fromdouble-u7-minus-1e300 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -1e300
+value-fromdouble-u7-minus-inf | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} -inf
+value-fromdouble-u7-nan | 1 | ERR E_VALUE | value fromdouble {"type":"uint","bits":7,"value":"0"} nan
+value-fromdouble-u7-5e-324 | 0 | {"bits":7,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":7,"value":"0"} 5e-324
+value-fromdouble-u14-8191.5 | 0 | {"bits":14,"type":"uint","value":"8192"} | value fromdouble {"type":"uint","bits":14,"value":"0"} 8191.5
+value-fromdouble-u14-16382.5 | 0 | {"bits":14,"type":"uint","value":"16382"} | value fromdouble {"type":"uint","bits":14,"value":"0"} 16382.5
+value-fromdouble-u14-16383.5 | 0 | {"bits":14,"type":"uint","value":"16383"} | value fromdouble {"type":"uint","bits":14,"value":"0"} 16383.5
+value-fromdouble-u14-16384 | 0 | {"bits":14,"type":"uint","value":"16383"} | value fromdouble {"type":"uint","bits":14,"value":"0"} 16384
+value-fromdouble-u16-32767.5 | 0 | {"bits":16,"type":"uint","value":"32768"} | value fromdouble {"type":"uint","bits":16,"value":"0"} 32767.5
+value-fromdouble-u16-65534.5 | 0 | {"bits":16,"type":"uint","value":"65534"} | value fromdouble {"type":"uint","bits":16,"value":"0"} 65534.5
+value-fromdouble-u16-65535.5 | 0 | {"bits":16,"type":"uint","value":"65535"} | value fromdouble {"type":"uint","bits":16,"value":"0"} 65535.5
+value-fromdouble-u32-2147483647.5 | 0 | {"bits":32,"type":"uint","value":"2147483648"} | value fromdouble {"type":"uint","bits":32,"value":"0"} 2147483647.5
+value-fromdouble-u32-4294967294.5 | 0 | {"bits":32,"type":"uint","value":"4294967294"} | value fromdouble {"type":"uint","bits":32,"value":"0"} 4294967294.5
+value-fromdouble-u32-4294967295.5 | 0 | {"bits":32,"type":"uint","value":"4294967295"} | value fromdouble {"type":"uint","bits":32,"value":"0"} 4294967295.5
+value-fromdouble-u32-4294967296 | 0 | {"bits":32,"type":"uint","value":"4294967295"} | value fromdouble {"type":"uint","bits":32,"value":"0"} 4294967296
+value-fromdouble-u52-4503599627370495.5 | 0 | {"bits":52,"type":"uint","value":"4503599627370495"} | value fromdouble {"type":"uint","bits":52,"value":"0"} 4503599627370495.5
+value-fromdouble-u53-9007199254740991 | 0 | {"bits":53,"type":"uint","value":"9007199254740991"} | value fromdouble {"type":"uint","bits":53,"value":"0"} 9007199254740991
+value-fromdouble-u53-9007199254740992 | 0 | {"bits":53,"type":"uint","value":"9007199254740991"} | value fromdouble {"type":"uint","bits":53,"value":"0"} 9007199254740992
+value-fromdouble-u64-18446744073709549568 | 0 | {"bits":64,"type":"uint","value":"18446744073709549568"} | value fromdouble {"type":"uint","bits":64,"value":"0"} 18446744073709549568
+value-fromdouble-u64-1.8446744073709552e19 | 0 | {"bits":64,"type":"uint","value":"18446744073709551615"} | value fromdouble {"type":"uint","bits":64,"value":"0"} 1.8446744073709552e19
+value-fromdouble-u64-minus-1 | 0 | {"bits":64,"type":"uint","value":"0"} | value fromdouble {"type":"uint","bits":64,"value":"0"} -1
+value-fromdouble-u64-inf | 0 | {"bits":64,"type":"uint","value":"18446744073709551615"} | value fromdouble {"type":"uint","bits":64,"value":"0"} inf
+value-fromdouble-u64-nan | 1 | ERR E_VALUE | value fromdouble {"type":"uint","bits":64,"value":"0"} nan
+value-fromdouble-u128-1.8446744073709552e19 | 0 | {"bits":128,"type":"uint","value":"18446744073709551616"} | value fromdouble {"type":"uint","bits":128,"value":"0"} 1.8446744073709552e19
+value-fromdouble-u128-3.4028236692093843e38 | 0 | {"bits":128,"type":"uint","value":"340282366920938425684442744474606501888"} | value fromdouble {"type":"uint","bits":128,"value":"0"} 3.4028236692093843e38
+value-fromdouble-u128-3.4028236692093846e38 | 0 | {"bits":128,"type":"uint","value":"340282366920938463463374607431768211455"} | value fromdouble {"type":"uint","bits":128,"value":"0"} 3.4028236692093846e38
+value-fromdouble-u128-inf | 0 | {"bits":128,"type":"uint","value":"340282366920938463463374607431768211455"} | value fromdouble {"type":"uint","bits":128,"value":"0"} inf
+value-fromdouble-i7-63.5 | 0 | {"bits":7,"type":"int","value":"63"} | value fromdouble {"type":"int","bits":7,"value":"0"} 63.5
+value-fromdouble-i7-minus-64.5 | 0 | {"bits":7,"type":"int","value":"-64"} | value fromdouble {"type":"int","bits":7,"value":"0"} -64.5
+value-fromdouble-i8-126.5 | 0 | {"bits":8,"type":"int","value":"126"} | value fromdouble {"type":"int","bits":8,"value":"0"} 126.5
+value-fromdouble-i8-127.4 | 0 | {"bits":8,"type":"int","value":"127"} | value fromdouble {"type":"int","bits":8,"value":"0"} 127.4
+value-fromdouble-i8-127.5 | 0 | {"bits":8,"type":"int","value":"127"} | value fromdouble {"type":"int","bits":8,"value":"0"} 127.5
+value-fromdouble-i8-128 | 0 | {"bits":8,"type":"int","value":"127"} | value fromdouble {"type":"int","bits":8,"value":"0"} 128
+value-fromdouble-i8-minus-127.5 | 0 | {"bits":8,"type":"int","value":"-128"} | value fromdouble {"type":"int","bits":8,"value":"0"} -127.5
+value-fromdouble-i8-minus-128 | 0 | {"bits":8,"type":"int","value":"-128"} | value fromdouble {"type":"int","bits":8,"value":"0"} -128
+value-fromdouble-i8-minus-128.5 | 0 | {"bits":8,"type":"int","value":"-128"} | value fromdouble {"type":"int","bits":8,"value":"0"} -128.5
+value-fromdouble-i8-minus-128.6 | 0 | {"bits":8,"type":"int","value":"-128"} | value fromdouble {"type":"int","bits":8,"value":"0"} -128.6
+value-fromdouble-i8-minus-129 | 0 | {"bits":8,"type":"int","value":"-128"} | value fromdouble {"type":"int","bits":8,"value":"0"} -129
+value-fromdouble-i8-minus-0.5 | 0 | {"bits":8,"type":"int","value":"0"} | value fromdouble {"type":"int","bits":8,"value":"0"} -0.5
+value-fromdouble-i8-minus-1.5 | 0 | {"bits":8,"type":"int","value":"-2"} | value fromdouble {"type":"int","bits":8,"value":"0"} -1.5
+value-fromdouble-i8-minus-2.5 | 0 | {"bits":8,"type":"int","value":"-2"} | value fromdouble {"type":"int","bits":8,"value":"0"} -2.5
+value-fromdouble-i8-inf | 0 | {"bits":8,"type":"int","value":"127"} | value fromdouble {"type":"int","bits":8,"value":"0"} inf
+value-fromdouble-i8-minus-inf | 0 | {"bits":8,"type":"int","value":"-128"} | value fromdouble {"type":"int","bits":8,"value":"0"} -inf
+value-fromdouble-i8-nan | 1 | ERR E_VALUE | value fromdouble {"type":"int","bits":8,"value":"0"} nan
+value-fromdouble-i14-8191.5 | 0 | {"bits":14,"type":"int","value":"8191"} | value fromdouble {"type":"int","bits":14,"value":"0"} 8191.5
+value-fromdouble-i14-minus-8192.5 | 0 | {"bits":14,"type":"int","value":"-8192"} | value fromdouble {"type":"int","bits":14,"value":"0"} -8192.5
+value-fromdouble-i16-32767.5 | 0 | {"bits":16,"type":"int","value":"32767"} | value fromdouble {"type":"int","bits":16,"value":"0"} 32767.5
+value-fromdouble-i16-minus-32768.5 | 0 | {"bits":16,"type":"int","value":"-32768"} | value fromdouble {"type":"int","bits":16,"value":"0"} -32768.5
+value-fromdouble-i32-2147483647.5 | 0 | {"bits":32,"type":"int","value":"2147483647"} | value fromdouble {"type":"int","bits":32,"value":"0"} 2147483647.5
+value-fromdouble-i32-minus-2147483647.5 | 0 | {"bits":32,"type":"int","value":"-2147483648"} | value fromdouble {"type":"int","bits":32,"value":"0"} -2147483647.5
+value-fromdouble-i32-minus-2147483648.5 | 0 | {"bits":32,"type":"int","value":"-2147483648"} | value fromdouble {"type":"int","bits":32,"value":"0"} -2147483648.5
+value-fromdouble-i53-4503599627370495.5 | 0 | {"bits":53,"type":"int","value":"4503599627370495"} | value fromdouble {"type":"int","bits":53,"value":"0"} 4503599627370495.5
+value-fromdouble-i64-9.2233720368547758e18 | 0 | {"bits":64,"type":"int","value":"9223372036854775807"} | value fromdouble {"type":"int","bits":64,"value":"0"} 9.2233720368547758e18
+value-fromdouble-i64-minus-9.2233720368547758e18 | 0 | {"bits":64,"type":"int","value":"-9223372036854775808"} | value fromdouble {"type":"int","bits":64,"value":"0"} -9.2233720368547758e18
+value-fromdouble-i64-minus-inf | 0 | {"bits":64,"type":"int","value":"-9223372036854775808"} | value fromdouble {"type":"int","bits":64,"value":"0"} -inf
+value-fromdouble-i128-1.7014118346046923e38 | 0 | {"bits":128,"type":"int","value":"170141183460469231731687303715884105727"} | value fromdouble {"type":"int","bits":128,"value":"0"} 1.7014118346046923e38
+value-fromdouble-i128-minus-1.7014118346046923e38 | 0 | {"bits":128,"type":"int","value":"-170141183460469231731687303715884105728"} | value fromdouble {"type":"int","bits":128,"value":"0"} -1.7014118346046923e38
+value-fromdouble-i128-minus-inf | 0 | {"bits":128,"type":"int","value":"-170141183460469231731687303715884105728"} | value fromdouble {"type":"int","bits":128,"value":"0"} -inf
+value-fromdouble-i128-nan | 1 | ERR E_VALUE | value fromdouble {"type":"int","bits":128,"value":"0"} nan

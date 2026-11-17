@@ -7,7 +7,7 @@
 # is documented at the top of that file) and prints one "PASS|FAIL|SKIP <case> (<detail>)" line per
 # case and a summary. Fails if any case fails. The expected values were written from
 # docs/jeiobs/tasks/006-control-protocols.md and the K1-PR1 contract, not from the implementation.
-# Plain CMake: no shell, no Python. WORK_DIR is only written to, never cleaned; it needs about 15 MB.
+# Plain CMake: no shell, no Python. WORK_DIR is only written to, never cleaned; it needs about 40 MB.
 
 cmake_minimum_required(VERSION 3.21)
 
@@ -147,7 +147,86 @@ _jc_chain_item(10000)
 _jc_write(perf-chain-10000.json "${_jc_head}\"slots\":[],\"routes\":[${_jc_all},${_jc_item}]}")
 string(REPLACE "{\"i\":10001}" "{\"i\":1}" _jc_item "${_jc_item}")
 _jc_write(perf-cycle-10000.json "${_jc_head}\"slots\":[],\"routes\":[${_jc_all},${_jc_item}]}")
+
+# contract r2 item 8: 10,000 routes p1.. on one target with priorities 1..10,000 (a merge check
+# that compares every pair of a group makes 5 * 10^7 comparisons), and the same with the last
+# priority equal to the first
+macro(_jc_prio_item i)
+  set(_jc_item "{\"id\":\"p${i}\",\"enabled\":true,\"match\":{\"slot\":null,\"address\":[{\"s\":\"p\"},{\"i\":${i}}]},\"target\":{\"kind\":\"scene\",\"id\":\"s\"},\"merge\":{\"policy\":\"priority\",\"priority\":${i}}}")
+endmacro()
+_jc_items(_jc_all 1 9999 _jc_prio_item)
+_jc_prio_item(10000)
+_jc_write(perf-merge-10000.json "${_jc_head}\"slots\":[],\"routes\":[${_jc_all},${_jc_item}]}")
+string(REPLACE "\"priority\":10000}" "\"priority\":1}" _jc_item "${_jc_item}")
+_jc_write(perf-merge-10000-clash.json "${_jc_head}\"slots\":[],\"routes\":[${_jc_all},${_jc_item}]}")
+
+# contract r2 item 8: 5,000 emit routes x1.. to one address [e] and 5,000 routes y1.. matching it
+# (a graph that keeps edges to routes without an emit target holds 25 million of them), and the
+# same with y5000 emitting into x1's address: the one cycle is x1 -> y5000 -> x1
+macro(_jc_emit_item i)
+  set(_jc_item "{\"id\":\"x${i}\",\"enabled\":true,\"match\":{\"slot\":null,\"address\":[{\"s\":\"in\"},{\"i\":${i}}]},\"target\":{\"kind\":\"emit\",\"address\":[{\"s\":\"e\"}]},\"merge\":{\"policy\":\"last-writer\"}}")
+endmacro()
+macro(_jc_sink_item i)
+  set(_jc_item "{\"id\":\"y${i}\",\"enabled\":true,\"match\":{\"slot\":null,\"address\":[{\"s\":\"e\"}]},\"target\":{\"kind\":\"scene\",\"id\":\"s${i}\"}}")
+endmacro()
+_jc_items(_jc_all 1 5000 _jc_emit_item)
+_jc_items(_jc_x 1 4999 _jc_sink_item)
+string(APPEND _jc_all ",${_jc_x}")
+_jc_sink_item(5000)
+_jc_write(perf-edges-5000x5000.json "${_jc_head}\"slots\":[],\"routes\":[${_jc_all},${_jc_item}]}")
+set(_jc_item "{\"id\":\"y5000\",\"enabled\":true,\"match\":{\"slot\":null,\"address\":[{\"s\":\"e\"}]},\"target\":{\"kind\":\"emit\",\"address\":[{\"s\":\"in\"},{\"i\":1}]}}")
+_jc_write(perf-edges-5000x5000-cycle.json "${_jc_head}\"slots\":[],\"routes\":[${_jc_all},${_jc_item}]}")
 unset(_jc_all)
+
+# contract r2 item 5: an unknown top-level member holding one object with 499,201 members (about
+# 4 MB): the 499,200 three-character keys over the first 78 x 80 x 80 characters of an
+# 80-character alphabet, then "last" (or, for the duplicate, the first key "AAA" again); and the
+# 499,200 keys as unknown members of the mapping object itself. A parser that inserts members by
+# a linear scan makes about 10^11 key comparisons (minutes); with keys and values counted each
+# file holds under 10^6 JSON values.
+set(_jc_alpha [=[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#%&'()*+,-./:<=>?]=])
+string(LENGTH "${_jc_alpha}" _jc_x)
+string(FIND "${_jc_alpha}" "@" _jc_o)
+string(FIND "${_jc_alpha}" "^" _jc_c)
+if(NOT _jc_x EQUAL 80 OR NOT _jc_o EQUAL -1 OR NOT _jc_c EQUAL -1)
+  message(FATAL_ERROR "run-cases.cmake: the key alphabet needs 80 characters without @ and ^")
+endif()
+set(_jc_x "") # "@^c":0, for each character c (distinct)
+foreach(_jc_i RANGE 0 79)
+  string(SUBSTRING "${_jc_alpha}" ${_jc_i} 1 _jc_c)
+  string(FIND "${_jc_alpha}" "${_jc_c}" _jc_o)
+  if(NOT _jc_o EQUAL _jc_i)
+    message(FATAL_ERROR "run-cases.cmake: '${_jc_c}' is twice in the key alphabet")
+  endif()
+  string(APPEND _jc_x "\"@^${_jc_c}\":0,")
+endforeach()
+set(_jc_o "")
+foreach(_jc_i RANGE 0 79)
+  string(SUBSTRING "${_jc_alpha}" ${_jc_i} 1 _jc_c)
+  string(REPLACE "^" "${_jc_c}" _jc_c "${_jc_x}")
+  string(APPEND _jc_o "${_jc_c}")
+endforeach()
+set(_jc_all "")
+foreach(_jc_i RANGE 0 77)
+  string(SUBSTRING "${_jc_alpha}" ${_jc_i} 1 _jc_c)
+  string(REPLACE "@" "${_jc_c}" _jc_c "${_jc_o}")
+  string(APPEND _jc_all "${_jc_c}")
+endforeach()
+string(LENGTH "${_jc_all}" _jc_x)
+if(NOT _jc_x EQUAL 3993600) # 499,200 members of 8 bytes
+  message(FATAL_ERROR "run-cases.cmake: the wide object has ${_jc_x} bytes of members")
+endif()
+_jc_write(wide-object.json "${_jc_head}\"x_wide\":{${_jc_all}\"last\":0},${_jc_slots}\"routes\":[${_jc_route_start}mic${_jc_post}")
+_jc_write(wide-object-dupkey.json "${_jc_head}\"x_wide\":{${_jc_all}\"AAA\":0},${_jc_slots}\"routes\":[${_jc_route_start}mic${_jc_post}")
+_jc_write(wide-top-level.json "${_jc_head}${_jc_all}${_jc_slots}\"routes\":[${_jc_route_start}mic${_jc_post}")
+foreach(_jc_f IN ITEMS wide-object wide-object-dupkey wide-top-level)
+  file(SIZE "${WORK_DIR}/${_jc_f}.json" _jc_x)
+  if(NOT _jc_x LESS 4194304)
+    message(FATAL_ERROR "run-cases.cmake: ${_jc_f}.json is over 4 MiB")
+  endif()
+endforeach()
+unset(_jc_all)
+unset(_jc_o)
 
 # byte-level parser faults, in the target id unless named otherwise
 set(_jc_utf8_ff 255)
@@ -178,6 +257,28 @@ _jc_write(bom-after-space.json " ${_jc_bom}${_jc_m}")
 _jc_write(bom-event.json "${_jc_bom}{\"slot\":null,\"address\":[{\"s\":\"mcu\"},{\"i\":0},{\"s\":\"fader\"}]}")
 _jc_write(empty.json "")
 _jc_write(whitespace.json " \t ")
+
+# events, which the mapping file's strict parser reads (contract r1 item 6, r2 item 2): bad
+# bytes, depth 32 (the slot is an array: E_SCHEMA event), 33 and 100,000 in the slot, and
+# 4 MiB and 4 MiB + 1 of an event that matches (blanks between members)
+_jc_write(event-utf8.json "{\"slot\":null,\"address\":[{\"s\":\"a${_jc_ff}b\"}]}")
+set(_jc_x "{\"slot\":null,\"address\":[{\"s\":\"a${_jc_nul}b\"}]}")
+file(WRITE "${WORK_DIR}/event-nul.json" "${_jc_x}")
+_jc_check_hex(event-nul.json "^.*22610062227d.*$" "its NUL byte") # "a<NUL>b"}
+foreach(_jc_n IN ITEMS 31 32 99999)
+  string(REPEAT "[" ${_jc_n} _jc_o)
+  string(REPEAT "]" ${_jc_n} _jc_c)
+  math(EXPR _jc_d "${_jc_n} + 1")
+  _jc_write(event-depth-${_jc_d}.json "{\"slot\":${_jc_o}${_jc_c},\"address\":[{\"s\":\"mcu\"}]}")
+endforeach()
+set(_jc_x "{\"slot\":null,\"address\":[{\"s\":\"mcu\"},{\"i\":0},{\"s\":\"fader\"}]}")
+string(LENGTH "${_jc_x}" _jc_len)
+foreach(_jc_size IN ITEMS 4194304 4194305)
+  math(EXPR _jc_pad "${_jc_size} - ${_jc_len}")
+  string(REPEAT " " ${_jc_pad} _jc_o)
+  _jc_write(event-size-${_jc_size}.json "{\"slot\":null,${_jc_o}\"address\":[{\"s\":\"mcu\"},{\"i\":0},{\"s\":\"fader\"}]}")
+endforeach()
+unset(_jc_o)
 
 # paths: a space, and non-ASCII directory and file names (UTF-8 arguments)
 file(MAKE_DIRECTORY "${WORK_DIR}/with space" "${WORK_DIR}/caf${_jc_e_acute}")

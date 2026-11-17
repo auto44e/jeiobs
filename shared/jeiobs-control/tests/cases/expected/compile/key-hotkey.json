@@ -1,1 +1,1 @@
-{"routes":[{"class":"hotkey","enabled":true,"fanout":1,"id":"r1","merge":{"policy":"last-writer","priority":0},"target_key":"hotkey|name=OBSBasic.Screenshot|registerer_id=obs|registerer_kind=frontend"}],"slots":["main_surface"]}
+{"routes":[{"class":"output-control","enabled":true,"fanout":1,"id":"r1","merge":{"policy":"last-writer","priority":0},"target_key":"hotkey|name=OBSBasic.Screenshot|registerer_id=obs|registerer_kind=frontend"}],"slots":["main_surface"]}

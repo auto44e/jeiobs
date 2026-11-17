@@ -1,0 +1,11 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "r1", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "filter-property", "id": "src_a", "field": "url"}}
+  ]
+}
