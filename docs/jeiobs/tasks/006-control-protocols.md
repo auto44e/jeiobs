@@ -186,6 +186,88 @@ A10. **K1 scope that shapes the types** (decided in outline here; PR1 fixes the 
     capability requirements, bound locally by product-instance ID, USB serial or port name, in
     that order of preference.
 
+### Amendments after review round 2 (override A1-A10 and the numbered items where they differ)
+
+A11. **Routes.** A route is `{match, guard, transform pipeline, target, merge policy}`. `match` is
+     evaluated on a `ControlAddress`: per-segment equality, numeric range, set membership, prefix,
+     and a single-segment wildcard (never matching a privileged target; fan-out per message is
+     capped). Split: one source address feeds several routes, each independent. Merge: several
+     routes to one target, governed by that target's merge policy. Thru: a route whose target is an
+     egress endpoint with the identity transform and the wire envelope forwarded unchanged unless a
+     channel/group remap transform is present. Filter: a guard predicate on the route (value range,
+     address predicate, device state, an active bank, layer or modifier). Remapped thru is thru
+     plus remap. Routes with no match, or whose target is unresolved or denied, are inert and listed.
+A12. **Bindings and exports (replaces A8's export claim).** `bindings.json` is captured by
+     workspaces so history restores a machine's setup, but its role is `local-only`: restored only
+     on the same `machine_id` and always omitted from exports, reviewed or not (reason
+     `local-only`). The projection never emits it, so no reviewed-include path can export serials or
+     peer addresses. PR5 makes the WORKSPACE_FORMAT change: a `local-only` role class in sections 6
+     and 7, an `incompat` feature so an older reader refuses to restore a revision with these roles,
+     and rounding of an omitted secrets file's recorded size (section 6's 65,536-byte rule applies to
+     it).
+A13. **Grants.** Peer grants and trust overrides are machine-local state in `grants.json`, outside
+     capture, export and import, so an old snapshot cannot re-grant a revoked peer and an imported
+     mapping cannot widen trust. UDP source addresses are spoofable: a UDP peer allowlist is
+     advisory, and no grant over UDP can give `output-control`, `profile` or `meta`. Only an
+     authenticated transport (for example Network MIDI 2.0 with its authentication, or a
+     token-authenticated OSC/TCP session whose secret is in `secrets.json`) can hold those classes.
+A14. **Loopback is not trusted by default.** A listener on `127.0.0.1` is reachable by web pages
+     and browser sources (DNS rebinding, `no-cors` POSTs). Default grants for `loopback-net`
+     apply to UDP only. TCP and HTTP listeners (OSC over TCP/SLIP, OSCQuery) default to read-only
+     until the listener enforces a loopback `Host`, rejects any `Origin`, sends no CORS headers,
+     and closes the connection on the first malformed frame; they never get write classes by
+     default. OSCQuery is GET-only.
+A15. **Targets, concretely** (every kind has all of: identity, read path, write path, class;
+     unclassified means deny):
+
+     | Target | Identity | Read | Write | Class |
+     | --- | --- | --- | --- | --- |
+     | source property | source UUID + property | settings snapshot on `update` signal | queued `obs_source_update` via allowlist | source-property |
+     | filter property | filter UUID (+ parent) | same | same | filter |
+     | scene, scene item | scene UUID, item id | item signals | queued frontend call | scene |
+     | mixer (volume, mute, balance, monitoring, mixers, sync) | source UUID | signals (`volume`, `mute`, `audio_balance`, ...) | latest-value slot for volume, mute and balance; queued for the rest | mix |
+     | transition | name + kind | frontend current-transition event | queued frontend call | scene |
+     | hotkey | registerer + name | none | queued, through the frontend hotkey router | by effect; unknown is output-control |
+     | output (stream, record, replay, virtual camera) | output kind | output signals | `RequestOutput(origin, kind, start or stop)` | output-control |
+     | profile, collection | name + generated UID | frontend events | `RequestProfileSwitch(origin, target)` with the same confirmation rules | profile |
+     | plugin parameter, plugin event | instance + parameter id or URI | M3 state snapshot | single-writer ring | plugin-param |
+     | M4 graph and listen bus | node/port id | graph snapshot | the R1/R3 API | mix |
+     | egress endpoint | endpoint id | none | endpoint egress queue | the endpoint's trust class |
+
+     `RequestOutput` covers only output kinds. Profile and collection switching use their own
+     request because it changes service and outputs. SysEx and raw wire thru need `meta` unless a
+     route is explicitly mapped.
+A16. **Coalescing.** Keep the newest absolute value per writer and per target, then apply the
+     target's reducer (Sum, Min, Max, ...). Relative values accumulate as the sum of deltas. A
+     writer's successive absolute values are never summed.
+A17. **A7 corrected.** Balance is written on whichever thread pushes audio
+     (`process_audio`, called from `obs_source_output_audio`, `obs-source.c:4057-4059,4085`), not only
+     the audio thread, and `audio_balance` is an existing signal (`:96,5735`): reads are signal driven.
+     Volume and mute reads come from the signal when the source is active. While an inactive
+     source holds a shadow value the read reports it as `pending`; `user_volume`, the mixer, the
+     saved collection and obs-websocket keep the old value until the adapter flushes the latest
+     shadow once when the source becomes active.
+A18. **Record.** Settled by: items 1-7, 9 and A1-A7: Claude and Codex agreed in the debate or in
+     review rounds; the lead resolved the splits. Items 8, A8, A12-A14: the lead, after the
+     peers disagreed (Claude and Codex first wanted bindings outside capture; round-1 review asked
+     for capture; the lead chose capture as `local-only` with no export path). A10: the lead's outline, scope
+     to be fixed by PR1. Round-2 findings that remain Minor or were answered by the open list
+     below are tracked in the ledger.
+
+**Additional if-otherwise and flex.**
+- Serials and peer addresses in portable files would let a mapping restore across machines;
+  rejected because they identify hardware and people (WORKSPACE_FORMAT section 4). Reopen only if
+  the owner wants cross-machine restores of device bindings, with an explicit user prompt.
+- Rejecting every equal-priority writer pair would be simpler to validate; rejected because an MCU
+  fader, a tablet fader and the OBS mixer driving one volume is the main use. Reopen if arbitration
+  bugs show up in real use.
+- Capture of `bindings.json` was reversed from the first draft: leaving it out of snapshots breaks
+  M1's "restores a machine's setup". Reopen if `local-only` restores prove fragile.
+- PR1 scope (types, validator, minimal compiler only) was narrowed from the first draft so the
+  foundation stays reviewable; reopen if PR2 keeps changing PR1's types.
+- Loopback TCP/HTTP read-only by default costs convenience for local web controllers; reopen with a
+  Host/Origin-checked transport and measured misuse resistance.
+
 **If otherwise, and flex.**
 - Direct libobs calls from the graph thread would have been simpler and faster to write; they were
   rejected because several calls block (`obs_frontend_set_current_scene`) and one stalled call would
@@ -200,7 +282,9 @@ A10. **K1 scope that shapes the types** (decided in outline here; PR1 fixes the 
 - Reopen the whole principal and capability model if the owner wants a different default for
   remote peers.
 
-**Open before K1-PR1** (not decided yet, must be before types are fixed): the exact `ControlValue`
+**Open before K1-PR1** (not decided yet, must be before types are fixed): which backends can tell
+a network-backed OS MIDI port from a hardware one (WinMM cannot; K2 decides the class for such
+ports); the exact `ControlValue`
 tuple nesting limits; the OSC address-pattern fan-out cap number; the default endpoint quota and
 queue sizes; whether transforms need per-route state (for example smoothing); how `ParameterChanges`
 preallocation for VST3 is sized (A7); the policy table defaults beyond the ones in A1.
