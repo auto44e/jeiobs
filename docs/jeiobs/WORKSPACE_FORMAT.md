@@ -92,8 +92,15 @@ One UTF-8 JSON object, no BOM. Writers choose key order and whitespace; nothing 
   jeiobs parser rejects the file), `bak` (the id of the `<path>.bak` entry) and `load_rule`
   (section 7).
 - `"status": "omitted"` adds `reason` and `size`. A directory excluded as a whole also gets
-  `kind: "dir"`, and its `size` counts its regular files without following symlinks. An omitted
-  entry never has a hash.
+  `kind: "dir"`, and its `size` counts its regular files without following symlinks; a collapsed
+  folder also gets `count` (its number of files, integer >= 1). Names that cannot be represented
+  (not UTF-8, or breaking a path rule) are one entry per folder with `kind: "names"`, `reason:
+  "unrepresentable"` and a `count`, and no names. A folder that cannot be listed is an entry with
+  `reason: "unreadable"`; a symlink, junction or reparse point is `reason: "symlink"` and is never
+  followed; a file over the blob limit is `reason: "too-large"`. `count` is allowed only on omitted
+  entries of kind `dir` or `names`. An omitted entry never has a hash. A `collection` entry may carry
+  `scene_uuids` (sorted, unique strings): the identity data of section 9, local only, dropped by the
+  export projection.
 - `target.audio` = `{sample_rate, channels, explicit, src: {entry}}`. The values come from the
   active profile's `basic.ini [Audio] SampleRate` and `ChannelSetup`
   (`OBSBasicSettings.cpp:3646,3650`). `explicit` is false when OBS's defaults apply (48000,
@@ -607,7 +614,7 @@ inherited cmocka setup never runs: the root `CMakeLists.txt:33` adds only `test/
 | PR1 | this document; `Limits`, `PathRules`, `Hash`, `Manifest` (parse, validate, child-writer extension rules, `ProjectForExport`). Synthetic fixtures: valid local and export manifests, unknown fields at each level, future minor, future major (read-only), unknown `incompat` and `ro_compat`, duplicate key, invalid UTF-8, NUL, `1e400`, depth 65, oversize input, every path rule, an undecided `opaque-unreviewed` entry | self-merge gate; persistence format, so review rounds repeat until one finds no blocker or major |
 | CI | `.github/workflows/jeiobs-workspace.yaml`: build and ctest on ubuntu, macos, windows | owner (`.github/`) |
 | PR2 | bounded JSON scanner with byte positions; INI reader that keeps BOM (written on Windows, `config-file.c:378-381`), CRLF and duplicates; redactor with per-kind placeholders. Fixtures: rtmp_common, custom RTMP with auth, WHIP, Twitch/YouTube/Restream tokens, websocket placeholder with forced auth, URL rule; a scan proving no secret bytes remain; a fuzz target | self-merge gate |
-| PR3 | `CapturePlanner` (allowlist, omit-by-default, `.bak` pairs, symlinks, `u1` rules), `CollectionIndex`, identity; synthetic Windows/macOS/Linux root trees with custom locations and portable mode | self-merge gate |
+| PR3 | `Fs` (`MemFs`, `RealFs`), `CapturePlanner` (allowlist, omit-by-default, `.bak` pairs, symlinks, unrepresentable names, collisions, limits), identity against a parent revision, `ReviewRules` (table starts with `scene` and `group`), `jw-check plan`; synthetic root trees with custom locations. Not yet: capture of file contents, real Windows/macOS trees (CI runs the synthetic ones) | self-merge gate |
 | PR4 | frontend capture host: save result, `StageWindowState`, `persistMutex`, root gate, Windows sharing, coordinator. Tests: an off-thread `config_save` blocks instead of tearing a read; an out-of-protocol writer makes capture refuse; `ReplaceFileW` succeeds during a capture read; a failed save yields no result | self-merge gate with decision 1 already made; it changes libobs public API, so review rounds repeat until one finds no Blocker or Major |
 | S2 | store writer, recovery, history, restore, and the purge (delete a revision or a workspace; remove unreferenced blobs) that decision 2 depends on | — |
 | Unicode tables | owner-merged: pin the Unicode Character Database, a committed generator script and the generated normalization and case-fold tables (decision 3); needed before S2 or S3 may write from a manifest with non-ASCII paths | owner (third-party data) |
