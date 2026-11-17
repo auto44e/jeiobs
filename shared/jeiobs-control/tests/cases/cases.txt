@@ -1325,9 +1325,9 @@ value-fromdouble-i128-nan | 1 | ERR E_VALUE | value fromdouble {"type":"int","bi
 # split14 (E_VALUE type or nonfinite is not settled), floats nested in a tuple of the empty pipeline
 # (the lead's reading, contract r1.4: a float inside a tuple keeps `bits_hex` in the value JSON).
 # Lead's integration changes (contract r1): the worker's scale cases assume the literal formula and
-# the implementation's endpoint special case was removed to match them; transform-pos-before-target-error
+# the implementation's endpoint special case was removed to match them, transform-pos-before-target-error
 # and transform-pos-before-unknown-op expect the other error first (r1.2), where the worker had
-# expected E_SCHEMA transforms; transform-cli-usage-position-hex-float and -nan were added by the lead
+# expected E_SCHEMA transforms. Also transform-cli-usage-position-hex-float and -nan were added by the lead
 # (review run 01), not by the blind worker.
 
 # ---- transform: entry conversion of the input (through clamp [-DBL_MAX, DBL_MAX])
