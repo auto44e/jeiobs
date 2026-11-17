@@ -242,6 +242,7 @@ class PlannerImpl {
 	using ChildHandler = std::function<bool(const Child &)>;
 	void ProcessDirectory(const std::string &fs_directory, const std::string &root, const std::string &relative,
 			      const ChildHandler &handler);
+	void ProcessOwnedRoot(const std::string &fs_directory, const ChildHandler &handler);
 
 	void AddSpecial(const std::string &root, const Child &child, std::string_view reason)
 	{
@@ -402,6 +403,16 @@ void PlannerImpl::ProcessDirectory(const std::string &fs_directory, const std::s
 	FinishUnknown(root, relative, unknown);
 }
 
+void PlannerImpl::ProcessOwnedRoot(const std::string &fs_directory, const ChildHandler &handler)
+{
+	const Error list_error = fs_.ListEach(fs_directory, [&](const FsEntry &entry) {
+		const Child child{entry.name, JoinPath(fs_directory, entry.name), entry.name, entry.kind, entry.size};
+		(void)handler(child);
+		return error_.ok();
+	});
+	(void)list_error;
+}
+
 void PlannerImpl::ProcessConfigModule(const std::string &fs_directory, const std::string &root,
 				      const std::string &relative, std::string_view module)
 {
@@ -463,28 +474,24 @@ void PlannerImpl::ProcessPluginConfig(const std::string &fs_directory, const std
 
 void PlannerImpl::ProcessConfigRoot(const std::string &fs_directory)
 {
-	ProcessDirectory(fs_directory, "config", {}, [&](const Child &child) {
-		if (child.name == "themes") {
-			return true;
-		}
-		if (child.name == "plugin_config" && child.kind == FsEntryKind::Directory) {
-			ProcessPluginConfig(child.path, "config", "plugin_config");
+	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+		if (child.name == "plugin_config") {
+			if (child.kind == FsEntryKind::Symlink) {
+				AddOmitted("config", "plugin_config", 0U, "symlink");
+			} else if (child.kind == FsEntryKind::Directory) {
+				ProcessPluginConfig(child.path, "config", "plugin_config");
+			}
 			return true;
 		}
 		if (child.name == "logs" || child.name == "crashes" || child.name == "profiler_data" ||
 		    child.name == "updates" || child.name == ".sentinel") {
-			AddSpecial("config", child, "runtime");
-			return true;
+			if (child.kind == FsEntryKind::Symlink) {
+				AddOmitted("config", child.relative_path, 0U, "symlink");
+			} else {
+				AddSpecial("config", child, "runtime");
+			}
 		}
-		if (child.name == "obs-vst3" && child.kind == FsEntryKind::Directory) {
-			ProcessConfigModule(child.path, "config", "obs-vst3", "obs-vst3");
-			return true;
-		}
-		if (child.kind == FsEntryKind::File && child.name == "global.ini") {
-			AddSpecial("config", child, "unknown");
-			return true;
-		}
-		return false;
+		return true;
 	});
 }
 
@@ -497,6 +504,10 @@ void PlannerImpl::AddCollectionFile(const std::string &root, const std::string &
 	}
 	const std::string main_name = is_bak ? child.name.substr(0U, child.name.size() - 4U) : child.name;
 	if (main_name.size() <= 5U || !EndsWith(main_name, ".json") || child.kind != FsEntryKind::File) {
+		return;
+	}
+	const std::string collection_name = main_name.substr(0U, main_name.size() - 5U);
+	if (collection_name.empty() || !IsRepresentablePath(collection_name)) {
 		return;
 	}
 	const std::string main_path = JoinRelative(relative.substr(0U, relative.size() - child.name.size()), main_name);
@@ -595,6 +606,10 @@ void PlannerImpl::ProcessCollectionDirectory(const std::string &fs_directory, co
 			if (main_name.size() <= 5U || !EndsWith(main_name, ".json")) {
 				return false;
 			}
+			const std::string collection_name = main_name.substr(0U, main_name.size() - 5U);
+			if (collection_name.empty() || !IsRepresentablePath(collection_name)) {
+				return false;
+			}
 			AddCollectionFile(root, JoinRelative(relative, child.name), child);
 			return true;
 		}
@@ -613,17 +628,25 @@ void PlannerImpl::ProcessCollectionDirectory(const std::string &fs_directory, co
 
 void PlannerImpl::ProcessScenesRoot(const std::string &fs_directory)
 {
-	ProcessDirectory(fs_directory, "scenes", {}, [&](const Child &child) {
-		if (child.name != "basic" || child.kind != FsEntryKind::Directory) {
+	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+		if (child.name != "basic") {
 			return false;
 		}
-		ProcessDirectory(child.path, "scenes", "basic", [&](const Child &basic_child) {
-			if (basic_child.name != "scenes" || basic_child.kind != FsEntryKind::Directory) {
-				return false;
-			}
-			ProcessCollectionDirectory(basic_child.path, "scenes", "basic/scenes");
-			return true;
-		});
+		if (child.kind == FsEntryKind::Symlink) {
+			AddOmitted("scenes", "basic", 0U, "symlink");
+		} else if (child.kind == FsEntryKind::Directory) {
+			ProcessOwnedRoot(child.path, [&](const Child &basic_child) {
+				if (basic_child.name != "scenes") {
+					return true;
+				}
+				if (basic_child.kind == FsEntryKind::Symlink) {
+					AddOmitted("scenes", "basic/scenes", 0U, "symlink");
+				} else if (basic_child.kind == FsEntryKind::Directory) {
+					ProcessCollectionDirectory(basic_child.path, "scenes", "basic/scenes");
+				}
+				return true;
+			});
+		}
 		return true;
 	});
 }
@@ -693,70 +716,81 @@ void PlannerImpl::ProcessProfileDirectory(std::size_t profile_index, const std::
 
 void PlannerImpl::ProcessProfilesRoot(const std::string &fs_directory)
 {
-	ProcessDirectory(fs_directory, "profiles", {}, [&](const Child &child) {
-		if (child.name != "basic" || child.kind != FsEntryKind::Directory) {
+	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+		if (child.name != "basic") {
 			return false;
 		}
-		ProcessDirectory(child.path, "profiles", "basic", [&](const Child &basic_child) {
-			if (basic_child.name != "profiles" || basic_child.kind != FsEntryKind::Directory) {
-				return false;
-			}
-			ProcessDirectory(basic_child.path, "profiles", "basic/profiles",
-					 [&](const Child &profile_child) {
-						 if (profile_child.kind != FsEntryKind::Directory) {
-							 return false;
-						 }
-						 ProfileInfo profile;
-						 profile.root = "profiles";
-						 profile.dir = profile_child.name;
-						 profiles_.push_back(std::move(profile));
-						 const std::size_t profile_index = profiles_.size() - 1U;
-						 ProcessProfileDirectory(profile_index, profile_child.path, "profiles",
-									 "basic/profiles/" + profile_child.name);
-						 return true;
-					 });
-			return true;
-		});
+		if (child.kind == FsEntryKind::Symlink) {
+			AddOmitted("profiles", "basic", 0U, "symlink");
+		} else if (child.kind == FsEntryKind::Directory) {
+			ProcessOwnedRoot(child.path, [&](const Child &basic_child) {
+				if (basic_child.name != "profiles") {
+					return true;
+				}
+				if (basic_child.kind == FsEntryKind::Symlink) {
+					AddOmitted("profiles", "basic/profiles", 0U, "symlink");
+				} else if (basic_child.kind == FsEntryKind::Directory) {
+					ProcessDirectory(
+						basic_child.path, "profiles", "basic/profiles",
+						[&](const Child &profile_child) {
+							if (profile_child.kind != FsEntryKind::Directory) {
+								return false;
+							}
+							ProfileInfo profile;
+							profile.root = "profiles";
+							profile.dir = profile_child.name;
+							profiles_.push_back(std::move(profile));
+							const std::size_t profile_index = profiles_.size() - 1U;
+							ProcessProfileDirectory(profile_index, profile_child.path,
+										"profiles",
+										"basic/profiles/" + profile_child.name);
+							return true;
+						});
+				}
+				return true;
+			});
+		}
 		return true;
 	});
 }
 
 void PlannerImpl::ProcessUserRoot(const std::string &fs_directory)
 {
-	ProcessDirectory(fs_directory, "user", {}, [&](const Child &child) {
-		if (child.kind == FsEntryKind::File && child.name == "user.ini") {
+	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+		if (child.name != "user.ini") {
+			return true;
+		}
+		if (child.kind == FsEntryKind::Symlink) {
+			AddOmitted("user", "user.ini", 0U, "symlink");
+		} else if (child.kind == FsEntryKind::File) {
 			AddStoredFile("user", "user.ini", "app.user", child.size, RawEntry::Category::User);
-			return true;
 		}
-		if (IsTransient(child.name)) {
-			AddSpecial("user", child, "transient");
-			return true;
-		}
-		if (child.name == "themes") {
-			return true;
-		}
-		return false;
+		return true;
 	});
 }
 
 void PlannerImpl::ProcessPluginManagerRoot(const std::string &fs_directory)
 {
-	ProcessDirectory(fs_directory, "plugin_manager", {}, [&](const Child &child) {
-		if (child.name != "plugin_manager" || child.kind != FsEntryKind::Directory) {
+	ProcessOwnedRoot(fs_directory, [&](const Child &child) {
+		if (child.name != "plugin_manager") {
 			return false;
 		}
-		ProcessDirectory(child.path, "plugin_manager", "plugin_manager", [&](const Child &nested) {
-			if (nested.kind == FsEntryKind::File && nested.name == "modules.json") {
-				AddStoredFile("plugin_manager", "plugin_manager/modules.json", "app.modules",
-					      nested.size, RawEntry::Category::PluginManager);
-				return true;
-			}
-			if (IsTransient(nested.name)) {
-				AddSpecial("plugin_manager", nested, "transient");
-				return true;
-			}
-			return false;
-		});
+		if (child.kind == FsEntryKind::Symlink) {
+			AddOmitted("plugin_manager", "plugin_manager", 0U, "symlink");
+		} else if (child.kind == FsEntryKind::Directory) {
+			ProcessDirectory(child.path, "plugin_manager", "plugin_manager", [&](const Child &nested) {
+				if (nested.kind == FsEntryKind::File && nested.name == "modules.json") {
+					AddStoredFile("plugin_manager", "plugin_manager/modules.json", "app.modules",
+						      nested.size, RawEntry::Category::PluginManager);
+					return true;
+				}
+				if (IsTransient(nested.name)) {
+					AddSpecial("plugin_manager", nested, "transient");
+					return true;
+				}
+				return false;
+			});
+		}
 		return true;
 	});
 }
@@ -854,16 +888,21 @@ void PlannerImpl::AssignCollectionUids()
 
 	std::map<std::string, std::size_t> current_set_count;
 	for (const CollectionInfo &collection : collections_) {
+		if (!collection.has_main) {
+			continue;
+		}
 		if (!collection.scene_uuids.empty()) {
 			++current_set_count[SceneKey(collection.scene_uuids)];
 		}
 	}
 	for (CollectionInfo &collection : collections_) {
-		const std::string identity_path = collection.has_main ? collection.main_path : collection.bak_path;
+		if (!collection.has_main) {
+			continue;
+		}
+		const std::string &identity_path = collection.main_path;
 		const std::string path_key = collection.root + '\0' + identity_path;
 		const auto path_match = parent_by_path.find(path_key);
 		if (path_match != parent_by_path.end() && claimed.insert(path_match->second).second) {
-			collection.main_path = collection.main_path;
 			// The UID is stored temporarily in the path-indexed side table below.
 			collection.bak_fs_path = path_match->second;
 			continue;
@@ -933,7 +972,7 @@ void PlannerImpl::BuildCollectionEntries()
 			entry.pair_main = true;
 			collection_entries.push_back(std::move(entry));
 		}
-		if (collection.has_bak) {
+		if (collection.has_main && collection.has_bak) {
 			RawEntry entry;
 			entry.root = collection.root;
 			entry.path = collection.bak_path;
@@ -942,6 +981,15 @@ void PlannerImpl::BuildCollectionEntries()
 			entry.category = RawEntry::Category::Collection;
 			entry.identity_uid = uid;
 			entry.pair_key = collection.root + '\0' + collection.main_path;
+			collection_entries.push_back(std::move(entry));
+		}
+		if (!collection.has_main && collection.has_bak) {
+			RawEntry entry;
+			entry.root = collection.root;
+			entry.path = collection.bak_path;
+			entry.role = "collection.bak";
+			entry.size = collection.bak_size;
+			entry.category = RawEntry::Category::Collection;
 			collection_entries.push_back(std::move(entry));
 		}
 	}
@@ -1027,19 +1075,20 @@ PlanResult PlannerImpl::Run()
 		return left.path < right.path;
 	});
 	std::sort(omitted_.begin(), omitted_.end(), [](const PlannedEntry &left, const PlannedEntry &right) {
-		if (left.root != right.root) {
-			return left.root < right.root;
+		if (left.path != right.path) {
+			return left.path < right.path;
 		}
-		return left.path < right.path;
+		return left.root < right.root;
 	});
 
 	Plan plan;
 	plan.roots = roots_;
 	for (std::size_t index = 0U; index < collections_.size(); ++index) {
 		const CollectionInfo &collection = collections_[index];
-		plan.collections.push_back({collection.bak_fs_path,
-					    collection.has_main ? collection.main_path : collection.bak_path,
-					    collection.scene_uuids});
+		if (collection.has_main) {
+			plan.collections.push_back(
+				{collection.bak_fs_path, collection.main_path, collection.scene_uuids});
+		}
 	}
 	for (const ProfileInfo &profile : profiles_) {
 		plan.profiles.push_back({profile.uid, profile.dir});
@@ -1064,20 +1113,11 @@ PlanResult PlannerImpl::Run()
 		entry.path = raw.path;
 		entry.role = raw.role;
 		entry.size = raw.size;
-		entry.collection = raw.role == "collection" || raw.role == "collection.bak"
-					   ? raw.identity_uid
-					   : std::optional<std::string>{};
+		if ((raw.role == "collection" || raw.role == "collection.bak") && !raw.identity_uid.empty()) {
+			entry.collection = raw.identity_uid;
+		}
 		entry.profile = raw.category == RawEntry::Category::Profile ? raw.identity_uid
 									    : std::optional<std::string>{};
-		if (raw.category == RawEntry::Category::Collection && raw.role == "collection") {
-			const auto collection =
-				std::find_if(collections_.begin(), collections_.end(),
-					     [&](const CollectionInfo &item) { return item.main_path == raw.path; });
-			if (collection != collections_.end()) {
-				entry.scene_uuids = collection->scene_uuids;
-				entry.has_scene_uuids = true;
-			}
-		}
 		raw_to_plan[index] = plan.entries.size();
 		entry_ids_by_path[raw.root + '\0' + raw.path] = entry.id;
 		plan.entries.push_back(std::move(entry));
@@ -1189,9 +1229,6 @@ Json PlanToJson(const Plan &plan)
 			}
 			if (entry.profile.has_value()) {
 				value["profile"] = *entry.profile;
-			}
-			if (entry.has_scene_uuids) {
-				value["scene_uuids"] = entry.scene_uuids;
 			}
 			if (entry.bak.has_value()) {
 				value["bak"] = *entry.bak;
