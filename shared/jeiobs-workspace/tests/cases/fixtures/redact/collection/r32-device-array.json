@@ -1,0 +1,19 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "AuxAudioDevice1": [{"id": "browser_source", "settings": {"url": "https://PLAINvalue-no-2@h.example.com/"}}],
+    "groups": [],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        }
+    ]
+}

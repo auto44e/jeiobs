@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 2}, "redactions": [{"pointer": "/sources/0/settings/ffmpeg_options", "kind": "url_credential", "start": 561, "end": 568}, {"pointer": "/sources/1/settings/ffmpeg_options", "kind": "url_credential", "start": 833, "end": 872}]}

@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "Options",
+            "settings": {"is_local_file": true, "ffmpeg_options": "a=http://cdn.example.com b=over-tb-1@PLAINvalue-tb-1 c=rtmp://relay.example.com/x?key=SECRETvalue-tb-1 key=SECRETvalue-tb-2&token=SECRETvalue-tb-3 d=over-tb-2"}
+        }
+    ]
+}

@@ -1,0 +1,15 @@
+[
+    {
+        "display_name": "Browser",
+        "module_name": "obs-browser",
+        "id": "",
+        "version": "",
+        "enabled": true,
+        "sources": [
+            "browser_source"
+        ],
+        "outputs": [],
+        "encoders": [],
+        "services": []
+    }
+]

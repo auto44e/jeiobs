@@ -84,7 +84,9 @@ One UTF-8 JSON object, no BOM. Writers choose key order and whitespace; nothing 
 
 - Every entry has `id` (unique), `status`, `root` and `path`. It also has `profile` or
   `collection` (a UID, section 9) when the file belongs to one. Pointers are RFC 6901 JSON
-  Pointers; in INI files they are `/<section>/<key>`, with the same escaping.
+  Pointers; in INI files they are `/<section>/<key>`, with the same escaping, except that a section
+  name over 1,024 bytes is written `/~section-<n>/<key>` (`n` the 0-based section ordinal; `~s`
+  cannot occur in an escaped name).
 - `"status": "stored"` adds `role`, `size`, `hash` and `fidelity`. Optional fields: `redactions`
   (`[{pointer, kind, ref}]`), `unreviewed` (`{rules, count}`), `parse` (`"invalid"` when the
   jeiobs parser rejects the file), `bak` (the id of the `<path>.bak` entry) and `load_rule`
@@ -95,7 +97,7 @@ One UTF-8 JSON object, no BOM. Writers choose key order and whitespace; nothing 
 - `target.audio` = `{sample_rate, channels, explicit, src: {entry}}`. The values come from the
   active profile's `basic.ini [Audio] SampleRate` and `ChannelSetup`
   (`OBSBasicSettings.cpp:3646,3650`). `explicit` is false when OBS's defaults apply (48000,
-  `Stereo`; `OBSBasic.cpp:758-759`). From PR2 the validator checks these values against the blob.
+  `Stereo`; `OBSBasic.cpp:758-759`). The validator checks the shape of `target.audio` (PR2); comparing it with the blob needs the INI scan and arrives with PR3.
 - `target.devices` lists the devices present at capture and stays local. Bindings inside documents
   (`device_id` in source settings, `[Audio] MonitoringDeviceId`) are document content and travel
   unchanged.
@@ -236,7 +238,9 @@ atomically.
   revision. It must not write a child of the revision or export it.
 - Unknown `major`: no writes of any kind (child, export, restore). The reader shows the revision
   read-only if it still validates under the v1 rules, and refuses it otherwise.
-- A minor only adds optional fields or features. Readers accept every minor of their major.
+- A minor only adds optional fields or features. Readers accept every minor of their major. A new
+  row in the section 7 allowlist (a new restorable file) is not optional for a reader that
+  would restore the revision: it needs an `incompat` or `ro_compat` feature name.
 - A writer creating a child copies the parent's unknown top-level fields as JSON values. It copies
   an entry's unknown fields only if the child entry has the same `root`, `path` and `hash` as the
   parent entry; otherwise it drops them and lists them in `dropped_ext`.
@@ -283,14 +287,14 @@ Section 8 lists every secret key.
 | File | Root | Role | Captured | Secret keys | Fidelity |
 | --- | --- | --- | --- | --- | --- |
 | `global.ini` | config | — | reviewed keys only, as `app_keys` (below) | legacy `[OBSWebSocket] ServerPassword` | — |
-| `user.ini` | user | `app.user` | whole file | — | `exact`; `opaque-unreviewed` with unknown sections or a non-empty `[BasicWindow] ExtraBrowserDocks` |
-| `basic/scenes/<f>.json`, `<f>.json.bak` | scenes | `collection`, `collection.bak` | whole file | browser-source URL credentials | `opaque-unreviewed` until every field is reviewed |
+| `user.ini` | user | `app.user` | whole file | dock URLs in `ExtraBrowserDocks` (flagged, not redacted) | `exact`; `opaque-unreviewed` with a non-empty `[BasicWindow] ExtraBrowserDocks` (PR2). Unknown sections follow in PR3 with the reviewed section list |
+| `basic/scenes/<f>.json`, `<f>.json.bak` | scenes | `collection`, `collection.bak` | whole file | browser-source, media-source and VLC playlist URL credentials | `opaque-unreviewed` until every field is reviewed |
 | `basic/profiles/<d>/basic.ini` | profiles | `profile.basic` | whole file | OAuth `Token`, `RefreshToken`; `[AdvOut] FFURL` credentials | `exact` or `redacted`; `opaque-unreviewed` with unknown sections or a set `FFURL` |
 | `basic/profiles/<d>/service.json`, `.bak` | profiles | `profile.service`, `profile.service.bak` | whole file | `key`, `bearer_token`, `username`, `password`; `server` credentials | `exact` or `redacted`; `opaque-unreviewed` for `rtmp_custom` and `whip_custom` (typed URL) and third-party types |
 | `basic/profiles/<d>/streamEncoder.json`, `recordEncoder.json`, `.bak` | profiles | `profile.encoder.stream`, `profile.encoder.record`, `.bak` | whole file | — | `exact` |
 | `plugin_manager/modules.json` | plugin_manager | `app.modules` | whole file | — | `exact` |
 | `plugin_config/obs-websocket/config.json` | config | `module.obs-websocket` | whole file | `server_password` | `redacted` |
-| `plugin_config/decklink-output-ui/decklink{,Preview}OutputProps.json` | config | `module.decklink-output-ui` | whole file | — | `exact` |
+| `plugin_config/decklink-output-ui/decklink{,Preview}OutputProps.json` | config | `module.decklink-output-ui` | whole file | — | `exact` (the redactor has no role for it until PR3; `jw-check redact` answers `E_SCHEMA role`) |
 | `plugin_config/aja-output-ui/aja{Output,PreviewOutput,Misc}Props.json` | config | `module.aja-output-ui` | whole file | — | `exact` |
 
 | Omitted, `reason` | Files |
@@ -343,13 +347,24 @@ plaintext websocket password, and nothing restores it as a file.
 | `service.json`, `.bak` | `/settings/username`, `/settings/password` (`rtmp-custom.c:28-29`) | `rtmp_auth` | `""` |
 | `basic.ini` | `Token`, `RefreshToken` in `[Twitch]`, `[Restream]`, `[YouTube]` (`OAuth.cpp:52-53`, `YoutubeAuth.cpp:84-85`; sections: `TwitchAuth.cpp:31`, `RestreamAuth.cpp:29`, `YoutubeAuth.cpp:23`) | `oauth_token` | `""` |
 | `obs-websocket/config.json` | `/server_password` (`Config.cpp:43`) | `ws_password` | 32 random characters (below) |
-| `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` when `is_local_file` is false (`obs-ffmpeg-source.c:182,396-422`) and `/settings/ffmpeg_options` (`:211`); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
+| `user.ini` `[BasicWindow] ExtraBrowserDocks` (dock URLs, `OBSBasic_Browser.cpp:73-90`: not redacted, a non-empty value makes the entry `opaque-unreviewed`); `service.json` `/settings/server`; `basic.ini` `/AdvOut/FFURL` (`OBSBasicSettings.cpp:3557`); collection `browser_source` `/settings/url`; `ffmpeg_source` `/settings/input` always (OBS opens it for any `is_local_file` that is not a true boolean, `obs-ffmpeg-source.c:182,396-422`; a local path has no `scheme://`) and `/settings/ffmpeg_options` (`:211`, the URL rule runs over the whole string); `vlc_source` `/settings/playlist/*/value` (`vlc-video-source.c:14,637`) | URL userinfo, and the values of query keys `key`, `token`, `access_token`, `auth`, `password`, `passphrase`, `secret`, `streamid` (any case) | `url_credential` | `""` for that byte range |
 | `global.ini` | `[OBSWebSocket] ServerPassword` (`Config.cpp:29,35`) | `ws_password` | never read; `global.ini` is not captured |
 | `plugin_config/obs-browser/` | the CEF profile | session | never captured |
 
 - Every occurrence of a registry key is redacted, duplicates included. An edit covers only the
   value: the bytes between the quotes of a JSON string, or from after the first `=` to the end of
   an INI line.
+- **URL rule.** For every `scheme://` in the value: the userinfo (the bytes up to the last `@` of the
+  authority, the `@` stays) and, after the FIRST `?` anywhere in the string (a `#` does not end the
+  query, because OBS's SRT code reads `streamid` and `passphrase` up to `&` or the end), the value
+  of each listed parameter up to the next `&`. Overlapping ranges are merged.
+- **INI files follow libobs's parser** (`config-file.c`, `lexer.c`: CR, LF, CRLF and LFCR are line
+  breaks; a header runs to the first `]` or line break, so `[Twitch` and `[Twitch]]` both name
+  section `Twitch`, and the rest of the line after a `]` is read as keys). Where the scanner is not certain (a CR not followed by LF, a `[` line that is not
+  `[name]` plus trailing blanks, a section name over 1,024 bytes) it redacts `Token` and
+  `RefreshToken` in EVERY section and position, and the file becomes `opaque-unreviewed`
+  (count +1). A redaction report that would exceed 4 MiB (64 bytes per item plus its pointer, kind
+  and placeholder) makes the file `omitted` with reason `unparseable`.
 - **Placeholders fail closed.** An empty key, token or password makes the output or the login fail
   and opens nothing.
 - **obs-websocket is the exception.** Its auth secret is derived from whatever password is stored
@@ -359,8 +374,9 @@ plaintext websocket password, and nothing restores it as a file.
     random input to redaction.
   - An explicit `"auth_required": false` becomes `true`, recorded as a `forced` redaction with
     `was: false`. An absent key already means `true` (`Config.h:42`).
-  - S2 restore never writes `""` or the stored placeholder. It re-attaches the live password or
-    generates a new one, and keeps authentication on.
+  - Restore (S2) and import (S3) never write `""` or the stored placeholder. They re-attach the
+    live password or generate a new one, and keep authentication on. An exported placeholder is a
+    known value in a public file; it is therefore never used as a live password.
   - Rejected: blanking the password (debate R1).
 - Identity values are not secrets and stay: `[Twitch] Name` and `UUID` (`TwitchAuth.cpp:164-165`),
   `[YouTube] ChannelName` (`YoutubeAuth.cpp:299`). The export review lists them, with local paths.
@@ -519,6 +535,7 @@ larger input, which is the safe failure.
 | JSON string | 16 MiB in documents, 64 KiB in manifests | 8 MiB of plugin state as hex |
 | JSON values | 1,000,000 per document, 250,000 per manifest | bounds parser memory |
 | INI line | 1 MiB | the longest real values are base64 `DockState` and `ExtraBrowserDocks` |
+| INI keys, sections | 1,000,000 keys, 100,000 sections | bounds scanner memory; OBS writes a few hundred keys |
 | Path | 512 bytes, 8 components, 255 bytes per component | OBS builds its paths in 512-byte buffers (`OBSApp.cpp:418,548`); its layout is at most 4 components deep |
 | Parent chain | 10,000 revisions | recovery walks the chain; nothing is pruned before S2 |
 
@@ -544,7 +561,8 @@ Omitted entries are never written.
 - no `\` or `:` anywhere (drive letters, UNC paths, NTFS streams);
 - no control characters (U+0000–U+001F, U+007F) and none of `< > " | ? *`;
 - no component that ends in a dot or a space;
-- no component whose part before the first dot is a Windows device name, in any case: `CON`,
+- no component whose part before the first dot, with trailing spaces removed, is a Windows device
+  name, in any case (so `CON .txt` and `nul  .json` are rejected): `CON`,
   `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, their superscript-digit forms, `CONIN$`,
   `CONOUT$`;
 - no two paths in one manifest equal under Unicode canonical caseless matching,
@@ -663,11 +681,8 @@ The options and costs as they were put to the owner. The "Decided:" labels were 
 
 - Only the PR1 slice is built (`shared/jeiobs-workspace/`), and only on Linux. Sections 2, 6
   (capture), 7–11 and the ZIP rules are design only.
-- Windows and macOS stay uncompiled for this library until the CI PR merges. On Windows,
-  `jw-check` reads `argv` in the ANSI code page, so the non-ASCII `path` cases will fail until it
-  uses `wmain` or a UTF-8 code-page manifest (the same rules pass through manifests).
-- Possible gap in the device-name rule: Windows also trims trailing spaces before comparing, so
-  `CON .txt` may name the device although the part before the first dot is `CON ` (not tested).
+- The library builds and passes its tests on Windows and Linux in CI (Ubuntu and Windows runners;
+  `jw-check` uses `wmain` and UTF-8 paths on Windows). The macOS runner has not run yet.
 - Power-loss durability cannot be shown in CI.
 - Until PR3 reviews the first-party source list, every collection is `opaque-unreviewed`.
 - Two cases are not detected: tokens inside URL paths, and plugins that write OBS files directly

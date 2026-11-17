@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "RTMPS://SECRETvalue-url-18:SECRETvalue-url-19@INGEST.EXAMPLE.COM:443/APP?KEY=SECRETvalue-url-20",
+        "bwtest": false
+    }
+}

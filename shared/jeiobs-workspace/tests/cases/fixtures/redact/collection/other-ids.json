@@ -1,0 +1,38 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "Browser_Source",
+            "name": "Case",
+            "settings": {"url": "https://PLAINvalue-id-1@h.example.com/?token=PLAINvalue-id-2"}
+        },
+        {
+            "id": "browser_source_v2",
+            "name": "Suffix",
+            "settings": {"url": "https://PLAINvalue-id-3@h.example.com/"}
+        },
+        {
+            "id": "vlc_source",
+            "name": "VLC url",
+            "settings": {"url": "https://PLAINvalue-id-4@h.example.com/", "playlist": "http://PLAINvalue-id-5@h.example.com/"}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "Wrong field",
+            "settings": {"is_local_file": false, "url": "rtmp://PLAINvalue-id-6@h.example.com/"}
+        }
+    ]
+}

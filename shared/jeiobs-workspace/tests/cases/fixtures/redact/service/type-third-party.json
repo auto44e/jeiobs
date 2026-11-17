@@ -1,0 +1,7 @@
+{
+    "type": "x_plugin_service",
+    "settings": {
+        "server": "PLAINvalue-svc-2",
+        "key": "SECRETvalue-svc-10"
+    }
+}

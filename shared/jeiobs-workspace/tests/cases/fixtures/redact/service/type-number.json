@@ -1,0 +1,7 @@
+{
+    "type": 7,
+    "settings": {
+        "service": "Twitch",
+        "bwtest": false
+    }
+}

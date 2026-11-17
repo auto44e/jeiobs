@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://SECRETvalue-je-1\"x:SECRETvalue-je-2\\@ingest.example.com\/live?key=SECRETvalue-je-3\u00e9&a=PLAINvalue-je-1",
+        "bwtest": false
+    }
+}

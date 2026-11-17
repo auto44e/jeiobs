@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 7}, "redactions": [{"pointer": "/sources/2/settings/playlist/1/value", "kind": "url_credential", "start": 781, "end": 797}]}

@@ -1,0 +1,31 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "transitions_x": [{"id": "browser_source", "settings": {"url": "https://PLAINvalue-ntl-2@h.example.com/"}}],
+    "x_nested": {"sources": [{"id": "browser_source", "settings": {"url": "https://PLAINvalue-ntl-3@h.example.com/"}}]},
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 6, "custom_size": false, "items": [{"name": "Overlay", "visible": true, "id": 1}]}
+        },
+        {
+            "id": "image_source",
+            "name": "Img",
+            "filters": [{"id": "browser_source", "name": "F", "settings": {"url": "https://PLAINvalue-ntl-1@h.example.com/"}}],
+            "settings": {"file": "/a.png"}
+        }
+    ]
+}

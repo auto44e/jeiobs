@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "SRT",
+            "settings": {"is_local_file": false, "input": "srt://relay.example.com:9000?streamid=#!::r=live/x,m=request,s=SECRETvalue-is-1&passphrase=SECRETvalue-is-2&latency=PLAINvalue-is-1"}
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 2}, "redactions": [{"pointer": "/TwitchChat/Token", "kind": "oauth_token", "start": 19, "end": 31}, {"pointer": "/YouTube2/RefreshToken", "kind": "oauth_token", "start": 56, "end": 68}]}

@@ -1,0 +1,45 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "x_nested": {"groups": [{"id": "browser_source", "settings": {"url": "https://PLAINvalue-gs-1@h.example.com/"}}]},
+    "groups": [
+        {
+            "id": "group",
+            "name": "Group",
+            "settings": {"id_counter": 0, "custom_size": true, "cx": 100, "cy": 100, "items": []}
+        },
+        {
+            "id": "browser_source",
+            "name": "G1",
+            "settings": {"url": "https://SECRETvalue-gs-1@h.example.com/?auth=SECRETvalue-gs-2"}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "G2",
+            "settings": {"is_local_file": false, "input": "rtsp://SECRETvalue-gs-3@cam.example.com/live", "ffmpeg_options": "headers=PLAINvalue-gs-2"}
+        },
+        {
+            "id": "image_source",
+            "name": "G3",
+            "settings": {"file": "/home/user/PLAINvalue-gs-3.png", "url": "https://PLAINvalue-gs-4@h.example.com/"}
+        }
+    ],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        },
+        {
+            "id": "image_source",
+            "name": "Logo",
+            "settings": {"file": "/home/user/logo.png"}
+        }
+    ]
+}

@@ -1,0 +1,19 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "DesktopAudioDevice1": "https://PLAINvalue-no-1@h.example.com/",
+    "groups": [],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        }
+    ]
+}

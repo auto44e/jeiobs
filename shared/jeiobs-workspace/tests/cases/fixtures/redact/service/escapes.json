@@ -1,0 +1,8 @@
+{
+    "type": "rtmp_common",
+    "settings": {
+        "service": "Twitch",
+        "key": "SECRETvalue-esc-1\"SECRETvalue-esc-2\\SECRETvalue-esc-3\u00e9SECRETvalue-esc-4\/\n\uD83D\uDE00SECRETvalue-esc-5",
+        "bwtest": false
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_common",
+    "settings": {
+        "service": "Twitch",
+        "key": null
+    }
+}

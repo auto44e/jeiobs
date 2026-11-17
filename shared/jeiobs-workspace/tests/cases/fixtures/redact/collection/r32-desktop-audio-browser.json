@@ -1,0 +1,19 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "DesktopAudioDevice1": {"id": "browser_source", "name": "Desktop Audio", "settings": {"url": "https://SECRETvalue-ad-1:SECRETvalue-ad-2@h.example.com/a?token=SECRETvalue-ad-3&x=PLAINvalue-ad-1"}},
+    "groups": [],
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 1, "custom_size": false, "items": []}
+        }
+    ]
+}

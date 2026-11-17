@@ -1,0 +1,24 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "browser_source",
+            "versioned_id": "",
+            "name": "Empty versioned_id",
+            "settings": {"url": "https://user-ve:pass-ve@h.example.com/"}
+        }
+    ]
+}

@@ -1,0 +1,58 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "scene",
+            "name": "Scene",
+            "settings": {"id_counter": 6, "custom_size": false, "items": [{"name": "Overlay", "visible": true, "id": 1}]}
+        },
+        {
+            "id": "group",
+            "name": "Group",
+            "settings": {"id_counter": 0, "custom_size": true, "cx": 100, "cy": 100, "items": []}
+        },
+        {
+            "id": "browser_source",
+            "name": "Overlay",
+            "settings": {"url": "https://SECRETvalue-col-1:SECRETvalue-col-2@overlay.example.com/alerts?token=SECRETvalue-col-3&theme=PLAINvalue-col-1", "width": 1920, "height": 1080, "css": "body { background-color: rgba(0, 0, 0, 0); }", "is_local_file": false}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "Remote",
+            "settings": {"is_local_file": false, "input": "rtmp://SECRETvalue-col-4@relay.example.com/live?key=SECRETvalue-col-5", "ffmpeg_options": "rtsp_transport=tcp http_proxy=http://SECRETvalue-col-6:SECRETvalue-col-7@proxy.example.com:3128", "buffering_mb": 2}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "Clip",
+            "settings": {"is_local_file": true, "local_file": "/home/user/PLAINvalue-col-2.mp4", "input": "rtmp://SECRETvalue-col-11:SECRETvalue-col-12@relay.example.com/live?key=SECRETvalue-col-13", "ffmpeg_options": "reconnect=1 headers=PLAINvalue-col-6", "looping": true}
+        },
+        {
+            "id": "vlc_source",
+            "name": "Playlist",
+            "settings": {"playlist": [{"value": "http://SECRETvalue-col-8:SECRETvalue-col-9@media.example.com/a.mp4?auth=SECRETvalue-col-10", "hidden": false, "selected": false}, {"value": "/home/user/PLAINvalue-col-7.mkv", "hidden": false, "selected": false}], "loop": true}
+        },
+        {
+            "id": "image_source",
+            "name": "Logo",
+            "settings": {"file": "/home/user/logo.png"}
+        },
+        {
+            "id": "text_ft2_source_v2",
+            "name": "Text",
+            "settings": {"text": "PLAINvalue-col-8 password=PLAINvalue-col-9 rtmp://PLAINvalue-col-10@h.example.com/?key=PLAINvalue-col-11"}
+        }
+    ]
+}

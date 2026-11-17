@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "redacted", "redactions": [{"pointer": "/Twitch/Token", "kind": "oauth_token", "start": 19, "end": 36}, {"pointer": "/Twitch/RefreshToken", "kind": "oauth_token", "start": 51, "end": 68}]}

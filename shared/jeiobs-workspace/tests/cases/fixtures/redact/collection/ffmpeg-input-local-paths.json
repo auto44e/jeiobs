@@ -1,0 +1,38 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "Unix",
+            "settings": {"is_local_file": true, "local_file": "/home/user/PLAINvalue-lp-1.mp4", "input": "/home/user/PLAINvalue-lp-1.mp4"}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "Windows",
+            "settings": {"is_local_file": true, "input": "C:\\Users\\PLAINvalue-lp-2\\a@b.mp4"}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "File URL",
+            "settings": {"input": "file:///home/PLAINvalue-lp-3@x/a.mp4?key=1"}
+        },
+        {
+            "id": "ffmpeg_source",
+            "name": "No scheme",
+            "settings": {"is_local_file": false, "input": "PLAINvalue-lp-4@host:clip.mp4?token=x"}
+        }
+    ]
+}

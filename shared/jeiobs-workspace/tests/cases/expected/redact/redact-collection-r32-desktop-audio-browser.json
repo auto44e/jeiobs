@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "redactions": [{"pointer": "/DesktopAudioDevice1/settings/url", "kind": "url_credential", "start": 272, "end": 305}, {"pointer": "/DesktopAudioDevice1/settings/url", "kind": "url_credential", "start": 328, "end": 344}]}

@@ -1,0 +1,53 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "image_source",
+            "versioned_id": "browser_source",
+            "name": "Browser by versioned_id",
+            "settings": {"url": "https://SECRETvalue-vi-1@h.example.com/"}
+        },
+        {
+            "id": "browser_source",
+            "versioned_id": "image_source",
+            "name": "Image by versioned_id",
+            "settings": {"url": "https://PLAINvalue-vi-1@h.example.com/"}
+        },
+        {
+            "id": "browser_source",
+            "versioned_id": 7,
+            "name": "versioned_id not a string",
+            "settings": {"url": "https://SECRETvalue-vi-2@h.example.com/"}
+        },
+        {
+            "id": "vlc_source",
+            "versioned_id": "ffmpeg_source",
+            "name": "ffmpeg by versioned_id",
+            "settings": {"input": "rtmp://SECRETvalue-vi-3@h.example.com/", "playlist": [{"value": "http://PLAINvalue-vi-2@h.example.com/"}]}
+        },
+        {
+            "id": "ffmpeg_source",
+            "versioned_id": "vlc_source",
+            "name": "vlc by versioned_id",
+            "settings": {"input": "rtmp://PLAINvalue-vi-3@h.example.com/", "playlist": [{"value": "http://SECRETvalue-vi-4@h.example.com/"}]}
+        },
+        {
+            "versioned_id": "browser_source",
+            "name": "versioned_id only",
+            "settings": {"url": "https://SECRETvalue-vi-5@h.example.com/"}
+        }
+    ]
+}

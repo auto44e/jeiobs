@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://SECRETvalue-pe-1%40x:SECRETvalue-pe-2%3A%2F@ingest.example.com/live?%6Bey=PLAINvalue-pe-1&key=SECRETvalue-pe-3%26token%3DSECRETvalue-pe-4&token%3D=PLAINvalue-pe-2",
+        "bwtest": false
+    }
+}

@@ -89,6 +89,75 @@ bool ContainsNul(std::string_view value)
 	return value.find('\0') != std::string_view::npos;
 }
 
+bool StringsWithinLimit(std::string_view bytes, std::size_t limit)
+{
+	for (std::size_t index = 0U; index < bytes.size(); ++index) {
+		if (bytes[index] != '"') {
+			continue;
+		}
+		std::size_t decoded = 0U;
+		++index;
+		while (index < bytes.size()) {
+			const unsigned char character = static_cast<unsigned char>(bytes[index]);
+			if (character == '"') {
+				break;
+			}
+			std::size_t width = 1U;
+			if (character == '\\') {
+				if (index + 1U >= bytes.size()) {
+					break;
+				}
+				if (bytes[index + 1U] == 'u' && index + 6U <= bytes.size()) {
+					unsigned int code_unit = 0U;
+					for (std::size_t offset = 0U; offset < 4U; ++offset) {
+						const char digit = bytes[index + 2U + offset];
+						if (!((digit >= '0' && digit <= '9') ||
+						      (digit >= 'a' && digit <= 'f') ||
+						      (digit >= 'A' && digit <= 'F'))) {
+							code_unit = 0U;
+							break;
+						}
+						code_unit = (code_unit << 4U) |
+							    static_cast<unsigned int>(
+								    digit >= '0' && digit <= '9'
+									    ? digit - '0'
+									    : (digit >= 'a' && digit <= 'f'
+										       ? digit - 'a' + 10
+										       : digit - 'A' + 10));
+					}
+					width = code_unit <= 0x7fU ? 1U : (code_unit <= 0x7ffU ? 2U : 3U);
+					if (code_unit >= 0xd800U && code_unit <= 0xdbffU &&
+					    index + 12U <= bytes.size() && bytes[index + 6U] == '\\' &&
+					    bytes[index + 7U] == 'u') {
+						width = 4U;
+						index += 6U;
+					}
+					index += 6U;
+				} else {
+					width = 1U;
+					index += 2U;
+				}
+			} else if (character >= 0x80U) {
+				if (character >= 0xc2U && character <= 0xdfU) {
+					width = 2U;
+				} else if (character >= 0xe0U && character <= 0xefU) {
+					width = 3U;
+				} else if (character >= 0xf0U && character <= 0xf4U) {
+					width = 4U;
+				}
+				index += width;
+			} else {
+				++index;
+			}
+			if (width > limit - decoded) {
+				return false;
+			}
+			decoded += width;
+		}
+	}
+	return true;
+}
+
 class BoundedSax final : public JsonSax {
 	struct Frame {
 		enum class Kind {
@@ -299,6 +368,9 @@ JsonResult ParseJsonInternal(std::string_view bytes)
 	if (!IsValidUtf8(bytes)) {
 		return {std::nullopt, MakeError(ErrorCode::Utf8)};
 	}
+	if (!StringsWithinLimit(bytes, Limits::kStringBytes)) {
+		return {std::nullopt, MakeError(ErrorCode::Limit, "string")};
+	}
 
 	BoundedSax sax;
 	bool parsed = false;
@@ -412,6 +484,86 @@ Error Schema(std::string field)
 bool IsObjectWithString(const Json &object, const char *field)
 {
 	return object.contains(field) && object.at(field).is_string();
+}
+
+Error ValidateKnownStringFields(const Json &object, std::string_view detail,
+				const std::initializer_list<const char *> &known_fields)
+{
+	if (!object.is_object()) {
+		return Schema(std::string(detail));
+	}
+	for (const char *field : known_fields) {
+		if (object.contains(field) && !object.at(field).is_string()) {
+			return Schema(std::string(detail));
+		}
+	}
+	return {};
+}
+
+Error ValidateAppKeys(const Json &document)
+{
+	for (const Json &app_key : document.at("app_keys")) {
+		if (!app_key.is_object()) {
+			return Schema("app_keys");
+		}
+		for (const char *field : {"root", "file", "section", "key", "value", "restore"}) {
+			if (!IsObjectWithString(app_key, field)) {
+				return Schema("app_keys");
+			}
+		}
+		const std::string &restore = app_key.at("restore").get_ref<const std::string &>();
+		if (restore != "same-os" && restore != "never") {
+			return Schema("app_keys");
+		}
+	}
+	return {};
+}
+
+Error ValidateDroppedExtensions(const Json &document)
+{
+	for (const Json &extension : document.at("dropped_ext")) {
+		if (!extension.is_object() || !extension.contains("entry") || !extension.contains("fields")) {
+			return Schema("dropped_ext");
+		}
+		if (!extension.at("entry").is_null() && !extension.at("entry").is_string()) {
+			return Schema("dropped_ext");
+		}
+		if (!extension.at("fields").is_array()) {
+			return Schema("dropped_ext");
+		}
+		for (const Json &field : extension.at("fields")) {
+			if (!field.is_string()) {
+				return Schema("dropped_ext");
+			}
+		}
+	}
+	return {};
+}
+
+Error ValidateTargetAudio(const Json &document, ManifestMode mode)
+{
+	const Json &target = document.at("target");
+	if (!target.contains("audio")) {
+		return {};
+	}
+	const Json &audio = target.at("audio");
+	if (!audio.is_object() || !audio.contains("sample_rate") || !IsPositiveInteger(audio.at("sample_rate")) ||
+	    !audio.contains("channels") || !audio.at("channels").is_string() ||
+	    audio.at("channels").get_ref<const std::string &>().empty()) {
+		return Schema("target.audio");
+	}
+	if (audio.contains("explicit")) {
+		if (mode == ManifestMode::Export || !audio.at("explicit").is_boolean()) {
+			return Schema("target.audio");
+		}
+	}
+	if (audio.contains("src")) {
+		if (mode == ManifestMode::Export || !audio.at("src").is_object() ||
+		    !IsObjectWithString(audio.at("src"), "entry")) {
+			return Schema("target.audio");
+		}
+	}
+	return {};
 }
 
 Error ValidateCompat(const Json &document, bool &ro_compat)
@@ -738,11 +890,11 @@ Error ValidateExportObjects(const Json &document, ManifestMode mode)
 	}
 	if (target.contains("audio")) {
 		if (!target.at("audio").is_object()) {
-			return Schema("target");
+			return Schema("target.audio");
 		}
 		for (const auto &[key, ignored] : target.at("audio").items()) {
 			if (key != "sample_rate" && key != "channels") {
-				return Schema("target");
+				return Schema("target.audio");
 			}
 		}
 	}
@@ -784,6 +936,14 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 		if (!document.at(field).is_object()) {
 			return {std::nullopt, Schema(field)};
 		}
+		const Error string_error =
+			std::string_view(field) == "creator"
+				? ValidateKnownStringFields(document.at(field), field,
+							    {"app", "version", "commit", "obs_base"})
+				: ValidateKnownStringFields(document.at(field), field, {"profile", "collection"});
+		if (!string_error.ok()) {
+			return {std::nullopt, string_error};
+		}
 	}
 	if (!document.at("target").is_object()) {
 		return {std::nullopt, Schema("target")};
@@ -796,6 +956,18 @@ ManifestResult ValidateDocument(Json document, ManifestMode mode)
 	}
 	if (!document.at("dropped_ext").is_array()) {
 		return {std::nullopt, Schema("dropped_ext")};
+	}
+	const Error audio_error = ValidateTargetAudio(document, mode);
+	if (!audio_error.ok()) {
+		return {std::nullopt, audio_error};
+	}
+	const Error app_keys_error = ValidateAppKeys(document);
+	if (!app_keys_error.ok()) {
+		return {std::nullopt, app_keys_error};
+	}
+	const Error dropped_ext_error = ValidateDroppedExtensions(document);
+	if (!dropped_ext_error.ok()) {
+		return {std::nullopt, dropped_ext_error};
 	}
 	const Error export_object_error = ValidateExportObjects(document, mode);
 	if (!export_object_error.ok()) {
@@ -980,6 +1152,18 @@ void AppendDropped(Json &dropped, const Json &entry, std::vector<std::string> fi
 	}
 	record["fields"] = std::move(fields);
 	dropped.push_back(std::move(record));
+}
+
+Json CopyDroppedExtensions(const Json &extensions)
+{
+	Json copied = Json::array();
+	for (const Json &extension : extensions) {
+		Json item = Json::object();
+		item["entry"] = extension.at("entry");
+		item["fields"] = extension.at("fields");
+		copied.push_back(std::move(item));
+	}
+	return copied;
 }
 
 std::string EntryKey(const Json &entry)
@@ -1289,7 +1473,7 @@ JsonResult ProjectForExport(const Manifest &manifest, std::string_view bytesHash
 		}
 		result["app_keys"] = std::move(app_keys);
 
-		Json dropped_ext = manifest.document.at("dropped_ext");
+		Json dropped_ext = CopyDroppedExtensions(manifest.document.at("dropped_ext"));
 		AppendDropped(dropped_ext, nullptr, ExportUnknownFields(manifest.document));
 
 		Json projected_entries = Json::array();

@@ -1,0 +1,23 @@
+{
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [
+        {
+            "name": "Scene"
+        }
+    ],
+    "name": "Main",
+    "groups": [],
+    "quick_transitions": [],
+    "transitions": [],
+    "saved_projectors": [],
+    "current_transition": "Fade",
+    "transition_duration": 300,
+    "sources": [
+        {
+            "id": "ffmpeg_source",
+            "name": "Media",
+            "settings": {"input": "rtmp://SECRETvalue-fl-1:SECRETvalue-fl-2@relay.example.com/live?key=SECRETvalue-fl-3", "local_file": "/home/user/PLAINvalue-fl-4.mp4"}
+        }
+    ]
+}

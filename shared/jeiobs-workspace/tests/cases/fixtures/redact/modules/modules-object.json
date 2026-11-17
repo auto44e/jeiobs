@@ -1,0 +1,5 @@
+{
+    "x_modules": [
+        {"module_name": "obs-browser", "enabled": true, "key": "PLAINvalue-mod-1"}
+    ]
+}

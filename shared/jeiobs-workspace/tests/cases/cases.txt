@@ -1,10 +1,11 @@
-# Black-box cases for jw-check (jeiobs-workspace, S1-PR1), run by run-cases.cmake.
-# Expected values come from docs/jeiobs/WORKSPACE_FORMAT.md and the S1-PR1 CLI contract.
+# Black-box cases for jw-check (jeiobs-workspace, S1-PR1 and S1-PR2), run by run-cases.cmake.
+# Expected values come from docs/jeiobs/WORKSPACE_FORMAT.md and the S1-PR1 and S1-PR2 CLI contracts.
 #
 # One case per line:   NAME | EXIT | EXPECTED | ARGS
 #   NAME      letters, digits, ".", "_", "-". A name ending in "@posix" is skipped on Windows
 #             (an argument holds bytes that are not UTF-8, or names a POSIX device such as /dev/null).
-#   EXIT      expected exit code: 0 OK, 1 ERR, 2 usage.
+#   EXIT      expected exit code: 0 OK, 1 ERR, 2 usage. N,M accepts either (only where the contract
+#             allows both readings). Whatever EXIT allows, an OK line needs exit 0 and an ERR line exit 1.
 #   EXPECTED  compared with stdout after trailing CR and LF characters are removed:
 #               TEXT     exact match, for example "OK readonly" or "ERR E_PATH dot"
 #               ~REGEX   CMake regular expression that must match stdout (anchor it)
@@ -18,6 +19,30 @@
 # Fields are separated by " | ". Blank lines and lines starting with # are ignored.
 # Semicolons, square brackets and backslashes are not allowed anywhere in this file
 # (CMake list syntax). Write them as %3B, %5B, %5D and %5C.
+#
+# redact cases (ARGS start with "redact"): redact ROLE INFILE ${OUT} ${REPORT}, optionally followed
+#   by --ws-placeholder P. ${OUT} and ${REPORT} are this case's OUTFILE and REPORT in the scratch
+#   directory. The runner deletes them before the case runs. EXPECTED is the stdout check above,
+#   followed for a case that prints OK by
+#     report=FILE,FILE,...   REPORT must be one JSON object equal to one of the FILEs (several FILEs
+#                            only where the contract allows more than one reading), or report=* for
+#                            "not compared"
+#     out=FILE               (optional) OUTFILE must have exactly the bytes of FILE
+#     timeout=N              (optional) the case fails after N seconds (default 120)
+#   FILE is relative to this directory, or ${WORK}/... for a file that run-cases.cmake generates.
+#   and the runner then checks, for every redact case:
+#     - OUTFILE exists if and only if REPORT says "outcome":"stored", and never after an ERR line.
+#     - Each redaction has a string pointer, a known kind, integers 0 <= start <= end <= INFILE size,
+#       "was": false if forced, and the redactions are sorted by start and do not overlap.
+#     - OUTFILE is INFILE with exactly the reported ranges replaced, by "" (stream_key,
+#       bearer_token, rtmp_auth, oauth_token, url_credential), "true" (forced) or the placeholder
+#       (ws_password). Every other byte is unchanged.
+#     - OUTFILE holds no "SECRETvalue" (each fixture secret starts with it) and as many "PLAINvalue"
+#       as INFILE (values the rules must keep, often next to a secret), also over 4 MiB.
+#     - A REPORT with more than 256 ranges is checked by its equality with the expected REPORT and
+#       out=FILE (made together by run-cases.cmake) instead of range by range.
+#     - Without --ws-placeholder, each placeholder is 32 characters of A-Z, a-z, 0-9, and a second
+#       run gives the same REPORT and another placeholder.
 
 # ---- usage (exit 2, stdout not checked)
 usage-no-arguments | 2 | *
@@ -174,6 +199,10 @@ parse-nonfinite | 1 | ERR E_NONFINITE | manifest fixtures/manifest/parse-nonfini
 parse-nonfinite-negative | 1 | ERR E_NONFINITE | manifest fixtures/manifest/parse-nonfinite-negative.json
 parse-nonfinite-nested | 1 | ERR E_NONFINITE | manifest fixtures/manifest/parse-nonfinite-nested.json
 parse-bom | 1 | ERR E_BOM | manifest ${WORK}/bom.json
+parse-bom-revision | 1 | ERR E_BOM | revision fixtures/rev/bom/0000000003-973ac4ca42676b5d78f865515df7b6c445d5c0ca01f7ff90ee25365ebdcb3a5e.json
+parse-bom-export-manifest | 1 | ERR E_BOM | export ${WORK}/bom.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z
+parse-bom-child-parent | 1 | ERR E_BOM | child ${WORK}/bom.json fixtures/child/draft.json
+parse-bom-child-draft | 1 | ERR E_BOM | child fixtures/child/parent-base.json ${WORK}/bom.json
 parse-empty-file | 1 | ERR E_JSON | manifest ${WORK}/empty.bin
 parse-syntax-truncated | 1 | ERR E_JSON | manifest fixtures/manifest/parse-syntax-truncated.json
 parse-syntax-trailing-comma | 1 | ERR E_JSON | manifest fixtures/manifest/parse-syntax-trailing-comma.json
@@ -404,7 +433,8 @@ export-schema-origin-missing-workspace-id | 1 | ~^ERR E_SCHEMA (origin.)?workspa
 export-schema-target-machine-id | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-machine-id.json --export
 export-schema-target-arch | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-arch.json --export
 export-schema-target-unknown-field | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-unknown-field.json --export
-export-schema-target-audio-explicit | 1 | ERR E_SCHEMA target | manifest fixtures/manifest/export-schema-target-audio-explicit.json --export
+# r3 item 12: every target.audio error in export mode is E_SCHEMA target.audio
+export-schema-target-audio-explicit | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/export-schema-target-audio-explicit.json --export
 export-schema-app-key-restore-never | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/export-schema-app-key-restore-never.json --export
 export-schema-target-without-audio | 0 | OK | manifest fixtures/manifest/export-schema-target-without-audio.json --export
 export-schema-stored-machine-id | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/export-schema-stored-machine-id.json --export
@@ -577,3 +607,662 @@ export-now-trailing-space | 1 | ERR E_SCHEMA now | export fixtures/manifest/loca
 export-now-date-only | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16
 export-now-empty | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now ""
 export-now-not-utf8@posix | 1 | ERR E_SCHEMA now | export fixtures/manifest/local-base.json fixtures/export/decisions-base.json --now 2026-11-16T19:10:42Z%FF
+
+# ---- manifest: value types of known fields (S1-PR2 Part B).
+# creator and active members, app_keys items, dropped_ext items and target.audio, in local and
+# export mode and through the export and child commands. Unknown members stay unchecked (section 5).
+partb-creator-app-number | 1 | ~^ERR E_SCHEMA (creator|creator.app|app)$ | manifest fixtures/manifest/partb-creator-app-number.json
+partb-creator-version-null | 1 | ~^ERR E_SCHEMA (creator|creator.version|version)$ | manifest fixtures/manifest/partb-creator-version-null.json
+partb-creator-commit-object | 1 | ~^ERR E_SCHEMA (creator|creator.commit|commit)$ | manifest fixtures/manifest/partb-creator-commit-object.json
+partb-creator-obs-base-array | 1 | ~^ERR E_SCHEMA (creator|creator.obs_base|obs_base)$ | manifest fixtures/manifest/partb-creator-obs-base-array.json
+partb-active-profile-number | 1 | ~^ERR E_SCHEMA (active|active.profile|profile)$ | manifest fixtures/manifest/partb-active-profile-number.json
+partb-active-collection-null | 1 | ~^ERR E_SCHEMA (active|active.collection|collection)$ | manifest fixtures/manifest/partb-active-collection-null.json
+partb-creator-unknown-member-not-checked | 0 | OK | manifest fixtures/manifest/partb-creator-unknown-member-number.json
+partb-export-creator-app-number | 1 | ~^ERR E_SCHEMA (creator|creator.app|app)$ | manifest fixtures/manifest/partb-export-creator-app-number.json --export
+partb-app-keys-item-string | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-item-string.json
+partb-app-keys-item-array | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-item-array.json
+partb-app-keys-missing-restore | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-missing-restore.json
+partb-app-keys-restore-unknown | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-restore-unknown.json
+partb-app-keys-restore-case | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-restore-case.json
+partb-app-keys-restore-null | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-restore-null.json
+partb-app-keys-restore-true | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-restore-true.json
+partb-app-keys-root-number | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-root-number.json
+partb-app-keys-missing-file | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-missing-file.json
+partb-app-keys-section-null | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-section-null.json
+partb-app-keys-key-object | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-key-object.json
+partb-app-keys-value-number | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-value-number.json
+partb-app-keys-missing-value | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-app-keys-missing-value.json
+partb-app-keys-empty-strings-ok | 0 | OK | manifest fixtures/manifest/partb-app-keys-empty-strings.json
+partb-app-keys-unknown-member-ok | 0 | OK | manifest fixtures/manifest/partb-app-keys-unknown-member.json
+partb-export-app-keys-missing-restore | 1 | ERR E_SCHEMA app_keys | manifest fixtures/manifest/partb-export-app-keys-missing-restore.json --export
+partb-dropped-ext-item-string | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-item-string.json
+partb-dropped-ext-item-null | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-item-null.json
+partb-dropped-ext-missing-entry | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-missing-entry.json
+partb-dropped-ext-entry-number | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-entry-number.json
+partb-dropped-ext-entry-object | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-entry-object.json
+partb-dropped-ext-missing-fields | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-missing-fields.json
+partb-dropped-ext-fields-string | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-fields-string.json
+partb-dropped-ext-fields-null | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-fields-null.json
+partb-dropped-ext-fields-number-item | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-fields-number-item.json
+partb-dropped-ext-second-item-bad | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-dropped-ext-second-item-bad.json
+partb-dropped-ext-ok | 0 | OK | manifest fixtures/manifest/partb-dropped-ext-ok.json
+partb-export-dropped-ext-fields-number-item | 1 | ERR E_SCHEMA dropped_ext | manifest fixtures/manifest/partb-export-dropped-ext-fields-number-item.json --export
+partb-export-dropped-ext-ok | 0 | OK | manifest fixtures/manifest/partb-export-dropped-ext-ok.json --export
+partb-audio-string | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-string.json
+partb-audio-null | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-null.json
+partb-audio-array | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-array.json
+partb-audio-missing-sample-rate | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-missing-sample-rate.json
+partb-audio-sample-rate-zero | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-sample-rate-zero.json
+partb-audio-sample-rate-negative | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-sample-rate-negative.json
+partb-audio-sample-rate-fraction | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-sample-rate-fraction.json
+partb-audio-sample-rate-string | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-sample-rate-string.json
+partb-audio-sample-rate-true | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-sample-rate-true.json
+partb-audio-missing-channels | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-missing-channels.json
+partb-audio-channels-empty | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-channels-empty.json
+partb-audio-channels-number | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-channels-number.json
+partb-audio-explicit-string | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-explicit-string.json
+partb-audio-explicit-number | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-explicit-number.json
+partb-audio-explicit-null | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-explicit-null.json
+partb-audio-src-string | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-src-string.json
+partb-audio-src-empty-object | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-src-empty-object.json
+partb-audio-src-entry-number | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-src-entry-number.json
+partb-audio-src-entry-null | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-audio-src-entry-null.json
+partb-audio-ok-full | 0 | OK | manifest fixtures/manifest/partb-audio-ok-full.json
+partb-audio-ok-minimal | 0 | OK | manifest fixtures/manifest/partb-audio-ok-minimal.json
+partb-audio-ok-explicit-false-src | 0 | OK | manifest fixtures/manifest/partb-audio-ok-explicit-false-src.json
+partb-target-without-audio-ok | 0 | OK | manifest fixtures/manifest/partb-target-without-audio.json
+partb-export-audio-src | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-src.json --export
+partb-export-audio-string | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-string.json --export
+partb-export-audio-sample-rate-zero | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-sample-rate-zero.json --export
+partb-export-audio-channels-empty | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-channels-empty.json --export
+partb-export-audio-missing-channels | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-missing-channels.json --export
+# r3 item 12: also an audio member that export mode does not allow (r2 item 7 allows sample_rate and channels)
+partb-export-audio-unknown-member | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-unknown-member.json --export
+partb-export-audio-null | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-null.json --export
+partb-export-audio-explicit-true | 1 | ERR E_SCHEMA target.audio | manifest fixtures/manifest/partb-export-audio-explicit-true.json --export
+partb-export-command-app-keys-missing-restore | 1 | ERR E_SCHEMA app_keys | export fixtures/manifest/partb-app-keys-missing-restore.json fixtures/export/decisions-base.json --now 2027-01-02T03:04:05Z
+partb-export-command-dropped-ext-missing-fields | 1 | ERR E_SCHEMA dropped_ext | export fixtures/manifest/partb-dropped-ext-missing-fields.json fixtures/export/decisions-base.json --now 2027-01-02T03:04:05Z
+partb-export-command-audio-sample-rate-string | 1 | ERR E_SCHEMA target.audio | export fixtures/manifest/partb-audio-sample-rate-string.json fixtures/export/decisions-base.json --now 2027-01-02T03:04:05Z
+partb-export-command-creator-app-number | 1 | ~^ERR E_SCHEMA (creator|creator.app|app)$ | export fixtures/manifest/partb-creator-app-number.json fixtures/export/decisions-base.json --now 2027-01-02T03:04:05Z
+partb-child-parent-dropped-ext-bad | 1 | ERR E_SCHEMA dropped_ext | child fixtures/child/partb-parent-dropped-ext-bad.json fixtures/child/draft.json
+partb-child-draft-audio-bad | 1 | ERR E_SCHEMA target.audio | child fixtures/child/parent-base.json fixtures/child/partb-draft-audio-bad.json
+partb-child-draft-app-keys-bad | 1 | ERR E_SCHEMA app_keys | child fixtures/child/parent-base.json fixtures/child/partb-draft-app-keys-bad.json
+partb-revision-audio | 1 | ERR E_SCHEMA target.audio | revision fixtures/rev/partb-audio/0000000003-937f288ba4392d8dcbbbbfb91327407a350cee01329f3c70336006d6f4bf3509.json
+partb-revision-app-keys | 1 | ERR E_SCHEMA app_keys | revision fixtures/rev/partb-app-keys/0000000003-d1b46374033bcadfa5e39e9766055d33f8f043f1296ab13915391e38a0bcf3ab.json
+
+# ---- redact: fidelity precedence. opaque-unreviewed if an unreviewed rule applies, else redacted if
+# there is a redaction, else exact. Registry secrets are redacted in opaque-unreviewed files too. Shown by
+# redact-service-rtmp-common-no-secret (exact), redact-service-rtmp-common (redacted),
+# redact-service-rtmp-custom (opaque with redactions), redact-service-type-rtmp-custom-no-secret (opaque
+# without), redact-basic-unknown-section-and-token, redact-ws-password-number (opaque, forced edit kept)
+# and redact-invalid-encoder-* (opaque, parse invalid).
+# Not here: r3.2 item 2 (an edit that cannot be applied fails closed, never stored unredacted) needs a fault
+# inside the library, which no input reaches through the CLI. The same item has jw-fuzz-smoke check it.
+
+# ---- redact profile.service and .bak (JSON). Registry: /settings/key stream_key, /settings/bearer_token
+# bearer_token, /settings/username and /settings/password rtmp_auth, /settings/server url_credential (URL
+# rule). Unreviewed: type is not "rtmp_common" (count 1). A registry value that is not a string is kept
+# and counts 1. Fidelity: opaque-unreviewed, else redacted with redactions, else exact.
+redact-service-rtmp-common | 0 | OK report=expected/redact/redact-service-rtmp-common.json out=expected/redact/redact-service-rtmp-common.out | redact profile.service fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-service-bak-rtmp-common | 0 | OK report=expected/redact/redact-service-rtmp-common.json | redact profile.service.bak fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-service-placeholder-given-other-role | 0 | OK report=expected/redact/redact-service-rtmp-common.json | redact profile.service fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-service-rtmp-common-crlf | 0 | OK report=expected/redact/redact-service-rtmp-common-crlf.json | redact profile.service fixtures/redact/service/rtmp-common-crlf.json ${OUT} ${REPORT}
+redact-service-rtmp-common-no-secret | 0 | OK report=expected/redact/exact.json | redact profile.service fixtures/redact/service/rtmp-common-no-key.json ${OUT} ${REPORT}
+# reading: an empty registry string is still redacted (a zero-length edit), so the file is redacted
+redact-service-rtmp-common-empty-key | 0 | OK report=expected/redact/redact-service-rtmp-common-empty-key.json | redact profile.service fixtures/redact/service/rtmp-common-empty-key.json ${OUT} ${REPORT}
+redact-service-rtmp-custom | 0 | OK report=expected/redact/redact-service-rtmp-custom.json out=expected/redact/redact-service-rtmp-custom.out | redact profile.service fixtures/redact/service/rtmp-custom.json ${OUT} ${REPORT}
+redact-service-bak-rtmp-custom | 0 | OK report=expected/redact/redact-service-rtmp-custom.json | redact profile.service.bak fixtures/redact/service/rtmp-custom.json ${OUT} ${REPORT}
+redact-service-whip-custom | 0 | OK report=expected/redact/redact-service-whip-custom.json | redact profile.service fixtures/redact/service/whip-custom.json ${OUT} ${REPORT}
+redact-service-row-key | 0 | OK report=expected/redact/redact-service-row-key.json | redact profile.service fixtures/redact/service/row-key.json ${OUT} ${REPORT}
+redact-service-row-bearer-token | 0 | OK report=expected/redact/redact-service-row-bearer-token.json | redact profile.service fixtures/redact/service/row-bearer-token.json ${OUT} ${REPORT}
+redact-service-row-username | 0 | OK report=expected/redact/redact-service-row-username.json | redact profile.service fixtures/redact/service/row-username.json ${OUT} ${REPORT}
+redact-service-row-password | 0 | OK report=expected/redact/redact-service-row-password.json | redact profile.service fixtures/redact/service/row-password.json ${OUT} ${REPORT}
+redact-service-row-server | 0 | OK report=expected/redact/redact-service-row-server.json | redact profile.service fixtures/redact/service/row-server.json ${OUT} ${REPORT}
+redact-service-type-rtmp-custom-no-secret | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/rtmp-custom-no-secret.json ${OUT} ${REPORT}
+redact-service-type-third-party | 0 | OK report=expected/redact/redact-service-type-third-party.json | redact profile.service fixtures/redact/service/type-third-party.json ${OUT} ${REPORT}
+redact-service-type-absent | 0 | OK report=expected/redact/redact-service-type-absent.json | redact profile.service fixtures/redact/service/type-absent.json ${OUT} ${REPORT}
+redact-service-type-number | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/type-number.json ${OUT} ${REPORT}
+redact-service-type-null | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/type-null.json ${OUT} ${REPORT}
+redact-service-type-object | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/type-object.json ${OUT} ${REPORT}
+redact-service-type-uppercase | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/type-uppercase.json ${OUT} ${REPORT}
+redact-service-type-trailing-space | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/type-trailing-space.json ${OUT} ${REPORT}
+# reading: names and values compare after JSON unescaping, as OBS (jansson) reads them
+redact-service-type-escaped-is-rtmp-common | 0 | OK report=expected/redact/redact-service-type-escaped-is-rtmp-common.json | redact profile.service fixtures/redact/service/type-escaped.json ${OUT} ${REPORT}
+redact-service-empty-object | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/empty-object.json ${OUT} ${REPORT}
+redact-service-key-number | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/key-number.json ${OUT} ${REPORT}
+redact-service-key-null | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/key-null.json ${OUT} ${REPORT}
+redact-service-key-object | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/key-object.json ${OUT} ${REPORT}
+redact-service-key-array | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/key-array.json ${OUT} ${REPORT}
+redact-service-key-true | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/key-true.json ${OUT} ${REPORT}
+redact-service-server-number | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/service/server-number.json ${OUT} ${REPORT}
+redact-service-custom-two-not-strings | 0 | OK report=expected/redact/redact-service-custom-two-not-strings.json | redact profile.service fixtures/redact/service/rtmp-custom-two-not-strings.json ${OUT} ${REPORT}
+redact-service-escapes-in-value | 0 | OK report=expected/redact/redact-service-escapes-in-value.json out=expected/redact/redact-service-escapes-in-value.out | redact profile.service fixtures/redact/service/escapes.json ${OUT} ${REPORT}
+redact-service-non-ascii-value | 0 | OK report=expected/redact/redact-service-non-ascii-value.json | redact profile.service fixtures/redact/service/non-ascii-value.json ${OUT} ${REPORT}
+# reading: a member name spelled with an escape (ke, then y as a u-escape) is key, as OBS reads it
+redact-service-escaped-member-name | 0 | OK report=expected/redact/redact-service-escaped-member-name.json | redact profile.service fixtures/redact/service/escaped-member-name.json ${OUT} ${REPORT}
+redact-service-only-registry-pointers | 0 | OK report=expected/redact/exact.json | redact profile.service fixtures/redact/service/not-registry-positions.json ${OUT} ${REPORT}
+redact-service-settings-not-object | 0 | OK report=expected/redact/exact.json | redact profile.service fixtures/redact/service/settings-not-object.json ${OUT} ${REPORT}
+redact-service-duplicate-key | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/service/duplicate-key.json ${OUT} ${REPORT}
+redact-service-duplicate-key-escaped | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/service/duplicate-key-escaped.json ${OUT} ${REPORT}
+redact-service-duplicate-other | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/service/duplicate-other.json ${OUT} ${REPORT}
+redact-service-duplicate-top-level | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/service/duplicate-top-level.json ${OUT} ${REPORT}
+redact-service-duplicate-nested-unknown | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/service/duplicate-nested-unknown.json ${OUT} ${REPORT}
+
+# ---- redact: the URL rule, on a custom server (rtmp_custom: opaque-unreviewed, count 1). For each
+# scheme:// (scheme = letters, digits, + . -): the userinfo up to the LAST @ before the next / ? # or
+# the end, and in the query (r3 item 8: from the first ? to the END of the string, # included, split on
+# & only) the value of key, token, access_token, auth, password, passphrase, secret, streamid in any
+# ASCII case, up to the next & or the end. Percent-encoding is not decoded. Overlapping or touching
+# ranges are merged into one (r3 item 5).
+redact-url-userinfo-only | 0 | OK report=expected/redact/redact-url-userinfo-only.json | redact profile.service fixtures/redact/url/userinfo-only.json ${OUT} ${REPORT}
+redact-url-user-without-password | 0 | OK report=expected/redact/redact-url-user-without-password.json | redact profile.service fixtures/redact/url/user-without-password.json ${OUT} ${REPORT}
+redact-url-query-only | 0 | OK report=expected/redact/redact-url-query-only.json | redact profile.service fixtures/redact/url/query-only.json ${OUT} ${REPORT}
+redact-url-userinfo-and-query | 0 | OK report=expected/redact/redact-url-userinfo-and-query.json out=expected/redact/redact-url-userinfo-and-query.out | redact profile.service fixtures/redact/url/userinfo-and-query.json ${OUT} ${REPORT}
+redact-url-every-query-name | 0 | OK report=expected/redact/redact-url-every-query-name.json out=expected/redact/redact-url-every-query-name.out | redact profile.service fixtures/redact/url/every-query-name.json ${OUT} ${REPORT}
+redact-url-query-names-any-case | 0 | OK report=expected/redact/redact-url-query-names-any-case.json | redact profile.service fixtures/redact/url/query-names-any-case.json ${OUT} ${REPORT}
+redact-url-other-query-names-kept | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/url/other-query-names-kept.json ${OUT} ${REPORT}
+redact-url-multiple-params-mixed | 0 | OK report=expected/redact/redact-url-multiple-params-mixed.json | redact profile.service fixtures/redact/url/multiple-params-mixed.json ${OUT} ${REPORT}
+redact-url-param-without-equals | 0 | OK report=expected/redact/redact-url-param-without-equals.json | redact profile.service fixtures/redact/url/param-without-equals.json ${OUT} ${REPORT}
+redact-url-value-up-to-ampersand-or-end | 0 | OK report=expected/redact/redact-url-value-up-to-ampersand-or-end.json | redact profile.service fixtures/redact/url/value-up-to-ampersand-or-end.json ${OUT} ${REPORT}
+redact-url-fragment-ends-authority | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/url/fragment-ends-authority.json ${OUT} ${REPORT}
+# reading: without scheme:// there is no URL, so nothing is removed, query values included
+redact-url-no-scheme | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/url/no-scheme.json ${OUT} ${REPORT}
+# reading: without scheme:// there is no URL, so nothing is removed, query values included
+redact-url-scheme-without-slashes | 0 | OK report=expected/redact/opaque-1.json | redact profile.service fixtures/redact/url/scheme-without-slashes.json ${OUT} ${REPORT}
+redact-url-at-in-path | 0 | OK report=expected/redact/redact-url-at-in-path.json | redact profile.service fixtures/redact/url/at-in-path.json ${OUT} ${REPORT}
+redact-url-at-in-path-after-userinfo | 0 | OK report=expected/redact/redact-url-at-in-path-after-userinfo.json | redact profile.service fixtures/redact/url/at-in-path-after-userinfo.json ${OUT} ${REPORT}
+redact-url-at-in-query | 0 | OK report=expected/redact/redact-url-at-in-query.json | redact profile.service fixtures/redact/url/at-in-query.json ${OUT} ${REPORT}
+redact-url-last-at | 0 | OK report=expected/redact/redact-url-last-at.json out=expected/redact/redact-url-last-at.out | redact profile.service fixtures/redact/url/last-at.json ${OUT} ${REPORT}
+redact-url-percent-encoded | 0 | OK report=expected/redact/redact-url-percent-encoded.json out=expected/redact/redact-url-percent-encoded.out | redact profile.service fixtures/redact/url/percent-encoded.json ${OUT} ${REPORT}
+redact-url-two-urls | 0 | OK report=expected/redact/redact-url-two-urls.json | redact profile.service fixtures/redact/url/two-urls.json ${OUT} ${REPORT}
+redact-url-uppercase-scheme | 0 | OK report=expected/redact/redact-url-uppercase-scheme.json | redact profile.service fixtures/redact/url/uppercase-scheme.json ${OUT} ${REPORT}
+redact-url-scheme-with-plus-dot-dash | 0 | OK report=expected/redact/redact-url-scheme-with-plus-dot-dash.json | redact profile.service fixtures/redact/url/scheme-with-plus-dot-dash.json ${OUT} ${REPORT}
+redact-url-json-escapes-in-url | 0 | OK report=expected/redact/redact-url-json-escapes-in-url.json | redact profile.service fixtures/redact/url/json-escapes-in-url.json ${OUT} ${REPORT}
+# either: an empty value is or is not reported as a zero-length edit
+redact-url-empty-query-value | 0 | OK report=expected/redact/redact-url-empty-query-value-alt1.json,expected/redact/redact-url-empty-query-value-alt2.json | redact profile.service fixtures/redact/url/empty-query-value.json ${OUT} ${REPORT}
+# either: an empty userinfo is or is not reported as a zero-length edit
+redact-url-empty-userinfo | 0 | OK report=expected/redact/redact-url-empty-userinfo-alt1.json,expected/redact/redact-url-empty-userinfo-alt2.json | redact profile.service fixtures/redact/url/empty-userinfo.json ${OUT} ${REPORT}
+redact-url-srt-streamid-access-control | 0 | OK report=expected/redact/redact-url-srt-streamid-access-control.json out=expected/redact/redact-url-srt-streamid-access-control.out | redact profile.service fixtures/redact/url/srt-streamid-access-control.json ${OUT} ${REPORT}
+redact-url-srt-passphrase-with-hash | 0 | OK report=expected/redact/redact-url-srt-passphrase-with-hash.json | redact profile.service fixtures/redact/url/srt-passphrase-with-hash.json ${OUT} ${REPORT}
+redact-url-hash-in-query-value | 0 | OK report=expected/redact/redact-url-hash-in-query-value.json | redact profile.service fixtures/redact/url/hash-in-query-value.json ${OUT} ${REPORT}
+# reading: the query starts at the first "?" after scheme://, also after a "#" (FFmpeg: strchr(uri, '?'))
+redact-url-hash-before-first-question-mark | 0 | OK report=expected/redact/redact-url-hash-before-first-question-mark.json | redact profile.service fixtures/redact/url/hash-before-query.json ${OUT} ${REPORT}
+redact-url-parameters-split-on-ampersand-only | 0 | OK report=expected/redact/redact-url-parameters-split-on-ampersand-only.json | redact profile.service fixtures/redact/url/ampersand-only-separator.json ${OUT} ${REPORT}
+redact-url-overlap-nested-url-literal | 0 | OK report=expected/redact/redact-url-overlap-nested-url-literal.json out=expected/redact/redact-url-overlap-nested-url-literal.out | redact profile.service fixtures/redact/url/overlap-literal.json ${OUT} ${REPORT}
+redact-url-overlap-nested-url | 0 | OK report=expected/redact/redact-url-overlap-nested-url.json | redact profile.service fixtures/redact/url/overlap-nested-url.json ${OUT} ${REPORT}
+redact-url-overlap-inner-query | 0 | OK report=expected/redact/redact-url-overlap-inner-query.json | redact profile.service fixtures/redact/url/overlap-inner-query.json ${OUT} ${REPORT}
+# the userinfo of the inner URL ends at the "@" where the key value starts: one merged range
+redact-url-touching-ranges-merged | 0 | OK report=expected/redact/redact-url-touching-ranges-merged.json out=expected/redact/redact-url-touching-ranges-merged.out | redact profile.service fixtures/redact/url/touching-ranges.json ${OUT} ${REPORT}
+
+# ---- redact profile.basic (INI). Registry: Token and RefreshToken in Twitch, Restream and YouTube oauth_token
+# (names case-sensitive), AdvOut FFURL url_credential (URL rule). An edit covers the bytes after the first =
+# up to the line end, CR excluded. Unreviewed: a non-empty AdvOut FFURL (count 1) and each distinct section
+# name outside the reviewed list (count 1 each, case-sensitive). BOM, CRLF, duplicates and comments stay.
+# r3 item 1: lines, headers and keys are read as libobs/util/config-file.c reads them. 1b: after a CR not
+# followed by LF, or a header line that is not exactly a bracketed name plus blanks, every Token and
+# RefreshToken in any section is redacted too, and the count gets 1 more.
+redact-basic-lf | 0 | OK report=expected/redact/redact-basic-lf.json | redact profile.basic fixtures/redact/basic/basic-lf.ini ${OUT} ${REPORT}
+redact-basic-crlf | 0 | OK report=expected/redact/redact-basic-crlf.json | redact profile.basic fixtures/redact/basic/basic-crlf.ini ${OUT} ${REPORT}
+redact-basic-bom-lf | 0 | OK report=expected/redact/redact-basic-bom-lf.json | redact profile.basic fixtures/redact/basic/bom-lf.ini ${OUT} ${REPORT}
+redact-basic-bom-crlf | 0 | OK report=expected/redact/redact-basic-bom-crlf.json out=expected/redact/redact-basic-bom-crlf.out | redact profile.basic fixtures/redact/basic/bom-crlf.ini ${OUT} ${REPORT}
+redact-basic-everything-bom-crlf | 0 | OK report=expected/redact/redact-basic-everything-bom-crlf.json out=expected/redact/redact-basic-everything-bom-crlf.out | redact profile.basic fixtures/redact/basic/everything-bom-crlf.ini ${OUT} ${REPORT}
+redact-basic-row-twitch-token | 0 | OK report=expected/redact/redact-basic-row-twitch-token.json | redact profile.basic fixtures/redact/basic/row-twitch-token.ini ${OUT} ${REPORT}
+redact-basic-row-twitch-refreshtoken | 0 | OK report=expected/redact/redact-basic-row-twitch-refreshtoken.json | redact profile.basic fixtures/redact/basic/row-twitch-refreshtoken.ini ${OUT} ${REPORT}
+redact-basic-row-youtube-token | 0 | OK report=expected/redact/redact-basic-row-youtube-token.json | redact profile.basic fixtures/redact/basic/row-youtube-token.ini ${OUT} ${REPORT}
+redact-basic-row-youtube-refreshtoken | 0 | OK report=expected/redact/redact-basic-row-youtube-refreshtoken.json | redact profile.basic fixtures/redact/basic/row-youtube-refreshtoken.ini ${OUT} ${REPORT}
+redact-basic-row-restream-token | 0 | OK report=expected/redact/redact-basic-row-restream-token.json | redact profile.basic fixtures/redact/basic/row-restream-token.ini ${OUT} ${REPORT}
+redact-basic-row-restream-refreshtoken | 0 | OK report=expected/redact/redact-basic-row-restream-refreshtoken.json | redact profile.basic fixtures/redact/basic/row-restream-refreshtoken.ini ${OUT} ${REPORT}
+redact-basic-row-ffurl | 0 | OK report=expected/redact/redact-basic-row-ffurl.json | redact profile.basic fixtures/redact/basic/row-ffurl.ini ${OUT} ${REPORT}
+redact-basic-duplicate-sections-and-keys | 0 | OK report=expected/redact/redact-basic-duplicate-sections-and-keys.json | redact profile.basic fixtures/redact/basic/duplicates.ini ${OUT} ${REPORT}
+redact-basic-comments-and-other-names | 0 | OK report=expected/redact/redact-basic-comments-and-other-names.json | redact profile.basic fixtures/redact/basic/comments-and-near-names.ini ${OUT} ${REPORT}
+redact-basic-registry-keys-in-other-sections | 0 | OK report=expected/redact/exact.json | redact profile.basic fixtures/redact/basic/tokens-in-other-sections.ini ${OUT} ${REPORT}
+# reading: OBS skips whitespace before an INI key (libobs/util/config-file.c), so these are the live tokens
+redact-basic-key-after-leading-whitespace | 0 | OK report=expected/redact/redact-basic-key-after-leading-whitespace.json | redact profile.basic fixtures/redact/basic/key-leading-space.ini ${OUT} ${REPORT}
+redact-basic-value-after-first-equals | 0 | OK report=expected/redact/redact-basic-value-after-first-equals.json | redact profile.basic fixtures/redact/basic/value-with-equals-and-spaces.ini ${OUT} ${REPORT}
+# reading: an empty Token is still redacted (a zero-length edit)
+redact-basic-empty-token | 0 | OK report=expected/redact/redact-basic-empty-token.json | redact profile.basic fixtures/redact/basic/empty-token.ini ${OUT} ${REPORT}
+redact-basic-no-final-newline | 0 | OK report=expected/redact/redact-basic-no-final-newline.json | redact profile.basic fixtures/redact/basic/no-final-newline.ini ${OUT} ${REPORT}
+# r3 item 1: a CR at the end of the file ends the line as in libobs (not part of the value), and a CR not
+# followed by LF trips the 1b fallback (count 1)
+redact-basic-final-cr-without-lf | 0 | OK report=expected/redact/redact-basic-final-cr-without-lf.json out=expected/redact/redact-basic-final-cr-without-lf.out | redact profile.basic fixtures/redact/basic/no-final-newline-crlf.ini ${OUT} ${REPORT}
+redact-basic-lines-without-key-ignored | 0 | OK report=expected/redact/redact-basic-lines-without-key-ignored.json | redact profile.basic fixtures/redact/basic/garbage-lines.ini ${OUT} ${REPORT}
+redact-basic-unknown-sections-counted-once | 0 | OK report=expected/redact/redact-basic-unknown-sections-counted-once.json | redact profile.basic fixtures/redact/basic/unknown-sections.ini ${OUT} ${REPORT}
+redact-basic-all-known-sections | 0 | OK report=expected/redact/exact.json | redact profile.basic fixtures/redact/basic/all-known-sections.ini ${OUT} ${REPORT}
+redact-basic-unknown-section-and-token | 0 | OK report=expected/redact/redact-basic-unknown-section-and-token.json | redact profile.basic fixtures/redact/basic/unknown-section-with-token.ini ${OUT} ${REPORT}
+# either: twitch is an unknown section (case-sensitive), and its Token may be kept (as OBS reads it) or redacted
+redact-basic-token-in-lowercase-section | 0 | OK report=expected/redact/opaque-1.json,expected/redact/redact-basic-token-in-lowercase-section-alt2.json | redact profile.basic fixtures/redact/basic/section-case-token.ini ${OUT} ${REPORT}
+redact-basic-ffurl-empty | 0 | OK report=expected/redact/redact-basic-ffurl-empty.json | redact profile.basic fixtures/redact/basic/ffurl-empty.ini ${OUT} ${REPORT}
+redact-basic-ffurl-without-credentials | 0 | OK report=expected/redact/opaque-1.json | redact profile.basic fixtures/redact/basic/ffurl-no-credentials.ini ${OUT} ${REPORT}
+redact-basic-ffurl-crlf | 0 | OK report=expected/redact/redact-basic-ffurl-crlf.json | redact profile.basic fixtures/redact/basic/ffurl-crlf.ini ${OUT} ${REPORT}
+# reading: a non-empty FFURL counts 1 per file, not per occurrence
+redact-basic-ffurl-duplicate-counted-once | 0 | OK report=expected/redact/redact-basic-ffurl-duplicate-counted-once.json | redact profile.basic fixtures/redact/basic/ffurl-duplicate.ini ${OUT} ${REPORT}
+redact-basic-ffurl-and-unknown-sections | 0 | OK report=expected/redact/redact-basic-ffurl-and-unknown-sections.json | redact profile.basic fixtures/redact/basic/ffurl-and-unknown-sections.ini ${OUT} ${REPORT}
+redact-basic-empty-file | 0 | OK report=expected/redact/exact.json | redact profile.basic fixtures/redact/basic/empty.ini ${OUT} ${REPORT}
+redact-basic-bom-only | 0 | OK report=expected/redact/exact.json | redact profile.basic fixtures/redact/basic/bom-only.ini ${OUT} ${REPORT}
+# the five inputs of r3 item 1. OBS reads each as section Twitch with Token=S (config-file.c: a header
+# ends at the first close bracket or line break, the rest of that line is read as keys, CR and LF are
+# skipped before a key, CR, LF, CRLF and LFCR end a line). Each also trips the 1b fallback: count 1.
+redact-basic-r3-header-then-comment | 0 | OK report=expected/redact/redact-basic-r3-header-then-comment.json out=expected/redact/redact-basic-r3-header-then-comment.out | redact profile.basic fixtures/redact/basic/r3-header-then-comment.ini ${OUT} ${REPORT}
+redact-basic-r3-header-without-bracket | 0 | OK report=expected/redact/redact-basic-r3-header-without-bracket.json | redact profile.basic fixtures/redact/basic/r3-header-without-bracket.ini ${OUT} ${REPORT}
+redact-basic-r3-cr-after-header | 0 | OK report=expected/redact/redact-basic-r3-cr-after-header.json | redact profile.basic fixtures/redact/basic/r3-cr-after-header.ini ${OUT} ${REPORT}
+redact-basic-r3-lfcr-after-header | 0 | OK report=expected/redact/redact-basic-r3-lfcr-after-header.json | redact profile.basic fixtures/redact/basic/r3-lfcr-after-header.ini ${OUT} ${REPORT}
+# reading: libobs ends the header at the FIRST close bracket, so the section is Twitch, not Twitch plus
+# a close bracket as the r3 parenthetical says (config_parse_string stops at the first end character)
+redact-basic-r3-header-double-bracket | 0 | OK report=expected/redact/redact-basic-r3-header-double-bracket.json | redact profile.basic fixtures/redact/basic/r3-header-double-bracket.ini ${OUT} ${REPORT}
+redact-basic-r3-key-on-header-line | 0 | OK report=expected/redact/redact-basic-r3-key-on-header-line.json | redact profile.basic fixtures/redact/basic/r3-key-on-header-line.ini ${OUT} ${REPORT}
+# libobs: after a header, an open bracket starts the next header (config_parse_section returns), so Token is in Twitch
+redact-basic-r3-two-headers-on-one-line | 0 | OK report=expected/redact/redact-basic-r3-two-headers-on-one-line.json | redact profile.basic fixtures/redact/basic/r3-two-headers-on-one-line.ini ${OUT} ${REPORT}
+redact-basic-r3-value-ends-at-cr | 0 | OK report=expected/redact/redact-basic-r3-value-ends-at-cr.json out=expected/redact/redact-basic-r3-value-ends-at-cr.out | redact profile.basic fixtures/redact/basic/r3-value-ends-at-cr.ini ${OUT} ${REPORT}
+redact-basic-r3-header-ends-at-cr | 0 | OK report=expected/redact/redact-basic-r3-header-ends-at-cr.json | redact profile.basic fixtures/redact/basic/r3-header-ends-at-cr.ini ${OUT} ${REPORT}
+# libobs skips blanks before a key, then "#" starts a comment. A semicolon does not (that key is semicolon-Token)
+redact-basic-r3-hash-comment-after-blanks | 0 | OK report=expected/redact/redact-basic-r3-hash-comment-after-blanks.json | redact profile.basic fixtures/redact/basic/r3-hash-comment-after-blanks.ini ${OUT} ${REPORT}
+# a header with only blanks after the close bracket is sure: no fallback, General Token stays, the file is redacted
+redact-basic-r3-header-trailing-blanks-no-fallback | 0 | OK report=expected/redact/redact-basic-r3-header-trailing-blanks-no-fallback.json | redact profile.basic fixtures/redact/basic/r3-header-trailing-blanks.ini ${OUT} ${REPORT}
+# 1b: CR line breaks only. Every Token and RefreshToken in any section is redacted, count +1 (plus FFURL 1)
+redact-basic-r3-fallback-cr-only-file | 0 | OK report=expected/redact/redact-basic-r3-fallback-cr-only-file.json out=expected/redact/redact-basic-r3-fallback-cr-only-file.out | redact profile.basic fixtures/redact/basic/r3-cr-only.ini ${OUT} ${REPORT}
+# 1b: a header line that is not exactly a bracketed name plus blanks. Token and RefreshToken in any section
+# (names exact) are redacted, count 1 for the fallback plus 1 for the unknown section x_plugin
+redact-basic-r3-fallback-malformed-header | 0 | OK report=expected/redact/redact-basic-r3-fallback-malformed-header.json | redact profile.basic fixtures/redact/basic/r3-malformed-header-fallback.ini ${OUT} ${REPORT}
+redact-basic-r3-fallback-crlf-file | 0 | OK report=expected/redact/redact-basic-r3-fallback-crlf-file.json | redact profile.basic fixtures/redact/basic/r3-fallback-crlf-file.ini ${OUT} ${REPORT}
+redact-basic-r3-ffurl-srt | 0 | OK report=expected/redact/redact-basic-r3-ffurl-srt.json | redact profile.basic fixtures/redact/basic/r3-ffurl-srt.ini ${OUT} ${REPORT}
+# either: r3 item 1 also says "any section whose name begins with Twitch/Restream/YouTube". OBS reads
+# neither token, so they may be kept (two unknown sections, count 2) or redacted
+redact-basic-r3-section-name-prefix | 0 | OK report=expected/redact/redact-basic-r3-section-name-prefix-alt1.json,expected/redact/redact-basic-r3-section-name-prefix-alt2.json | redact profile.basic fixtures/redact/basic/r3-section-name-prefix.ini ${OUT} ${REPORT}
+# r3.2 item 3 (claude-15, codex-4): the 1b fallback covers the whole file. Any header line that is not
+# exactly a bracketed name plus blanks trips it, also an empty header (an open and a close bracket), a lone
+# open bracket (on its own line or at the end of the file) and a header holding one blank. Then every Token
+# and RefreshToken is redacted wherever it is, also before the first header (pointer //Token, an empty
+# section). OBS stops reading at an empty or lone-bracket header (config-file.c:229-230) and never reads a
+# key before the first header, but the redactor reads on. Count 1 for the fallback.
+# either: count 1, or 2 if the keys before the first header count as an unknown (empty) section
+redact-basic-r32-token-before-first-header | 0 | OK report=expected/redact/redact-basic-r32-token-before-first-header.json,expected/redact/redact-basic-r32-token-before-first-header-alt2.json | redact profile.basic fixtures/redact/basic/r32-token-before-first-header.ini ${OUT} ${REPORT}
+# keys before the first header are read as in a section: blanks before a key are skipped, and a key
+# starting with a semicolon or # is not Token. either: count 1 or 2, as above
+redact-basic-r32-pre-header-keys | 0 | OK report=expected/redact/redact-basic-r32-pre-header-keys.json,expected/redact/redact-basic-r32-pre-header-keys-alt2.json | redact profile.basic fixtures/redact/basic/r32-pre-header-keys.ini ${OUT} ${REPORT}
+# a CR without LF ends the line before the first header: it trips the fallback, and the Token value ends there
+redact-basic-r32-pre-header-cr | 0 | OK report=expected/redact/redact-basic-r32-pre-header-cr.json,expected/redact/redact-basic-r32-pre-header-cr-alt2.json | redact profile.basic fixtures/redact/basic/r32-pre-header-cr.ini ${OUT} ${REPORT}
+# no fallback: a Token before the first header is not a registry key (OBS never reads it) and stays.
+# either: redacted, or opaque-unreviewed count 1 if those keys count as an unknown section
+redact-basic-r32-sure-file-pre-header-token | 0 | OK report=expected/redact/redact-basic-r32-sure-file-pre-header-token.json,expected/redact/redact-basic-r32-sure-file-pre-header-token-alt2.json | redact profile.basic fixtures/redact/basic/r32-sure-file-pre-header-token.ini ${OUT} ${REPORT}
+# an empty header first, then Token lines in later sections. either: count 1, or 2 if the empty name counts
+redact-basic-r32-empty-header-first | 0 | OK report=expected/redact/redact-basic-r32-empty-header-first.json,expected/redact/redact-basic-r32-empty-header-first-alt2.json | redact profile.basic fixtures/redact/basic/r32-empty-header-first.ini ${OUT} ${REPORT}
+# the rest of an empty header line is read as keys (r3 item 1), as after any header
+redact-basic-r32-empty-header-key-on-line | 0 | OK report=expected/redact/redact-basic-r32-empty-header-key-on-line.json,expected/redact/redact-basic-r32-empty-header-key-on-line-alt2.json | redact profile.basic fixtures/redact/basic/r32-empty-header-key-on-line.ini ${OUT} ${REPORT}
+# the claude-15 and codex-4 repro. either: the Token after the empty header stays in Twitch (a malformed
+# header changes no section, r3 item 1), count 1, or it is in the empty-named section, count 1 or 2
+redact-basic-r32-empty-header-after-twitch | 0 | OK report=expected/redact/redact-basic-r32-empty-header-after-twitch.json,expected/redact/redact-basic-r32-empty-header-after-twitch-alt2.json,expected/redact/redact-basic-r32-empty-header-after-twitch-alt3.json | redact profile.basic fixtures/redact/basic/r32-empty-header-after-twitch.ini ${OUT} ${REPORT}
+# a lone open bracket first, and one at the end of the file (it trips the fallback for the keys before it).
+# either: count 1, or 2 if the empty name counts
+redact-basic-r32-lone-bracket-first | 0 | OK report=expected/redact/redact-basic-r32-lone-bracket-first.json,expected/redact/redact-basic-r32-lone-bracket-first-alt2.json | redact profile.basic fixtures/redact/basic/r32-lone-bracket-first.ini ${OUT} ${REPORT}
+redact-basic-r32-bracket-at-eof | 0 | OK report=expected/redact/redact-basic-r32-bracket-at-eof.json,expected/redact/redact-basic-r32-bracket-at-eof-alt2.json | redact profile.basic fixtures/redact/basic/r32-bracket-at-eof.ini ${OUT} ${REPORT}
+# libobs reads a header holding one blank as the section named by that blank: pointer "/ /Token". Count 2:
+# fallback, and that unknown section
+redact-basic-r32-blank-header | 0 | OK report=expected/redact/redact-basic-r32-blank-header.json | redact profile.basic fixtures/redact/basic/r32-blank-header.ini ${OUT} ${REPORT}
+# r3.2 item 1 (claude-3): in a section whose name is over 1,024 bytes a pointer is /~section-N/KEY, N the
+# 0-based ordinal of the section header (here 1: General is 0), and the file counts 1 more. A name of
+# exactly 1,024 bytes stays in its pointers, and a section named ~section-1 is escaped to /~0section-1/,
+# so the two cannot collide. Fallback from a Video header with a comment, three unknown sections.
+# either: count 5 (the long name counts 1 besides its unknown section) or 4 (its unknown section is the 1)
+redact-basic-r32-long-section-pointer | 0 | OK report=expected/redact/redact-basic-r32-long-section-pointer.json,expected/redact/redact-basic-r32-long-section-pointer-alt2.json | redact profile.basic fixtures/redact/basic/r32-long-section-pointer.ini ${OUT} ${REPORT}
+# two long names, ordinals 0 and 2, fallback from a CR without LF, 2 unknown sections. either: count 4
+# (long names count 1 for the file), 5 (1 each) or 3 (their unknown sections are the 1s)
+redact-basic-r32-two-long-sections | 0 | OK report=expected/redact/redact-basic-r32-two-long-sections.json,expected/redact/redact-basic-r32-two-long-sections-alt2.json,expected/redact/redact-basic-r32-two-long-sections-alt3.json | redact profile.basic fixtures/redact/basic/r32-two-long-sections.ini ${OUT} ${REPORT}
+
+# ---- redact module.obs-websocket (JSON). /server_password ws_password is replaced by the placeholder (32
+# characters), a literal false at /auth_required by true (forced, was false). Unreviewed: each top-level key
+# outside first_load, server_enabled, server_port, alerts_enabled, debug_enabled, auth_required,
+# server_password (count 1 each). Without --ws-placeholder the runner checks a random placeholder.
+redact-ws-auth-false | 0 | OK report=expected/redact/redact-ws-auth-false.json out=expected/redact/redact-ws-auth-false.out | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-auth-false-random-placeholder | 0 | OK report=expected/redact/redact-ws-auth-false.json | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT}
+redact-ws-auth-true | 0 | OK report=expected/redact/redact-ws-auth-true.json | redact module.obs-websocket fixtures/redact/websocket/auth-true.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-auth-true-random-placeholder | 0 | OK report=expected/redact/redact-ws-auth-true.json | redact module.obs-websocket fixtures/redact/websocket/auth-true.json ${OUT} ${REPORT}
+redact-ws-auth-absent | 0 | OK report=expected/redact/redact-ws-auth-absent.json | redact module.obs-websocket fixtures/redact/websocket/auth-absent.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-password-before-auth | 0 | OK report=expected/redact/redact-ws-password-before-auth.json | redact module.obs-websocket fixtures/redact/websocket/password-before-auth.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-auth-false-with-whitespace | 0 | OK report=expected/redact/redact-ws-auth-false-with-whitespace.json | redact module.obs-websocket fixtures/redact/websocket/auth-false-spaces.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-unknown-keys | 0 | OK report=expected/redact/redact-ws-unknown-keys.json | redact module.obs-websocket fixtures/redact/websocket/unknown-keys.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-no-password-auth-false | 0 | OK report=expected/redact/redact-ws-no-password-auth-false.json | redact module.obs-websocket fixtures/redact/websocket/no-password-auth-false.json ${OUT} ${REPORT}
+redact-ws-no-password-auth-true | 0 | OK report=expected/redact/exact.json | redact module.obs-websocket fixtures/redact/websocket/no-password-auth-true.json ${OUT} ${REPORT}
+redact-ws-empty-object | 0 | OK report=expected/redact/exact.json | redact module.obs-websocket fixtures/redact/websocket/empty-object.json ${OUT} ${REPORT}
+# an empty password still gets the placeholder (never an empty password)
+redact-ws-password-empty | 0 | OK report=expected/redact/redact-ws-password-empty.json out=expected/redact/redact-ws-password-empty.out | redact module.obs-websocket fixtures/redact/websocket/password-empty.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-password-empty-random-placeholder | 0 | OK report=expected/redact/redact-ws-password-empty.json | redact module.obs-websocket fixtures/redact/websocket/password-empty.json ${OUT} ${REPORT}
+redact-ws-password-escapes | 0 | OK report=expected/redact/redact-ws-password-escapes.json | redact module.obs-websocket fixtures/redact/websocket/password-escapes.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-password-number | 0 | OK report=expected/redact/redact-ws-password-number.json | redact module.obs-websocket fixtures/redact/websocket/password-number.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-password-null | 0 | OK report=expected/redact/redact-ws-password-null.json | redact module.obs-websocket fixtures/redact/websocket/password-null.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-password-object | 0 | OK report=expected/redact/redact-ws-password-object.json | redact module.obs-websocket fixtures/redact/websocket/password-object.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-ws-duplicate-password | 0 | OK report=expected/redact/omitted-unparseable.json | redact module.obs-websocket fixtures/redact/websocket/duplicate-password.json ${OUT} ${REPORT}
+redact-ws-duplicate-auth | 0 | OK report=expected/redact/omitted-unparseable.json | redact module.obs-websocket fixtures/redact/websocket/duplicate-auth.json ${OUT} ${REPORT}
+
+# ---- redact collection and collection.bak (JSON). For each object in the top-level sources array, by its
+# type (r3 item 6: versioned_id if it is a string, else id): browser_source settings/url, ffmpeg_source
+# settings/input (r3 item 2: whatever is_local_file is) and settings/ffmpeg_options (r3 item 9: URL rule on
+# the whole string), vlc_source each settings/playlist/<j>/value. Always opaque-unreviewed: count =
+# max(1, sources whose id is not scene or group), plus 1 for each registry value that is not a string.
+redact-collection-mixed | 0 | OK report=expected/redact/redact-collection-mixed.json out=expected/redact/redact-collection-mixed.out | redact collection fixtures/redact/collection/mixed.json ${OUT} ${REPORT}
+redact-collection-bak-mixed | 0 | OK report=expected/redact/redact-collection-mixed.json | redact collection.bak fixtures/redact/collection/mixed.json ${OUT} ${REPORT}
+redact-collection-scenes-and-groups-only | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/scenes-and-groups-only.json ${OUT} ${REPORT}
+redact-collection-without-sources | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/no-sources.json ${OUT} ${REPORT}
+redact-collection-empty-sources | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/empty-sources.json ${OUT} ${REPORT}
+redact-collection-empty-object | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/empty-object.json ${OUT} ${REPORT}
+redact-collection-sources-not-an-array | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/sources-not-array.json ${OUT} ${REPORT}
+redact-collection-count-excludes-scenes-and-groups | 0 | OK report=expected/redact/redact-collection-count-excludes-scenes-and-groups.json | redact collection fixtures/redact/collection/three-counted.json ${OUT} ${REPORT}
+# reading: a source without id is a source whose id is not scene or group
+redact-collection-source-without-id-counted | 0 | OK report=expected/redact/redact-collection-source-without-id-counted.json | redact collection fixtures/redact/collection/source-without-id.json ${OUT} ${REPORT}
+redact-collection-browser-url-only | 0 | OK report=expected/redact/redact-collection-browser-url-only.json | redact collection fixtures/redact/collection/browser.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-remote-input | 0 | OK report=expected/redact/redact-collection-ffmpeg-remote-input.json | redact collection fixtures/redact/collection/ffmpeg-remote.json ${OUT} ${REPORT}
+# r3 item 2: input always gets the URL rule. OBS opens input unless is_local_file reads as true
+# (obs_data_get_bool is false for a value that is not a boolean), and a stored credential is a secret anyway
+redact-collection-ffmpeg-input-is-local-file-true | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-true.json | redact collection fixtures/redact/collection/ffmpeg-local-true.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-is-local-file-absent | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-absent.json | redact collection fixtures/redact/collection/ffmpeg-local-absent.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-is-local-file-string-false | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-string-false.json | redact collection fixtures/redact/collection/ffmpeg-local-string-false.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-is-local-file-zero | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-zero.json | redact collection fixtures/redact/collection/ffmpeg-local-zero.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-is-local-file-null | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-null.json | redact collection fixtures/redact/collection/ffmpeg-local-null.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-is-local-file-one | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-one.json | redact collection fixtures/redact/collection/ffmpeg-local-one.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-is-local-file-string-true | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-is-local-file-string-true.json | redact collection fixtures/redact/collection/ffmpeg-local-string-true.json ${OUT} ${REPORT}
+# a local path has no scheme:// and keeps every byte. Under file:// the authority is empty (the "@" is in
+# the path), but the query rule still removes key=1
+redact-collection-ffmpeg-input-local-paths-kept | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-local-paths-kept.json | redact collection fixtures/redact/collection/ffmpeg-input-local-paths.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-input-srt | 0 | OK report=expected/redact/redact-collection-ffmpeg-input-srt.json | redact collection fixtures/redact/collection/ffmpeg-input-srt.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-options-whole-string | 0 | OK report=expected/redact/redact-collection-ffmpeg-options-whole-string.json out=expected/redact/redact-collection-ffmpeg-options-whole-string.out | redact collection fixtures/redact/collection/ffmpeg-options.json ${OUT} ${REPORT}
+redact-collection-ffmpeg-options-query-runs-to-end | 0 | OK report=expected/redact/redact-collection-ffmpeg-options-query-runs-to-end.json | redact collection fixtures/redact/collection/ffmpeg-options-token-boundary.json ${OUT} ${REPORT}
+redact-collection-vlc-playlist-values | 0 | OK report=expected/redact/redact-collection-vlc-playlist-values.json | redact collection fixtures/redact/collection/vlc.json ${OUT} ${REPORT}
+redact-collection-other-ids-and-fields-kept | 0 | OK report=expected/redact/redact-collection-other-ids-and-fields-kept.json | redact collection fixtures/redact/collection/other-ids.json ${OUT} ${REPORT}
+redact-collection-only-top-level-sources | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/not-top-level.json ${OUT} ${REPORT}
+# reading: ids compare after JSON unescaping, as OBS reads them
+redact-collection-escaped-id-is-browser-source | 0 | OK report=expected/redact/redact-collection-escaped-id-is-browser-source.json | redact collection fixtures/redact/collection/escaped-id.json ${OUT} ${REPORT}
+# r3 item 6: a registry value that is not a string adds 1: count max(1, N) + 1
+redact-collection-url-not-a-string | 0 | OK report=expected/redact/redact-collection-url-not-a-string.json | redact collection fixtures/redact/collection/url-null.json ${OUT} ${REPORT}
+redact-collection-duplicate-url | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection fixtures/redact/collection/duplicate-url.json ${OUT} ${REPORT}
+redact-collection-duplicate-name | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection fixtures/redact/collection/duplicate-name.json ${OUT} ${REPORT}
+redact-collection-duplicate-top-level | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection fixtures/redact/collection/duplicate-top-level.json ${OUT} ${REPORT}
+# r3 item 6: the type is versioned_id if it is a string, else id. Count 6: no source is a scene or group
+redact-collection-versioned-id | 0 | OK report=expected/redact/redact-collection-versioned-id.json | redact collection fixtures/redact/collection/versioned-id.json ${OUT} ${REPORT}
+# either: an empty versioned_id is a string, so the type is "" (r3 as written), but OBS then uses id
+# (obs.c obs_load_source_type: if (!*v_id) v_id = id) and opens this URL: redacting it is the OBS reading
+redact-collection-versioned-id-empty-string | 0 | OK report=expected/redact/opaque-1.json,expected/redact/redact-collection-versioned-id-empty-string-alt2.json | redact collection fixtures/redact/collection/versioned-id-empty.json ${OUT} ${REPORT}
+# count = max(1, 3 sources) + 4 values that are not strings
+redact-collection-nonstring-registry-values-counted | 0 | OK report=expected/redact/redact-collection-nonstring-registry-values-counted.json | redact collection fixtures/redact/collection/nonstring-values.json ${OUT} ${REPORT}
+# r3 item 9: the URL rule runs on the whole string, the authority ends only at / ? # or the end
+redact-collection-ffmpeg-options-quoted-proxy | 0 | OK report=expected/redact/redact-collection-ffmpeg-options-quoted-proxy.json out=expected/redact/redact-collection-ffmpeg-options-quoted-proxy.out | redact collection fixtures/redact/collection/ffmpeg-options-quoted-proxy.json ${OUT} ${REPORT}
+# r3.2 item 4 (claude-6): OBS also loads the top-level objects DesktopAudioDevice1, DesktopAudioDevice2 and
+# AuxAudioDevice1 to AuxAudioDevice4 with obs_load_source (OBSBasic_SceneCollections.cpp:1007-1014,
+# 1259-1264), and the items of the top-level groups array, which it appends to sources (:1222, 1270-1274).
+# The source rules apply to each: pointers into the object or the groups item. With one counted object
+# outside sources and none in it, the count is 1 whether or not such objects are counted.
+redact-collection-r32-desktop-audio-browser | 0 | OK report=expected/redact/redact-collection-r32-desktop-audio-browser.json | redact collection fixtures/redact/collection/r32-desktop-audio-browser.json ${OUT} ${REPORT}
+redact-collection-r32-aux-audio-ffmpeg | 0 | OK report=expected/redact/redact-collection-r32-aux-audio-ffmpeg.json | redact collection fixtures/redact/collection/r32-aux-audio-ffmpeg.json ${OUT} ${REPORT}
+redact-collection-r32-groups-browser | 0 | OK report=expected/redact/redact-collection-r32-groups-browser.json | redact collection fixtures/redact/collection/r32-groups-browser.json ${OUT} ${REPORT}
+redact-collection-bak-r32-groups-browser | 0 | OK report=expected/redact/redact-collection-r32-groups-browser.json | redact collection.bak fixtures/redact/collection/r32-groups-browser.json ${OUT} ${REPORT}
+# without a sources array OBS loads groups as the sources
+redact-collection-r32-groups-without-sources | 0 | OK report=expected/redact/redact-collection-r32-groups-without-sources.json | redact collection fixtures/redact/collection/r32-groups-without-sources.json ${OUT} ${REPORT}
+# all six names (one typed by versioned_id), an audio capture device with a url member (kept: not a URL
+# source type), and names OBS does not load (DesktopAudioDevice3, AuxAudioDevice0, AuxAudioDevice5, lower
+# case, nested): kept. either: count 1 (sources items only, as the PR2 contract counts) or 7 (the six
+# devices counted like sources items)
+redact-collection-r32-all-audio-devices | 0 | OK report=expected/redact/redact-collection-r32-all-audio-devices.json,expected/redact/redact-collection-r32-all-audio-devices-alt2.json | redact collection fixtures/redact/collection/r32-all-audio-devices.json ${OUT} ${REPORT}
+# several groups items: a group and three typed sources (an image source url kept), and groups nested
+# elsewhere (kept). either: count 1 (sources items only) or 4 (the three groups items whose id is not
+# group counted like sources items)
+redact-collection-r32-groups-several | 0 | OK report=expected/redact/redact-collection-r32-groups-several.json,expected/redact/redact-collection-r32-groups-several-alt2.json | redact collection fixtures/redact/collection/r32-groups-several.json ${OUT} ${REPORT}
+# OBS loads no device whose value is not an object, and no groups member that is not an array: kept. One
+# such value per file, with only a scene in sources, so the count is 1 whether or not it is counted
+redact-collection-r32-device-not-an-object | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/r32-device-not-an-object.json ${OUT} ${REPORT}
+redact-collection-r32-device-array | 0 | OK report=expected/redact/opaque-1.json | redact collection fixtures/redact/collection/r32-device-array.json ${OUT} ${REPORT}
+# either: count 1, or 2 if a groups member that is not an array counts 1 as a value of the wrong type
+redact-collection-r32-groups-not-an-array | 0 | OK report=expected/redact/opaque-1.json,expected/redact/opaque-2.json | redact collection fixtures/redact/collection/r32-groups-not-an-array.json ${OUT} ${REPORT}
+
+# ---- redact roles without secrets: profile.encoder.stream, .record and their .bak, app.modules (JSON) and
+# app.user (INI). Nothing is edited, PLAINvalue markers included. app.user is opaque-unreviewed (count 1)
+# only with a non-empty BasicWindow ExtraBrowserDocks (the PR2 contract, narrower than section 7).
+# r3 item 4: an app.modules document is a JSON object or array, every other JSON role needs an object.
+redact-encoder-stream | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/stream-encoder.json ${OUT} ${REPORT}
+redact-encoder-stream-bak | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream.bak fixtures/redact/encoder/stream-encoder.json ${OUT} ${REPORT}
+redact-encoder-record | 0 | OK report=expected/redact/exact.json | redact profile.encoder.record fixtures/redact/encoder/stream-encoder.json ${OUT} ${REPORT}
+redact-encoder-record-bak | 0 | OK report=expected/redact/exact.json | redact profile.encoder.record.bak fixtures/redact/encoder/stream-encoder.json ${OUT} ${REPORT}
+redact-encoder-empty-object | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/empty-object.json ${OUT} ${REPORT}
+redact-encoder-large-finite-numbers | 0 | OK report=expected/redact/exact.json | redact profile.encoder.record fixtures/redact/encoder/numbers.json ${OUT} ${REPORT}
+redact-encoder-trailing-whitespace | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream fixtures/redact/encoder/trailing-whitespace.json ${OUT} ${REPORT}
+redact-modules-object | 0 | OK report=expected/redact/exact.json | redact app.modules fixtures/redact/modules/modules-object.json ${OUT} ${REPORT}
+# OBS writes modules.json as a top-level array (frontend/plugin-manager/PluginManager.cpp)
+redact-modules-top-level-array-as-obs-writes-it | 0 | OK report=expected/redact/exact.json | redact app.modules fixtures/redact/modules/modules-obs-array.json ${OUT} ${REPORT}
+redact-modules-empty-array | 0 | OK report=expected/redact/exact.json | redact app.modules fixtures/redact/modules/modules-empty-array.json ${OUT} ${REPORT}
+redact-modules-array-of-values | 0 | OK report=expected/redact/exact.json | redact app.modules fixtures/redact/modules/modules-array-of-values.json ${OUT} ${REPORT}
+redact-modules-top-level-string | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-top-level-string.json ${OUT} ${REPORT}
+redact-modules-top-level-number | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-top-level-number.json ${OUT} ${REPORT}
+redact-modules-top-level-null | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-top-level-null.json ${OUT} ${REPORT}
+redact-modules-top-level-true | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-top-level-true.json ${OUT} ${REPORT}
+redact-modules-array-duplicate-key | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-array-duplicate-key.json ${OUT} ${REPORT}
+redact-modules-array-trailing-comma | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-array-trailing-comma.json ${OUT} ${REPORT}
+redact-modules-two-arrays | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/modules/modules-two-arrays.json ${OUT} ${REPORT}
+redact-user-without-docks | 0 | OK report=expected/redact/exact.json | redact app.user fixtures/redact/user/user.ini ${OUT} ${REPORT}
+redact-user-extra-docks | 0 | OK report=expected/redact/opaque-1.json | redact app.user fixtures/redact/user/extra-docks.ini ${OUT} ${REPORT}
+redact-user-extra-docks-empty | 0 | OK report=expected/redact/exact.json | redact app.user fixtures/redact/user/extra-docks-empty.ini ${OUT} ${REPORT}
+redact-user-extra-docks-bom-crlf | 0 | OK report=expected/redact/opaque-1.json | redact app.user fixtures/redact/user/extra-docks-bom-crlf.ini ${OUT} ${REPORT}
+redact-user-extra-docks-duplicate-counted-once | 0 | OK report=expected/redact/opaque-1.json | redact app.user fixtures/redact/user/extra-docks-duplicate.ini ${OUT} ${REPORT}
+redact-user-extra-docks-in-other-sections | 0 | OK report=expected/redact/exact.json | redact app.user fixtures/redact/user/extra-docks-other-section.ini ${OUT} ${REPORT}
+redact-user-extra-docks-name-case | 0 | OK report=expected/redact/exact.json | redact app.user fixtures/redact/user/extra-docks-case.ini ${OUT} ${REPORT}
+# PR2 contract: only ExtraBrowserDocks makes app.user opaque-unreviewed (section 7 also names unknown sections)
+redact-user-unknown-sections-and-tokens | 0 | OK report=expected/redact/exact.json | redact app.user fixtures/redact/user/unknown-sections-and-tokens.ini ${OUT} ${REPORT}
+redact-user-empty-file | 0 | OK report=expected/redact/exact.json | redact app.user fixtures/redact/user/empty.ini ${OUT} ${REPORT}
+# either: count 1 (ExtraBrowserDocks), or 2 if the 1b fallback also counts for app.user
+redact-user-r3-extra-docks-cr-only | 0 | OK report=expected/redact/opaque-1.json,expected/redact/redact-user-r3-extra-docks-cr-only-alt2.json | redact app.user fixtures/redact/user/r3-docks-cr-only.ini ${OUT} ${REPORT}
+redact-user-r3-extra-docks-after-malformed-header | 0 | OK report=expected/redact/opaque-1.json,expected/redact/redact-user-r3-extra-docks-after-malformed-header-alt2.json | redact app.user fixtures/redact/user/r3-docks-after-malformed-header.ini ${OUT} ${REPORT}
+redact-user-r3-extra-docks-on-header-line | 0 | OK report=expected/redact/opaque-1.json,expected/redact/redact-user-r3-extra-docks-on-header-line-alt2.json | redact app.user fixtures/redact/user/r3-docks-on-header-line.ini ${OUT} ${REPORT}
+
+# ---- redact: invalid documents. A role with registry secrets omits the file (no OUTFILE). A role without
+# them stores it unchanged: parse invalid, opaque-unreviewed, count 1, no redactions.
+redact-invalid-service-truncated | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/invalid/service-truncated.json ${OUT} ${REPORT}
+redact-invalid-service-trailing-data | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/invalid/service-trailing-data.json ${OUT} ${REPORT}
+redact-invalid-service-top-level-array | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/invalid/service-top-level-array.json ${OUT} ${REPORT}
+redact-invalid-service-nul-escape | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/invalid/service-nul-escape.json ${OUT} ${REPORT}
+redact-invalid-service-nonfinite | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/invalid/service-nonfinite.json ${OUT} ${REPORT}
+redact-invalid-service-comment | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service fixtures/redact/invalid/service-comment.json ${OUT} ${REPORT}
+redact-invalid-service-bak-truncated | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service.bak fixtures/redact/invalid/service-bak-truncated.json ${OUT} ${REPORT}
+redact-invalid-websocket-nonfinite | 0 | OK report=expected/redact/omitted-unparseable.json | redact module.obs-websocket fixtures/redact/invalid/websocket-nonfinite.json ${OUT} ${REPORT}
+redact-invalid-websocket-truncated | 0 | OK report=expected/redact/omitted-unparseable.json | redact module.obs-websocket fixtures/redact/invalid/websocket-truncated.json ${OUT} ${REPORT}
+redact-invalid-collection-truncated | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection fixtures/redact/invalid/collection-truncated.json ${OUT} ${REPORT}
+redact-invalid-collection-bak-truncated | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection.bak fixtures/redact/invalid/collection-truncated.json ${OUT} ${REPORT}
+redact-invalid-encoder-truncated | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-truncated.json ${OUT} ${REPORT}
+redact-invalid-encoder-trailing-data | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-trailing-data.json ${OUT} ${REPORT}
+redact-invalid-encoder-two-objects | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-two-objects.json ${OUT} ${REPORT}
+redact-invalid-encoder-comment | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-comment.json ${OUT} ${REPORT}
+redact-invalid-encoder-single-quotes | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-single-quotes.json ${OUT} ${REPORT}
+redact-invalid-encoder-unquoted-key | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-unquoted-key.json ${OUT} ${REPORT}
+redact-invalid-encoder-trailing-comma | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-trailing-comma.json ${OUT} ${REPORT}
+redact-invalid-encoder-leading-zero | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-leading-zero.json ${OUT} ${REPORT}
+redact-invalid-encoder-top-level-array | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-top-level-array.json ${OUT} ${REPORT}
+redact-invalid-encoder-top-level-string | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-top-level-string.json ${OUT} ${REPORT}
+redact-invalid-encoder-top-level-null | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-top-level-null.json ${OUT} ${REPORT}
+redact-invalid-encoder-whitespace-only | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-whitespace-only.json ${OUT} ${REPORT}
+redact-invalid-encoder-nul-escape | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-nul-escape.json ${OUT} ${REPORT}
+redact-invalid-encoder-nonfinite | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-nonfinite.json ${OUT} ${REPORT}
+redact-invalid-encoder-nonfinite-negative | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-nonfinite-negative.json ${OUT} ${REPORT}
+redact-invalid-encoder-raw-tab-in-string | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-raw-tab-in-string.json ${OUT} ${REPORT}
+redact-invalid-encoder-raw-newline-in-string | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-raw-newline-in-string.json ${OUT} ${REPORT}
+redact-invalid-encoder-bad-escape | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-bad-escape.json ${OUT} ${REPORT}
+redact-invalid-encoder-duplicate-key | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-duplicate-key.json ${OUT} ${REPORT}
+redact-invalid-encoder-duplicate-key-nested | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-duplicate-key-nested.json ${OUT} ${REPORT}
+redact-invalid-encoder-duplicate-key-escaped | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream fixtures/redact/invalid/plain-duplicate-key-escaped.json ${OUT} ${REPORT}
+redact-invalid-truncated-encoder-stream-bak | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream.bak fixtures/redact/invalid/plain-truncated.json ${OUT} ${REPORT}
+redact-invalid-truncated-encoder-record | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record fixtures/redact/invalid/plain-truncated.json ${OUT} ${REPORT}
+redact-invalid-truncated-encoder-record-bak | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record.bak fixtures/redact/invalid/plain-truncated.json ${OUT} ${REPORT}
+redact-invalid-truncated-app-modules | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules fixtures/redact/invalid/plain-truncated.json ${OUT} ${REPORT}
+redact-invalid-empty-file-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/empty.bin ${OUT} ${REPORT}
+redact-invalid-empty-file-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/empty.bin ${OUT} ${REPORT}
+redact-empty-file-basic-is-valid | 0 | OK report=expected/redact/exact.json | redact profile.basic ${WORK}/empty.bin ${OUT} ${REPORT}
+redact-empty-file-user-is-valid | 0 | OK report=expected/redact/exact.json | redact app.user ${WORK}/empty.bin ${OUT} ${REPORT}
+redact-invalid-collection-top-level-array | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection fixtures/redact/invalid/collection-top-level-array.json ${OUT} ${REPORT}
+redact-invalid-websocket-top-level-array | 0 | OK report=expected/redact/omitted-unparseable.json | redact module.obs-websocket fixtures/redact/invalid/websocket-top-level-array.json ${OUT} ${REPORT}
+redact-invalid-service-bak-top-level-array | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service.bak fixtures/redact/invalid/service-top-level-array.json ${OUT} ${REPORT}
+redact-invalid-encoder-record-top-level-array | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record fixtures/redact/invalid/plain-top-level-array.json ${OUT} ${REPORT}
+
+# ---- redact: generated byte-level faults (UTF-8, NUL) in ${WORK}/redact, for a role with secrets (omitted)
+# and one without (stored, parse invalid). Built by run-cases.cmake.
+redact-invalid-utf8-ff-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-ff-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-ff-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-ff-encoder.json ${OUT} ${REPORT}
+redact-invalid-utf8-80-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-80-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-80-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-80-encoder.json ${OUT} ${REPORT}
+redact-invalid-utf8-overlong-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-overlong-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-overlong-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-overlong-encoder.json ${OUT} ${REPORT}
+redact-invalid-utf8-surrogate-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-surrogate-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-surrogate-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-surrogate-encoder.json ${OUT} ${REPORT}
+redact-invalid-utf8-above-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-above-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-above-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-above-encoder.json ${OUT} ${REPORT}
+redact-invalid-utf8-truncated-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-truncated-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-truncated-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-truncated-encoder.json ${OUT} ${REPORT}
+redact-invalid-utf8-key-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/utf8-key-service.json ${OUT} ${REPORT}
+redact-invalid-utf8-key-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/utf8-key-encoder.json ${OUT} ${REPORT}
+redact-invalid-nul-raw-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/nul-service.json ${OUT} ${REPORT}
+redact-invalid-nul-raw-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/nul-encoder.json ${OUT} ${REPORT}
+redact-invalid-nul-raw-trailing-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/nul-trailing-encoder.json ${OUT} ${REPORT}
+redact-invalid-ini-ff-basic | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.basic ${WORK}/redact/ini-ff-basic.ini ${OUT} ${REPORT}
+redact-invalid-ini-ff-user | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.user ${WORK}/redact/ini-ff-user.ini ${OUT} ${REPORT}
+redact-invalid-ini-overlong-basic | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.basic ${WORK}/redact/ini-overlong-basic.ini ${OUT} ${REPORT}
+redact-invalid-ini-overlong-user | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.user ${WORK}/redact/ini-overlong-user.ini ${OUT} ${REPORT}
+redact-invalid-ini-surrogate-basic | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.basic ${WORK}/redact/ini-surrogate-basic.ini ${OUT} ${REPORT}
+redact-invalid-ini-surrogate-user | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.user ${WORK}/redact/ini-surrogate-user.ini ${OUT} ${REPORT}
+redact-invalid-ini-truncated-basic | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.basic ${WORK}/redact/ini-truncated-basic.ini ${OUT} ${REPORT}
+redact-invalid-ini-truncated-user | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.user ${WORK}/redact/ini-truncated-user.ini ${OUT} ${REPORT}
+redact-invalid-ini-nul-basic | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.basic ${WORK}/redact/ini-nul-basic.ini ${OUT} ${REPORT}
+redact-invalid-ini-nul-user | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.user ${WORK}/redact/ini-nul-user.ini ${OUT} ${REPORT}
+
+# ---- redact: a UTF-8 BOM in a JSON document (r3 item 7), generated in ${WORK}/redact. One BOM at the start is
+# skipped as OBS does, and offsets count it. A manifest or DECISIONS file with a BOM stays ERR E_BOM
+# (parse-bom-*, export-decisions-bom).
+redact-bom-service | 0 | OK report=expected/redact/redact-bom-service.json | redact profile.service ${WORK}/redact/bom-service.json ${OUT} ${REPORT}
+redact-bom-service-bak | 0 | OK report=expected/redact/redact-bom-service.json | redact profile.service.bak ${WORK}/redact/bom-service.json ${OUT} ${REPORT}
+redact-bom-encoder | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream ${WORK}/redact/bom-encoder.json ${OUT} ${REPORT}
+redact-bom-websocket | 0 | OK report=expected/redact/redact-bom-websocket.json | redact module.obs-websocket ${WORK}/redact/bom-websocket.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032
+redact-bom-websocket-random-placeholder | 0 | OK report=expected/redact/redact-bom-websocket.json | redact module.obs-websocket ${WORK}/redact/bom-websocket.json ${OUT} ${REPORT}
+redact-bom-collection | 0 | OK report=expected/redact/opaque-1.json | redact collection ${WORK}/redact/bom-collection.json ${OUT} ${REPORT}
+redact-bom-collection-browser-url | 0 | OK report=expected/redact/redact-bom-collection-browser-url.json | redact collection ${WORK}/redact/bom-browser-collection.json ${OUT} ${REPORT}
+redact-bom-modules-object | 0 | OK report=expected/redact/exact.json | redact app.modules ${WORK}/redact/bom-modules.json ${OUT} ${REPORT}
+redact-bom-modules-array | 0 | OK report=expected/redact/exact.json | redact app.modules ${WORK}/redact/bom-modules-array.json ${OUT} ${REPORT}
+redact-bom-then-whitespace-encoder | 0 | OK report=expected/redact/exact.json | redact profile.encoder.record ${WORK}/redact/bom-whitespace-encoder.json ${OUT} ${REPORT}
+# only one BOM is skipped: a second one is not JSON
+redact-bom-twice-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/bom-twice-service.json ${OUT} ${REPORT}
+redact-bom-twice-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/bom-twice-encoder.json ${OUT} ${REPORT}
+redact-bom-after-space-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/bom-after-space-encoder.json ${OUT} ${REPORT}
+redact-bom-only-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/bom-only.json ${OUT} ${REPORT}
+redact-bom-only-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/bom-only.json ${OUT} ${REPORT}
+redact-bom-only-basic | 0 | OK report=expected/redact/exact.json | redact profile.basic ${WORK}/redact/bom-only.json ${OUT} ${REPORT}
+
+# ---- redact: limits (section 12) on generated inputs in ${WORK}/redact. Depth 64 (the top-level object is
+# depth 1), 16 MiB per string, 1,000,000 values, INI lines of 1 MiB, 64 MiB per file (E_LIMIT blob).
+redact-limit-depth-64-encoder | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream ${WORK}/redact/depth-64.json ${OUT} ${REPORT}
+redact-limit-depth-64-service | 0 | OK report=expected/redact/opaque-1.json | redact profile.service ${WORK}/redact/depth-64.json ${OUT} ${REPORT}
+redact-limit-depth-64-websocket | 0 | OK report=expected/redact/opaque-1.json | redact module.obs-websocket ${WORK}/redact/depth-64.json ${OUT} ${REPORT}
+redact-limit-depth-65-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/depth-65.json ${OUT} ${REPORT}
+redact-limit-depth-65-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/depth-65.json ${OUT} ${REPORT}
+redact-limit-depth-65-websocket | 0 | OK report=expected/redact/omitted-unparseable.json | redact module.obs-websocket ${WORK}/redact/depth-65.json ${OUT} ${REPORT}
+redact-limit-depth-65-collection | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection ${WORK}/redact/depth-65.json ${OUT} ${REPORT}
+redact-limit-depth-65-objects-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.record ${WORK}/redact/depth-65-objects.json ${OUT} ${REPORT}
+redact-limit-depth-65-objects-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/depth-65-objects.json ${OUT} ${REPORT}
+redact-limit-depth-100000-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/depth-100000.json ${OUT} ${REPORT}
+redact-limit-depth-100000-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/depth-100000.json ${OUT} ${REPORT}
+redact-limit-depth-100000-collection | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection ${WORK}/redact/depth-100000.json ${OUT} ${REPORT}
+redact-limit-depth-100000-modules | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules ${WORK}/redact/depth-100000.json ${OUT} ${REPORT}
+redact-limit-depth-64-modules-array | 0 | OK report=expected/redact/exact.json | redact app.modules ${WORK}/redact/modules-depth-64.json ${OUT} ${REPORT}
+redact-limit-depth-65-modules-array | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.modules ${WORK}/redact/modules-depth-65.json ${OUT} ${REPORT}
+redact-limit-string-16mib-encoder | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream ${WORK}/redact/string-16mib.json ${OUT} ${REPORT}
+redact-limit-string-16mib-plus-one-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/string-16mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-string-16mib-plus-one-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/string-16mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-key-16mib-plus-one-service | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/key-16mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-values-999000-encoder | 0 | OK report=expected/redact/exact.json | redact profile.encoder.stream ${WORK}/redact/values-999000.json ${OUT} ${REPORT}
+redact-limit-values-1000001-encoder | 0 | OK report=expected/redact/stored-parse-invalid.json | redact profile.encoder.stream ${WORK}/redact/values-1000001.json ${OUT} ${REPORT}
+redact-limit-values-1000001-collection | 0 | OK report=expected/redact/omitted-unparseable.json | redact collection ${WORK}/redact/values-1000001.json ${OUT} ${REPORT}
+redact-limit-ini-line-1mib-user | 0 | OK report=expected/redact/exact.json | redact app.user ${WORK}/redact/line-1mib.ini ${OUT} ${REPORT}
+redact-limit-ini-line-1mib-basic | 0 | OK report=expected/redact/exact.json | redact profile.basic ${WORK}/redact/line-1mib.ini ${OUT} ${REPORT}
+redact-limit-ini-line-1mib-plus-one-user | 0 | OK report=expected/redact/stored-parse-invalid.json | redact app.user ${WORK}/redact/line-1mib-plus-one.ini ${OUT} ${REPORT}
+redact-limit-ini-line-1mib-plus-one-basic | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.basic ${WORK}/redact/line-1mib-plus-one.ini ${OUT} ${REPORT}
+# r3 item 3: at most 1,000,000 INI keys and 100,000 sections. Over the limit, r3 item 3 says ERR E_LIMIT
+# values, but item 5 allows Redact no ERR except E_LIMIT blob, E_IO and E_SCHEMA role or ws-placeholder: either
+# the ERR line (exit 1, no OUTFILE) or an invalid file (omitted, or stored with parse invalid) is accepted
+redact-limit-ini-keys-1000000-basic | 0 | OK report=expected/redact/redact-limit-ini-keys-1000000-basic.json timeout=60 | redact profile.basic ${WORK}/redact/ini-keys-1000000.ini ${OUT} ${REPORT}
+redact-limit-ini-keys-1000000-user | 0 | OK report=expected/redact/exact.json timeout=60 | redact app.user ${WORK}/redact/ini-keys-1000000.ini ${OUT} ${REPORT}
+redact-limit-ini-keys-1000001-basic | 0,1 | ~^(OK|ERR E_LIMIT values)$ report=expected/redact/omitted-unparseable.json timeout=60 | redact profile.basic ${WORK}/redact/ini-keys-1000001.ini ${OUT} ${REPORT}
+redact-limit-ini-keys-1000001-user | 0,1 | ~^(OK|ERR E_LIMIT values)$ report=expected/redact/stored-parse-invalid.json timeout=60 | redact app.user ${WORK}/redact/ini-keys-1000001.ini ${OUT} ${REPORT}
+redact-limit-ini-sections-100000-basic | 0 | OK report=expected/redact/redact-limit-ini-sections-100000-basic.json timeout=60 | redact profile.basic ${WORK}/redact/ini-sections-100000.ini ${OUT} ${REPORT}
+redact-limit-ini-sections-100000-user | 0 | OK report=expected/redact/exact.json timeout=60 | redact app.user ${WORK}/redact/ini-sections-100000.ini ${OUT} ${REPORT}
+redact-limit-ini-sections-100001-basic | 0,1 | ~^(OK|ERR E_LIMIT values)$ report=expected/redact/omitted-unparseable.json timeout=60 | redact profile.basic ${WORK}/redact/ini-sections-100001.ini ${OUT} ${REPORT}
+redact-limit-ini-sections-100001-user | 0,1 | ~^(OK|ERR E_LIMIT values)$ report=expected/redact/stored-parse-invalid.json timeout=60 | redact app.user ${WORK}/redact/ini-sections-100001.ini ${OUT} ${REPORT}
+redact-limit-blob-64mib-read | 0 | OK report=expected/redact/omitted-unparseable.json | redact profile.service ${WORK}/redact/blob-64mib.json ${OUT} ${REPORT}
+redact-limit-blob-64mib-plus-one-service | 1 | ERR E_LIMIT blob | redact profile.service ${WORK}/redact/blob-64mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-blob-64mib-plus-one-encoder | 1 | ERR E_LIMIT blob | redact profile.encoder.stream ${WORK}/redact/blob-64mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-blob-64mib-plus-one-user | 1 | ERR E_LIMIT blob | redact app.user ${WORK}/redact/blob-64mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-blob-64mib-plus-one-basic | 1 | ERR E_LIMIT blob | redact profile.basic ${WORK}/redact/blob-64mib-plus-one.json ${OUT} ${REPORT}
+redact-limit-blob-64mib-plus-one-collection | 1 | ERR E_LIMIT blob | redact collection ${WORK}/redact/blob-64mib-plus-one.json ${OUT} ${REPORT}
+
+# ---- redact: performance sanity on generated inputs in ${WORK}/redact
+# r3 item 3: inputs inside every limit that take quadratic time or memory without the fixes. Each must
+# finish within its timeout (60 s) with the right outcome
+redact-perf-key-4kib-100000-values-encoder | 0 | OK report=expected/redact/exact.json timeout=60 | redact profile.encoder.stream ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
+redact-perf-key-4kib-100000-values-service | 0 | OK report=expected/redact/opaque-1.json timeout=60 | redact profile.service ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
+redact-perf-key-4kib-100000-values-collection | 0 | OK report=expected/redact/opaque-1.json timeout=60 | redact collection ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
+redact-perf-key-4kib-100000-values-websocket | 0 | OK report=expected/redact/opaque-1.json timeout=60 | redact module.obs-websocket ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
+redact-perf-key-4kib-100000-values-modules | 0 | OK report=expected/redact/exact.json timeout=60 | redact app.modules ${WORK}/redact/perf-key-4kib.json ${OUT} ${REPORT}
+# r3.2 item 1: a section name over 1,024 bytes makes the file opaque-unreviewed with 1 more. either: count 2
+# (the unknown section and the long name) or 1 (the unknown section is the long name's 1)
+redact-perf-ini-header-1mib-100000-keys-basic | 0 | OK report=expected/redact/opaque-2.json,expected/redact/opaque-1.json timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-header-1mib.ini ${OUT} ${REPORT}
+# either: exact (only ExtraBrowserDocks makes app.user opaque), or count 1 if the long name counts for app.user too
+redact-perf-ini-header-1mib-100000-keys-user | 0 | OK report=expected/redact/exact.json,expected/redact/opaque-1.json timeout=60 | redact app.user ${WORK}/redact/perf-ini-header-1mib.ini ${OUT} ${REPORT}
+# REPORT and OUTFILE generated by run-cases.cmake: 20,000 url_credential ranges, count 10,000
+redact-perf-sources-10000 | 0 | OK report=${WORK}/redact/perf-sources-10000.report.json out=${WORK}/redact/perf-sources-10000.out timeout=60 | redact collection ${WORK}/redact/perf-sources-10000.json ${OUT} ${REPORT}
+redact-perf-url-1048576-parameters | 0 | OK report=expected/redact/redact-perf-url-1048576-parameters.json timeout=60 | redact profile.service ${WORK}/redact/perf-url-params.json ${OUT} ${REPORT}
+redact-perf-url-1048576-schemes | 0 | OK report=expected/redact/redact-perf-url-1048576-schemes.json timeout=60 | redact profile.service ${WORK}/redact/perf-url-schemes.json ${OUT} ${REPORT}
+# r3.2 item 1 (claude-3): INI pointers never copy a long section name. A header of about 1 MiB over 100,000
+# Token lines in a file that trips the 1b fallback (a header with a comment at the end): every Token is
+# redacted at /~section-0/Token. REPORT and OUTFILE are generated by run-cases.cmake. Count 3 (fallback,
+# long name, unknown section) or 2 (the unknown section is the long name's 1), as for
+# redact-basic-r32-long-section-pointer. either: stored, or omitted if the implementation bounds the REPORT
+# (this one is about 8 MB, over the 4 MiB manifest limit). Copying the name would need about 100 GiB.
+redact-perf-ini-long-section-100000-tokens | 0 | OK report=${WORK}/redact/perf-ini-long-section-100000.report.json,${WORK}/redact/perf-ini-long-section-100000.report-alt2.json,expected/redact/omitted-unparseable.json out=${WORK}/redact/perf-ini-long-section-100000.out timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-long-section-100000.ini ${OUT} ${REPORT}
+# the first 20,000 Token lines of the same layout: a REPORT of about 1.6 MB, stored. Count 3 or 2
+redact-perf-ini-long-section-20000-tokens | 0 | OK report=${WORK}/redact/perf-ini-long-section-20000.report.json,${WORK}/redact/perf-ini-long-section-20000.report-alt2.json out=${WORK}/redact/perf-ini-long-section-20000.out timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-long-section-20000.ini ${OUT} ${REPORT}
+# r3.2 item 1 (claude-3): URL scanning is linear in the value length, with no scan to the document end. A
+# 64 MiB collection, about 54 MiB of it blanks after the document, with 114,001 sources and 152,001 values
+# under the URL rule: 2 ranges in the first url, count 114,001. One scan to the document end per value
+# takes minutes.
+redact-perf-collection-64mib-urls | 0 | OK report=expected/redact/redact-perf-collection-64mib-urls.json timeout=60 | redact collection ${WORK}/redact/perf-collection-64mib.json ${OUT} ${REPORT}
+# the same for INI: 900,000 FFURL values (29 MB), 2 ranges in the first, count 1
+redact-perf-ini-ffurl-900000 | 0 | OK report=expected/redact/redact-perf-ini-ffurl-900000.json timeout=60 | redact profile.basic ${WORK}/redact/perf-ini-ffurl-900000.ini ${OUT} ${REPORT}
+
+# ---- redact: roles. Only the twelve roles of the contract. Any other role is ERR E_SCHEMA role, including
+# allowlist roles without a redact rule (decklink, AJA). The --ws-placeholder value must be exactly 32
+# characters of A-Z, a-z, 0-9. ERR lines and usage errors write no OUTFILE.
+redact-role-unknown | 1 | ERR E_SCHEMA role | redact profile fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-empty | 1 | ERR E_SCHEMA role | redact "" fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-uppercase | 1 | ERR E_SCHEMA role | redact PROFILE.SERVICE fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-basic-bak | 1 | ERR E_SCHEMA role | redact profile.basic.bak fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-websocket-bak | 1 | ERR E_SCHEMA role | redact module.obs-websocket.bak fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-modules-bak | 1 | ERR E_SCHEMA role | redact app.modules.bak fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-user-bak | 1 | ERR E_SCHEMA role | redact app.user.bak fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-decklink | 1 | ERR E_SCHEMA role | redact module.decklink-output-ui fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-aja | 1 | ERR E_SCHEMA role | redact module.aja-output-ui fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-trailing-space | 1 | ERR E_SCHEMA role | redact collection%20 fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-encoder-prefix | 1 | ERR E_SCHEMA role | redact profile.encoder fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-encoder-bak-bak | 1 | ERR E_SCHEMA role | redact profile.encoder.stream.bak.bak fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-service-bak-prefix | 1 | ERR E_SCHEMA role | redact profile.service.ba fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-collection-json | 1 | ERR E_SCHEMA role | redact collection.json fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-role-global | 1 | ERR E_SCHEMA role | redact global.ini fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT}
+redact-placeholder-31-characters | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest003
+redact-placeholder-33-characters | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest0032x
+redact-placeholder-dash | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4Web-ocketPasswordTest0032
+redact-placeholder-underscore | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4Web_ocketPasswordTest0032
+redact-placeholder-non-ascii | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest00%C3%A9
+redact-placeholder-empty | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder ""
+redact-placeholder-spaces | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder %20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20
+redact-placeholder-trailing-newline | 1 | ERR E_SCHEMA ws-placeholder | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder Ph0ldr4WebSocketPasswordTest003%0A
+redact-placeholder-digits-only | 0 | OK report=expected/redact/redact-ws-auth-false.json | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder 01234567890123456789012345678901
+redact-io-missing-input | 1 | ERR E_IO | redact profile.service fixtures/redact/does-not-exist.json ${OUT} ${REPORT}
+redact-io-input-directory | 1 | ERR E_IO | redact profile.service fixtures/redact ${OUT} ${REPORT}
+redact-io-input-dev-null@posix | 1 | ERR E_IO | redact app.user /dev/null ${OUT} ${REPORT}
+redact-io-input-dev-zero@posix | 1 | ERR E_IO | redact profile.encoder.stream /dev/zero ${OUT} ${REPORT}
+redact-io-report-directory | 1 | ~^ERR E_IO( .+)?$ | redact profile.service fixtures/redact/invalid/service-truncated.json ${OUT} fixtures
+redact-io-outfile-directory | 1 | ~^ERR E_IO( .+)?$ | redact profile.service fixtures/redact/service/rtmp-common.json fixtures ${REPORT}
+redact-usage-no-arguments | 2 | * | redact
+redact-usage-role-only | 2 | * | redact profile.service
+redact-usage-without-report | 2 | * | redact profile.service fixtures/redact/service/rtmp-common.json ${OUT}
+redact-usage-extra-argument | 2 | * | redact profile.service fixtures/redact/service/rtmp-common.json ${OUT} ${REPORT} extra
+redact-usage-placeholder-without-value | 2 | * | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --ws-placeholder
+redact-usage-unknown-option | 2 | * | redact module.obs-websocket fixtures/redact/websocket/auth-false.json ${OUT} ${REPORT} --placeholder Ph0ldr4WebSocketPasswordTest0032

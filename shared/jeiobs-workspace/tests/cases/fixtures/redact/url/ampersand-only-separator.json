@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://ingest.example.com/live?a=1;key=PLAINvalue-sep-1 token=PLAINvalue-sep-2&token=SECRETvalue-sep-1",
+        "bwtest": false
+    }
+}

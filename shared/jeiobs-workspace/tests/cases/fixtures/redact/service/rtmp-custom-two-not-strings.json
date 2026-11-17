@@ -1,0 +1,9 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://ingest.example.com/live",
+        "key": "SECRETvalue-svc-13",
+        "username": null,
+        "password": {"v": "PLAINvalue-svc-5"}
+    }
+}

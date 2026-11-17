@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://ingest.example.com/live/PLAINvalue-url-12@PLAINvalue-url-13?key=SECRETvalue-url-12",
+        "bwtest": false
+    }
+}

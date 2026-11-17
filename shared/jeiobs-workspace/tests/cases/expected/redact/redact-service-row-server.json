@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "redacted", "redactions": [{"pointer": "/settings/server", "kind": "url_credential", "start": 102, "end": 119}]}

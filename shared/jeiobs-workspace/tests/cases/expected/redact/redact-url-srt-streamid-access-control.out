@@ -1,0 +1,7 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "srt://in.example.com:9000?streamid=&passphrase=&latency=PLAINvalue-srt-1",
+        "bwtest": false
+    }
+}

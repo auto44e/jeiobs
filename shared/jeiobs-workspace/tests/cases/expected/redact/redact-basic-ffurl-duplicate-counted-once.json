@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "opaque-unreviewed", "unreviewed": {"rules": "u1", "count": 1}, "redactions": [{"pointer": "/AdvOut/FFURL", "kind": "url_credential", "start": 22, "end": 38}, {"pointer": "/AdvOut/FFURL", "kind": "url_credential", "start": 105, "end": 121}]}

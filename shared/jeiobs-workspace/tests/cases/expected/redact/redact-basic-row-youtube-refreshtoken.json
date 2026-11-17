@@ -1,0 +1,1 @@
+{"outcome": "stored", "fidelity": "redacted", "redactions": [{"pointer": "/YouTube/RefreshToken", "kind": "oauth_token", "start": 47, "end": 83}]}

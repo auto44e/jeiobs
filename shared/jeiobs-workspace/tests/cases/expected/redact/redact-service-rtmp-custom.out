@@ -1,0 +1,11 @@
+{
+    "type": "rtmp_custom",
+    "settings": {
+        "server": "rtmp://@ingest.example.com/live?token=&quality=PLAINvalue-svc-1",
+        "use_auth": true,
+        "bwtest": false,
+        "key": "",
+        "username": "",
+        "password": ""
+    }
+}
