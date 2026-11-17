@@ -1600,3 +1600,273 @@ redact-number-exponent-7-digits-service | 0 | OK report=expected/redact/omitted-
 # the Token in General stays (opaque-unreviewed for the unknown section only)
 redact-basic-pr3-long-section-only | 0 | OK report=expected/redact/redact-basic-pr3-long-section-only.json,expected/redact/redact-basic-pr3-long-section-only-alt2.json | redact profile.basic fixtures/redact/basic/pr3-long-section-only.ini ${OUT} ${REPORT}
 redact-basic-pr3-section-1024-bytes | 0 | OK report=expected/redact/opaque-1.json | redact profile.basic fixtures/redact/basic/pr3-section-1024-bytes.ini ${OUT} ${REPORT}
+
+# Unicode collision key (S1 Unicode tables PR): black-box cases written from the contract without reading the library.
+# ---- unicode: jw-check unicode nfd, fold and key, Unicode collision key on manifest paths
+# Expected values: Python 3.12 unicodedata (Unicode 15.0.0), cross-checked against UCD 15.1.0 and
+# the pinned UCD 18.0.0. Justifications: notes.md of the blind case set.
+
+# ---- unicode nfd: canonical decomposition with canonical ordering, Hangul computed, no case
+# folding. OK is followed by the lowercase hex of the UTF-8 bytes of the result
+unicode-nfd-ascii-unchanged | 0 | OK 414243616263 | unicode nfd ABCabc
+unicode-nfd-e-acute-precomposed | 0 | OK 65cc81 | unicode nfd %C3%A9
+unicode-nfd-e-acute-decomposed | 0 | OK 65cc81 | unicode nfd e%CC%81
+unicode-nfd-capital-e-acute-keeps-case | 0 | OK 45cc81 | unicode nfd %C3%89
+unicode-nfd-sharp-s-unchanged | 0 | OK c39f | unicode nfd %C3%9F
+unicode-nfd-capital-sharp-s-unchanged | 0 | OK e1ba9e | unicode nfd %E1%BA%9E
+unicode-nfd-dotted-capital-i | 0 | OK 49cc87 | unicode nfd %C4%B0
+unicode-nfd-kelvin-singleton | 0 | OK 4b | unicode nfd %E2%84%AA
+unicode-nfd-angstrom-full-decomposition | 0 | OK 41cc8a | unicode nfd %E2%84%AB
+unicode-nfd-ohm-singleton | 0 | OK cea9 | unicode nfd %E2%84%A6
+unicode-nfd-fi-ligature-unchanged | 0 | OK efac81 | unicode nfd %EF%AC%81
+unicode-nfd-fullwidth-a-unchanged | 0 | OK efbca1 | unicode nfd %EF%BC%A1
+unicode-nfd-superscript-two-unchanged | 0 | OK c2b2 | unicode nfd %C2%B2
+unicode-nfd-hangul-lvt | 0 | OK e18480e185a1e186a8 | unicode nfd %EA%B0%81
+unicode-nfd-hangul-first-syllable | 0 | OK e18480e185a1 | unicode nfd %EA%B0%80
+unicode-nfd-hangul-lv-second-vowel | 0 | OK e18480e185a2 | unicode nfd %EA%B0%9C
+unicode-nfd-hangul-last-syllable | 0 | OK e18492e185b5e18782 | unicode nfd %ED%9E%A3
+unicode-nfd-hangul-after-last-syllable | 0 | OK ed9ea4 | unicode nfd %ED%9E%A4
+unicode-nfd-hangul-before-first-syllable | 0 | OK eaafbf | unicode nfd %EA%AF%BF
+unicode-nfd-hangul-jamo-not-composed | 0 | OK e18480e185a1e186a8 | unicode nfd %E1%84%80%E1%85%A1%E1%86%A8
+unicode-nfd-order-dot-below-before-acute | 0 | OK 61cca3cc81 | unicode nfd a%CC%81%CC%A3
+unicode-nfd-order-already-ordered | 0 | OK 61cca3cc81 | unicode nfd a%CC%A3%CC%81
+unicode-nfd-order-same-class-grave-acute | 0 | OK 61cc80cc81 | unicode nfd a%CC%80%CC%81
+unicode-nfd-order-same-class-acute-grave | 0 | OK 61cc81cc80 | unicode nfd a%CC%81%CC%80
+unicode-nfd-order-three-classes-reversed | 0 | OK 61cca8cca3cc81 | unicode nfd a%CC%81%CC%A3%CC%A8
+unicode-nfd-order-stable-equal-classes | 0 | OK 61cca3cc81cc80 | unicode nfd a%CC%81%CC%A3%CC%80
+unicode-nfd-order-after-precomposed | 0 | OK 61cca3cc81 | unicode nfd %C3%A1%CC%A3
+unicode-nfd-order-d-dot-above-dot-below | 0 | OK 64cca3cc87 | unicode nfd %E1%B8%8B%CC%A3
+unicode-nfd-order-marks-without-base | 0 | OK cca3cc81 | unicode nfd %CC%81%CC%A3
+unicode-nfd-order-not-across-starter | 0 | OK 61cc8162cca3 | unicode nfd a%CC%81b%CC%A3
+unicode-nfd-order-non-bmp-mark | 0 | OK 61f09d85a5cc81 | unicode nfd a%CC%81%F0%9D%85%A5
+unicode-nfd-recursive-u-diaeresis-macron | 0 | OK 55cc88cc84 | unicode nfd %C7%95
+unicode-nfd-recursive-iota-dialytika-tonos | 0 | OK ceb9cc88cc81 | unicode nfd %CE%90
+unicode-nfd-musical-half-note | 0 | OK f09d8597f09d85a5 | unicode nfd %F0%9D%85%9E
+unicode-nfd-musical-eighth-note-recursive | 0 | OK f09d8598f09d85a5f09d85ae | unicode nfd %F0%9D%85%A0
+unicode-nfd-cjk-compat-ideograph | 0 | OK e8b188 | unicode nfd %EF%A4%80
+unicode-nfd-cjk-compat-ideograph-supplement | 0 | OK e4b8bd | unicode nfd %F0%AF%A0%80
+unicode-nfd-greek-1f88 | 0 | OK ce91cc93cd85 | unicode nfd %E1%BE%88
+unicode-nfd-greek-prosgegrammeni-singleton | 0 | OK ceb9 | unicode nfd %E1%BE%BE
+unicode-nfd-long-s-dot-above | 0 | OK c5bfcc87 | unicode nfd %E1%BA%9B
+unicode-nfd-pass-through-cjk-emoji | 0 | OK e4b8adf09f9880 | unicode nfd %E4%B8%AD%F0%9F%98%80
+unicode-nfd-pass-through-unassigned-plane-4 | 0 | OK f1808080 | unicode nfd %F1%80%80%80
+unicode-nfd-pass-through-private-use | 0 | OK ee8080 | unicode nfd %EE%80%80
+unicode-nfd-max-code-point | 0 | OK f48fbfbf | unicode nfd %F4%8F%BF%BF
+
+# ---- unicode fold: full case folding (CaseFolding.txt C and F, no T), no normalization
+unicode-fold-ascii | 0 | OK 68656c6c6f20776f726c642d313233 | unicode fold Hello%20World-123
+unicode-fold-capital-e-acute-not-normalized | 0 | OK c3a9 | unicode fold %C3%89
+unicode-fold-decomposed-stays-decomposed | 0 | OK 65cc81 | unicode fold E%CC%81
+unicode-fold-small-e-acute-unchanged | 0 | OK c3a9 | unicode fold %C3%A9
+unicode-fold-sharp-s-full | 0 | OK 7373 | unicode fold %C3%9F
+unicode-fold-capital-sharp-s-full | 0 | OK 7373 | unicode fold %E1%BA%9E
+unicode-fold-final-sigma | 0 | OK cf83 | unicode fold %CF%82
+unicode-fold-capital-sigma | 0 | OK cf83 | unicode fold %CE%A3
+unicode-fold-sigma-no-final-context | 0 | OK cf83ceb1cf83 | unicode fold %CE%A3%CE%91%CE%A3
+unicode-fold-dotted-capital-i-full | 0 | OK 69cc87 | unicode fold %C4%B0
+unicode-fold-capital-i-not-turkic | 0 | OK 69 | unicode fold I
+unicode-fold-dotless-i-unchanged | 0 | OK c4b1 | unicode fold %C4%B1
+unicode-fold-kelvin | 0 | OK 6b | unicode fold %E2%84%AA
+unicode-fold-angstrom-not-normalized | 0 | OK c3a5 | unicode fold %E2%84%AB
+unicode-fold-ohm | 0 | OK cf89 | unicode fold %E2%84%A6
+unicode-fold-fi-ligature-full | 0 | OK 6669 | unicode fold %EF%AC%81
+unicode-fold-long-s-t-ligature-full | 0 | OK 7374 | unicode fold %EF%AC%85
+unicode-fold-long-s | 0 | OK 73 | unicode fold %C5%BF
+unicode-fold-micro-sign | 0 | OK cebc | unicode fold %C2%B5
+unicode-fold-ypogegrammeni | 0 | OK ceb9 | unicode fold %CD%85
+unicode-fold-greek-1f88-full | 0 | OK e1bc80ceb9 | unicode fold %E1%BE%88
+unicode-fold-greek-1f80-full | 0 | OK e1bc80ceb9 | unicode fold %E1%BE%80
+unicode-fold-greek-upsilon-dialytika-tonos | 0 | OK cf85cc88cc81 | unicode fold %CE%B0
+unicode-fold-cherokee-small-to-capital | 0 | OK e18ea0 | unicode fold %EA%AD%B0
+unicode-fold-cherokee-capital-unchanged | 0 | OK e18ea0 | unicode fold %E1%8E%A0
+unicode-fold-cherokee-small-ye | 0 | OK e18fb0 | unicode fold %E1%8F%B8
+unicode-fold-georgian-mtavruli | 0 | OK e18390 | unicode fold %E1%B2%90
+unicode-fold-georgian-mkhedruli-unchanged | 0 | OK e18390 | unicode fold %E1%83%90
+unicode-fold-georgian-asomtavruli | 0 | OK e2b480 | unicode fold %E1%82%A0
+unicode-fold-fullwidth-capital-a | 0 | OK efbd81 | unicode fold %EF%BC%A1
+unicode-fold-roman-numeral-one | 0 | OK e285b0 | unicode fold %E2%85%A0
+unicode-fold-circled-capital-a | 0 | OK e29390 | unicode fold %E2%92%B6
+unicode-fold-superscript-two-unchanged | 0 | OK c2b2 | unicode fold %C2%B2
+unicode-fold-math-bold-capital-a-unchanged | 0 | OK f09d9080 | unicode fold %F0%9D%90%80
+unicode-fold-deseret-non-bmp | 0 | OK f09090a8 | unicode fold %F0%90%90%80
+unicode-fold-n-preceded-by-apostrophe | 0 | OK cabc6e | unicode fold %C5%89
+unicode-fold-armenian-ech-yiwn | 0 | OK d5a5d682 | unicode fold %D6%87
+unicode-fold-dz-titlecase | 0 | OK c786 | unicode fold %C7%85
+unicode-fold-hangul-not-decomposed | 0 | OK eab081 | unicode fold %EA%B0%81
+unicode-fold-cyrillic | 0 | OK d0b6d191 | unicode fold %D0%96%D0%81
+
+# ---- unicode key: NFD(toCasefold(NFD(TEXT))), the section 12 collision key (Unicode D145)
+unicode-key-ascii-upper | 0 | OK 616263 | unicode key ABC
+unicode-key-ascii-lower | 0 | OK 616263 | unicode key abc
+unicode-key-ascii-path | 0 | OK 62617369632f7363656e65732f6d61696e2e6a736f6e | unicode key Basic/Scenes/Main.JSON
+unicode-key-e-acute-precomposed | 0 | OK 65cc81 | unicode key %C3%A9
+unicode-key-e-acute-decomposed | 0 | OK 65cc81 | unicode key e%CC%81
+unicode-key-capital-e-acute-precomposed | 0 | OK 65cc81 | unicode key %C3%89
+unicode-key-capital-e-acute-decomposed | 0 | OK 65cc81 | unicode key E%CC%81
+unicode-key-sharp-s | 0 | OK 7373 | unicode key %C3%9F
+unicode-key-ss | 0 | OK 7373 | unicode key ss
+unicode-key-capital-sharp-s | 0 | OK 7373 | unicode key %E1%BA%9E
+unicode-key-capital-ss | 0 | OK 7373 | unicode key SS
+unicode-key-final-sigma | 0 | OK cf83 | unicode key %CF%82
+unicode-key-small-sigma | 0 | OK cf83 | unicode key %CF%83
+unicode-key-capital-sigma | 0 | OK cf83 | unicode key %CE%A3
+unicode-key-dotted-capital-i | 0 | OK 69cc87 | unicode key %C4%B0
+unicode-key-i-dot-above | 0 | OK 69cc87 | unicode key i%CC%87
+unicode-key-capital-i-dot-above | 0 | OK 69cc87 | unicode key I%CC%87
+unicode-key-i | 0 | OK 69 | unicode key i
+unicode-key-capital-i | 0 | OK 69 | unicode key I
+unicode-key-dotless-i | 0 | OK c4b1 | unicode key %C4%B1
+unicode-key-kelvin | 0 | OK 6b | unicode key %E2%84%AA
+unicode-key-small-k | 0 | OK 6b | unicode key k
+unicode-key-capital-k | 0 | OK 6b | unicode key K
+unicode-key-angstrom | 0 | OK 61cc8a | unicode key %E2%84%AB
+unicode-key-a-ring-capital-precomposed | 0 | OK 61cc8a | unicode key %C3%85
+unicode-key-a-ring-capital-decomposed | 0 | OK 61cc8a | unicode key A%CC%8A
+unicode-key-a-ring-small-precomposed | 0 | OK 61cc8a | unicode key %C3%A5
+unicode-key-ohm | 0 | OK cf89 | unicode key %E2%84%A6
+unicode-key-omega-small | 0 | OK cf89 | unicode key %CF%89
+unicode-key-omega-capital | 0 | OK cf89 | unicode key %CE%A9
+unicode-key-hangul-syllable | 0 | OK e18480e185a1e186a8 | unicode key %EA%B0%81
+unicode-key-hangul-jamo | 0 | OK e18480e185a1e186a8 | unicode key %E1%84%80%E1%85%A1%E1%86%A8
+unicode-key-hangul-lv-plus-trailing-jamo | 0 | OK e18480e185a1e186a8 | unicode key %EA%B0%80%E1%86%A8
+unicode-key-order-dot-below-acute | 0 | OK 61cca3cc81 | unicode key a%CC%A3%CC%81
+unicode-key-order-acute-dot-below | 0 | OK 61cca3cc81 | unicode key a%CC%81%CC%A3
+unicode-key-order-grave-acute | 0 | OK 61cc80cc81 | unicode key a%CC%80%CC%81
+unicode-key-order-acute-grave | 0 | OK 61cc81cc80 | unicode key a%CC%81%CC%80
+unicode-key-order-capital-precomposed-then-mark | 0 | OK 61cca3cc81 | unicode key %C3%81%CC%A3
+unicode-key-order-precomposed-dot-below-then-acute | 0 | OK 61cca3cc81 | unicode key %E1%BA%A1%CC%81
+unicode-key-fi-ligature | 0 | OK 6669 | unicode key %EF%AC%81
+unicode-key-fi | 0 | OK 6669 | unicode key fi
+unicode-key-capital-fi | 0 | OK 6669 | unicode key FI
+unicode-key-long-s-t-ligature | 0 | OK 7374 | unicode key %EF%AC%85
+unicode-key-st-ligature | 0 | OK 7374 | unicode key %EF%AC%86
+unicode-key-fullwidth-capital-a | 0 | OK efbd81 | unicode key %EF%BC%A1
+unicode-key-fullwidth-small-a | 0 | OK efbd81 | unicode key %EF%BD%81
+unicode-key-superscript-two | 0 | OK c2b2 | unicode key %C2%B2
+unicode-key-digit-two | 0 | OK 32 | unicode key 2
+unicode-key-roman-numeral-one | 0 | OK e285b0 | unicode key %E2%85%A0
+unicode-key-musical-half-note | 0 | OK f09d8597f09d85a5 | unicode key %F0%9D%85%9E
+unicode-key-musical-half-note-decomposed | 0 | OK f09d8597f09d85a5 | unicode key %F0%9D%85%97%F0%9D%85%A5
+unicode-key-cherokee-capital | 0 | OK e18ea0 | unicode key %E1%8E%A0
+unicode-key-cherokee-small | 0 | OK e18ea0 | unicode key %EA%AD%B0
+unicode-key-greek-1f88 | 0 | OK ceb1cc93ceb9 | unicode key %E1%BE%88
+unicode-key-greek-1f80 | 0 | OK ceb1cc93ceb9 | unicode key %E1%BE%80
+unicode-key-greek-alpha-psili-iota | 0 | OK ceb1cc93ceb9 | unicode key %E1%BC%80%CE%B9
+unicode-key-greek-ypogegrammeni-before-psili | 0 | OK ceb1cc93ceb9 | unicode key %CE%B1%CD%85%CC%93
+unicode-key-greek-alpha-ypogegrammeni-then-psili | 0 | OK ceb1cc93ceb9 | unicode key %E1%BE%B3%CC%93
+unicode-key-greek-1fb4 | 0 | OK ceb1cc81ceb9 | unicode key %E1%BE%B4
+unicode-key-greek-prosgegrammeni | 0 | OK ceb9 | unicode key %E1%BE%BE
+unicode-key-georgian-mkhedruli | 0 | OK e18390 | unicode key %E1%83%90
+unicode-key-georgian-mtavruli | 0 | OK e18390 | unicode key %E1%B2%90
+unicode-key-long-s-dot-above | 0 | OK 73cc87 | unicode key %E1%BA%9B
+unicode-key-s-dot-above-capital | 0 | OK 73cc87 | unicode key %E1%B9%A0
+unicode-key-micro-sign | 0 | OK cebc | unicode key %C2%B5
+unicode-key-greek-capital-mu | 0 | OK cebc | unicode key %CE%9C
+unicode-key-deseret-capital | 0 | OK f09090a8 | unicode key %F0%90%90%80
+unicode-key-cjk-compat-ideograph | 0 | OK e8b188 | unicode key %EF%A4%80
+unicode-key-dz-digraph-capital | 0 | OK c786 | unicode key %C7%84
+unicode-key-path-mixed | 0 | OK 62617369632f736365cc806e65732f6d792063616665cc812e6a736f6e | unicode key Basic/SC%C3%88NES/My%20Caf%C3%89.json
+unicode-key-greek-word | 0 | OK cebfceb4cebfcc81cf83 | unicode key %CE%9F%CE%94%CE%8C%CE%A3
+unicode-key-min-2-byte | 0 | OK c280 | unicode key %C2%80
+unicode-key-max-2-byte | 0 | OK dfbf | unicode key %DF%BF
+unicode-key-min-3-byte | 0 | OK e0a080 | unicode key %E0%A0%80
+unicode-key-before-surrogates | 0 | OK ed9fbf | unicode key %ED%9F%BF
+unicode-key-after-surrogates | 0 | OK ee8080 | unicode key %EE%80%80
+unicode-key-max-3-byte | 0 | OK efbfbf | unicode key %EF%BF%BF
+unicode-key-min-4-byte | 0 | OK f0908080 | unicode key %F0%90%80%80
+unicode-key-max-code-point | 0 | OK f48fbfbf | unicode key %F4%8F%BF%BF
+unicode-key-unassigned-plane-4 | 0 | OK f1808080 | unicode key %F1%80%80%80
+
+# ---- unicode: TEXT that is not strict UTF-8, for nfd, fold and key (POSIX only: the
+# Windows argv cannot carry it)
+unicode-nfd-not-utf8-overlong-c0@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %C0%80
+unicode-nfd-not-utf8-overlong-c1@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %C1%BF
+unicode-nfd-not-utf8-overlong-e0@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %E0%80%80
+unicode-nfd-not-utf8-surrogate@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %ED%A0%80
+unicode-nfd-not-utf8-above-max@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %F4%90%80%80
+unicode-nfd-not-utf8-truncated@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %E2%82
+unicode-nfd-not-utf8-stray-continuation@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %80
+unicode-fold-not-utf8-overlong-c0@posix | 1 | ERR E_PATH not-utf8 | unicode fold %C0%80
+unicode-fold-not-utf8-overlong-c1@posix | 1 | ERR E_PATH not-utf8 | unicode fold %C1%BF
+unicode-fold-not-utf8-overlong-e0@posix | 1 | ERR E_PATH not-utf8 | unicode fold %E0%80%80
+unicode-fold-not-utf8-surrogate@posix | 1 | ERR E_PATH not-utf8 | unicode fold %ED%A0%80
+unicode-fold-not-utf8-above-max@posix | 1 | ERR E_PATH not-utf8 | unicode fold %F4%90%80%80
+unicode-fold-not-utf8-truncated@posix | 1 | ERR E_PATH not-utf8 | unicode fold %E2%82
+unicode-fold-not-utf8-stray-continuation@posix | 1 | ERR E_PATH not-utf8 | unicode fold %80
+unicode-key-not-utf8-overlong-c0@posix | 1 | ERR E_PATH not-utf8 | unicode key %C0%80
+unicode-key-not-utf8-overlong-c1@posix | 1 | ERR E_PATH not-utf8 | unicode key %C1%BF
+unicode-key-not-utf8-overlong-e0@posix | 1 | ERR E_PATH not-utf8 | unicode key %E0%80%80
+unicode-key-not-utf8-surrogate@posix | 1 | ERR E_PATH not-utf8 | unicode key %ED%A0%80
+unicode-key-not-utf8-above-max@posix | 1 | ERR E_PATH not-utf8 | unicode key %F4%90%80%80
+unicode-key-not-utf8-truncated@posix | 1 | ERR E_PATH not-utf8 | unicode key %E2%82
+unicode-key-not-utf8-stray-continuation@posix | 1 | ERR E_PATH not-utf8 | unicode key %80
+unicode-nfd-not-utf8-after-valid-text@posix | 1 | ERR E_PATH not-utf8 | unicode nfd %C3%A9%FF
+unicode-fold-not-utf8-after-valid-text@posix | 1 | ERR E_PATH not-utf8 | unicode fold A%C3%89%80
+unicode-key-not-utf8-overlong-slash@posix | 1 | ERR E_PATH not-utf8 | unicode key %C0%AF
+unicode-key-not-utf8-overlong-e0-9f@posix | 1 | ERR E_PATH not-utf8 | unicode key %E0%9F%BF
+unicode-key-not-utf8-overlong-f0-80@posix | 1 | ERR E_PATH not-utf8 | unicode key %F0%80%80%80
+unicode-key-not-utf8-overlong-f0-8f@posix | 1 | ERR E_PATH not-utf8 | unicode key %F0%8F%BF%BF
+unicode-key-not-utf8-surrogate-last@posix | 1 | ERR E_PATH not-utf8 | unicode key %ED%BF%BF
+unicode-key-not-utf8-surrogate-pair-cesu@posix | 1 | ERR E_PATH not-utf8 | unicode key %ED%A0%BD%ED%B8%80
+unicode-key-not-utf8-lead-f5@posix | 1 | ERR E_PATH not-utf8 | unicode key %F5%80%80%80
+unicode-key-not-utf8-lead-f7-max@posix | 1 | ERR E_PATH not-utf8 | unicode key %F7%BF%BF%BF
+unicode-key-not-utf8-five-byte@posix | 1 | ERR E_PATH not-utf8 | unicode key %F8%88%80%80%80
+unicode-key-not-utf8-byte-fe@posix | 1 | ERR E_PATH not-utf8 | unicode key %FE
+unicode-key-not-utf8-byte-ff@posix | 1 | ERR E_PATH not-utf8 | unicode key %FF
+unicode-key-not-utf8-truncated-at-end@posix | 1 | ERR E_PATH not-utf8 | unicode key a%C3
+unicode-key-not-utf8-truncated-4-byte@posix | 1 | ERR E_PATH not-utf8 | unicode key %F0%9F%98
+unicode-key-not-utf8-truncated-before-ascii@posix | 1 | ERR E_PATH not-utf8 | unicode key %E2%82a
+unicode-key-not-utf8-lead-after-lead@posix | 1 | ERR E_PATH not-utf8 | unicode key %C3%C3%A9
+unicode-key-not-utf8-stray-after-valid@posix | 1 | ERR E_PATH not-utf8 | unicode key %C3%A9%80
+unicode-key-not-utf8-continuation-run@posix | 1 | ERR E_PATH not-utf8 | unicode key %80%80%80
+unicode-key-not-utf8-after-valid-text@posix | 1 | ERR E_PATH not-utf8 | unicode key A%C3%89%FF
+
+# ---- path: valid non-ASCII paths print plain OK (section 12)
+unicode-path-ok-nfd-combining | 0 | OK | path basic/scenes/Cafe%CC%81.json
+unicode-path-ok-sharp-s | 0 | OK | path basic/scenes/Stra%C3%9Fe.json
+unicode-path-ok-capital-sharp-s | 0 | OK | path basic/scenes/STRA%E1%BA%9EE.json
+unicode-path-ok-greek-final-sigma | 0 | OK | path basic/scenes/%CE%BB%CF%8C%CE%B3%CE%BF%CF%82.json
+unicode-path-ok-dotted-capital-i | 0 | OK | path basic/scenes/%C4%B0stanbul.json
+unicode-path-ok-dotless-i | 0 | OK | path %C4%B1.txt
+unicode-path-ok-kelvin-angstrom-ohm | 0 | OK | path %E2%84%AA/%E2%84%AB/%E2%84%A6.txt
+unicode-path-ok-hangul-syllables | 0 | OK | path %EA%B0%81/%ED%9E%A3.txt
+unicode-path-ok-hangul-jamo | 0 | OK | path %E1%84%80%E1%85%A1%E1%86%A8.txt
+unicode-path-ok-fi-ligature | 0 | OK | path %EF%AC%81le.txt
+unicode-path-ok-fullwidth | 0 | OK | path %EF%BC%A1.txt
+unicode-path-ok-superscript-two | 0 | OK | path x%C2%B2.txt
+unicode-path-ok-non-bmp | 0 | OK | path %F0%9D%85%9E/%F0%90%90%80.txt
+unicode-path-ok-greek-1f88 | 0 | OK | path %E1%BE%88.txt
+unicode-path-ok-cherokee | 0 | OK | path %EA%AD%B0%E1%8E%A0.txt
+unicode-path-ok-georgian | 0 | OK | path %E1%B2%90%E1%83%90.txt
+unicode-path-ok-mark-at-component-start | 0 | OK | path a/%CC%81.txt
+unicode-path-ok-deep-non-ascii | 0 | OK | path plugin_config/%C3%84%C3%96%C3%9C/sub/state.json
+
+# ---- manifest: entry paths of one root must not be equal under the collision key (section 12)
+ucollision-nfc-vs-nfd | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-nfc-vs-nfd.json
+ucollision-nfc-vs-nfd-escaped | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-nfc-vs-nfd-escaped.json
+ucollision-hangul-syllable-vs-jamo | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-hangul-syllable-vs-jamo.json
+ucollision-angstrom-three-way | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-angstrom-three-way.json
+ucollision-mark-order | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-mark-order.json
+ucollision-mark-order-same-class-ok | 0 | OK | manifest fixtures/manifest/ucollision-mark-order-same-class-ok.json
+ucollision-deep-component-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-deep-component-case.json
+ucollision-deep-component-case-greek | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-deep-component-case-greek.json
+ucollision-multi-component-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-multi-component-case.json
+ucollision-sharp-s-three-way | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-sharp-s-three-way.json
+ucollision-sigma-three-way | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-sigma-three-way.json
+ucollision-dotted-capital-i | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-dotted-capital-i.json
+ucollision-dotted-capital-i-ok | 0 | OK | manifest fixtures/manifest/ucollision-dotted-capital-i-ok.json
+ucollision-kelvin | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-kelvin.json
+ucollision-ohm | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-ohm.json
+ucollision-fi-ligature | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-fi-ligature.json
+ucollision-micro-sign | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-micro-sign.json
+ucollision-fullwidth-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-fullwidth-case.json
+ucollision-compat-not-unified-ok | 0 | OK | manifest fixtures/manifest/ucollision-compat-not-unified-ok.json
+ucollision-stored-vs-omitted-long-s | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-stored-vs-omitted-long-s.json
+ucollision-deseret-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-deseret-case.json
+ucollision-musical-symbol | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-musical-symbol.json
+ucollision-greek-full-folding | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-greek-full-folding.json
+ucollision-greek-inner-nfd | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-greek-inner-nfd.json
+ucollision-cherokee | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-cherokee.json
+ucollision-georgian | 1 | ERR E_COLLISION | manifest fixtures/manifest/ucollision-georgian.json
+ucollision-other-root-same-path-ok | 0 | OK | manifest fixtures/manifest/ucollision-other-root-same-path-ok.json
+ucollision-other-root-equal-keys-ok | 0 | OK | manifest fixtures/manifest/ucollision-other-root-equal-keys-ok.json

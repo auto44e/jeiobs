@@ -11,6 +11,9 @@
 - `07`, `08`: black-box test brief for the Claude worker (written without reading the library)
   and its report.
 - The PR's review run is added under this folder.
+- `44`, `45`: the Unicode tables PR (owner decision 3). The lead wrote the contract, the generator and the
+  library (no Codex implementation worker this time: about 200 lines over generated tables, checked by
+  `NormalizationTest.txt`); the Claude worker wrote the black-box cases blind (`45`).
 
 The workers committed on detached HEADs in local worktrees (`9f1133475`, `778797801`); those
 commits were never pushed and reached the branch by cherry-pick.
