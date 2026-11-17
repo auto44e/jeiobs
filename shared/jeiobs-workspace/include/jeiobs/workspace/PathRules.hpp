@@ -17,7 +17,6 @@ namespace Jeiobs::Workspace {
 
 enum class PathStatus {
 	Ok,
-	Unchecked,
 	Invalid,
 };
 
@@ -36,6 +35,9 @@ struct PathResult {
 
 [[nodiscard]] PathResult ValidatePath(std::string_view path);
 
-[[nodiscard]] std::string AsciiFold(std::string_view value);
+// The key two entries of one manifest must not share: `root`, a NUL byte, then the Unicode collision
+// key of `path` (section 12 of WORKSPACE_FORMAT.md). A path that is not UTF-8 gets the byte 0xFF and
+// its raw bytes instead, which no valid key can equal; ValidatePath rejects such a path anyway.
+[[nodiscard]] std::string EntryCollisionKey(std::string_view root, std::string_view path);
 
 } // namespace Jeiobs::Workspace

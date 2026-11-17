@@ -123,9 +123,9 @@ path-ok-device-inside | 0 | OK | path icon.png
 path-ok-max-components | 0 | OK | path a/b/c/d/e/f/g/h
 path-ok-512-bytes | 0 | OK | path ${P512}
 path-ok-255-byte-component | 0 | OK | path ${C255}
-path-ok-unchecked-non-ascii | 0 | OK unchecked | path basic/scenes/Caf%C3%A9.json
-path-ok-unchecked-superscript-4 | 0 | OK unchecked | path COM%E2%81%B4
-path-ok-unchecked-255-byte-multibyte | 0 | OK unchecked | path ${C255U}
+path-ok-non-ascii-non-ascii | 0 | OK | path basic/scenes/Caf%C3%A9.json
+path-ok-non-ascii-superscript-4 | 0 | OK | path COM%E2%81%B4
+path-ok-non-ascii-255-byte-multibyte | 0 | OK | path ${C255U}
 path-empty | 1 | ERR E_PATH empty | path ""
 path-absolute | 1 | ERR E_PATH absolute | path /etc/passwd
 path-dot-inside | 1 | ERR E_PATH dot | path a/./b
@@ -209,8 +209,8 @@ manifest-first-revision-parent-null | 0 | OK | manifest fixtures/manifest/manife
 manifest-without-label | 0 | OK | manifest fixtures/manifest/manifest-without-label.json
 manifest-no-entries | 0 | OK | manifest fixtures/manifest/manifest-no-entries.json
 manifest-omitted-directory | 0 | OK | manifest fixtures/manifest/manifest-omitted-directory.json
-manifest-non-ascii-path | 0 | OK unchecked-paths | manifest fixtures/manifest/manifest-non-ascii-path.json
-manifest-non-ascii-path-escaped | 0 | OK unchecked-paths | manifest fixtures/manifest/manifest-non-ascii-path-escaped.json
+manifest-non-ascii-path | 0 | OK | manifest fixtures/manifest/manifest-non-ascii-path.json
+manifest-non-ascii-path-escaped | 0 | OK | manifest fixtures/manifest/manifest-non-ascii-path-escaped.json
 manifest-whitespace-cr-tab | 0 | OK | manifest ${WORK}/whitespace-cr-tab.json
 manifest-missing-file | 1 | ERR E_IO | manifest fixtures/does-not-exist.json
 manifest-directory | 1 | ERR E_IO | manifest fixtures
@@ -276,7 +276,7 @@ limit-component-255-bytes | 0 | OK | manifest ${WORK}/component-255.json
 limit-component-256-bytes | 1 | ERR E_LIMIT component | manifest ${WORK}/component-256.json
 limit-components-9 | 1 | ERR E_LIMIT components | manifest fixtures/manifest/limit-components-9.json
 limit-components-8 | 0 | OK | manifest fixtures/manifest/limit-components-8.json
-limit-component-255-bytes-multibyte | 0 | OK unchecked-paths | manifest fixtures/manifest/limit-component-255-bytes-multibyte.json
+limit-component-255-bytes-multibyte | 0 | OK | manifest fixtures/manifest/limit-component-255-bytes-multibyte.json
 limit-component-256-bytes-multibyte | 1 | ERR E_LIMIT component | manifest fixtures/manifest/limit-component-256-bytes-multibyte.json
 
 # ---- manifest: path rules and collisions on entry paths
@@ -296,7 +296,7 @@ manifest-path-device-space | 1 | ERR E_PATH device-name | manifest fixtures/mani
 manifest-collision-ascii-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/manifest-collision-ascii-case.json
 manifest-collision-identical | 1 | ERR E_COLLISION | manifest fixtures/manifest/manifest-collision-identical.json
 manifest-no-collision-other-root | 0 | OK | manifest fixtures/manifest/manifest-no-collision-other-root.json
-manifest-no-ascii-collision-non-ascii-case | 0 | OK unchecked-paths | manifest fixtures/manifest/manifest-no-ascii-collision-non-ascii-case.json
+manifest-collision-non-ascii-case | 1 | ERR E_COLLISION | manifest fixtures/manifest/manifest-collision-non-ascii-case.json
 
 # ---- manifest: schema faults, local mode. E_SCHEMA names the field. Nested fields outside
 # entries may also be reported with their parent object (target.os).
@@ -401,7 +401,7 @@ allowlist-ok-module-aja-preview | 0 | OK | manifest fixtures/manifest/allowlist-
 allowlist-ok-module-aja-misc | 0 | OK | manifest fixtures/manifest/allowlist-ok-module-aja-misc.json
 allowlist-ok-all-rows | 0 | OK | manifest fixtures/manifest/allowlist-ok-all-rows.json
 allowlist-ok-names-with-spaces-and-dots | 0 | OK | manifest fixtures/manifest/allowlist-ok-names-with-spaces-and-dots.json
-allowlist-ok-non-ascii-profile-folder | 0 | OK unchecked-paths | manifest fixtures/manifest/allowlist-ok-non-ascii-profile-folder.json
+allowlist-ok-non-ascii-profile-folder | 0 | OK | manifest fixtures/manifest/allowlist-ok-non-ascii-profile-folder.json
 allowlist-wrong-role | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role.json
 allowlist-wrong-role-unknown | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role-unknown.json
 allowlist-wrong-role-main-for-bak | 1 | ERR E_SCHEMA role | manifest fixtures/manifest/allowlist-wrong-role-main-for-bak.json
@@ -484,9 +484,9 @@ compat-unknown-incompat-first-listed | 1 | ERR E_INCOMPAT x_zeta | manifest fixt
 compat-unknown-ro-compat | 0 | OK ro_compat | manifest fixtures/manifest/compat-unknown-ro-compat.json
 compat-future-major-valid | 0 | OK readonly | manifest fixtures/manifest/compat-future-major-valid.json
 compat-future-major-invalid | 1 | ERR E_SCHEMA entries | manifest fixtures/manifest/compat-future-major-invalid.json
-compat-flags-readonly-unchecked | 0 | OK readonly unchecked-paths | manifest fixtures/manifest/compat-flags-readonly-unchecked.json
-compat-flags-ro-compat-unchecked | 0 | OK ro_compat unchecked-paths | manifest fixtures/manifest/compat-flags-ro-compat-unchecked.json
-compat-flags-all | 0 | OK readonly ro_compat unchecked-paths | manifest fixtures/manifest/compat-flags-all.json
+compat-flags-readonly-non-ascii | 0 | OK readonly | manifest fixtures/manifest/compat-flags-readonly-non-ascii.json
+compat-flags-ro-compat-non-ascii | 0 | OK ro_compat | manifest fixtures/manifest/compat-flags-ro-compat-non-ascii.json
+compat-flags-all | 0 | OK readonly ro_compat | manifest fixtures/manifest/compat-flags-all.json
 compat-future-minor | 0 | OK | manifest fixtures/manifest/compat-future-minor.json
 compat-unknown-fields-everywhere | 0 | OK | manifest fixtures/manifest/compat-unknown-fields-everywhere.json
 
@@ -1364,9 +1364,9 @@ plan-names-not-utf8@posix | 0 | tree=names-not-utf8 @expected/plan/names-not-utf
 plan-names-long@posix | 0 | tree=names-long @expected/plan/names-long.json | plan ${TREE} --uid-seed 7
 # ASCII case collisions in one root (profiles Main and main, collections Scene and scene, files Notes.txt
 # and notes.txt): all planned, collision true on both entries of each pair, and a case-collision warning
-# per pair with both paths joined by a vertical bar, in plan order. Two names that differ beyond ASCII case
-# (an accented capital and small letter) give none. either: the profile warning names the two basic.ini
-# paths or the two folders
+# per pair with both paths joined by a vertical bar, in plan order. An accented capital and small letter collide too (Unicode case folding, section
+# 12).
+# For the profile pair either: the profile warning names the two basic.ini paths or the two folders
 plan-case-collision@posix | 0 | tree=case-collision @expected/plan/case-collision.json,expected/plan/case-collision-alt2.json | plan ${TREE} --uid-seed 7
 # roots: --roots maps a root to a directory of TREE_DIR and records it custom, and the default scenes
 # directory is then not read. All five roots in one directory, as OBS lays them out by default: nothing is

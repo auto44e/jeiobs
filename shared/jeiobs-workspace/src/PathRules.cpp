@@ -11,6 +11,7 @@
 #include "jeiobs/workspace/PathRules.hpp"
 
 #include "jeiobs/workspace/Limits.hpp"
+#include "jeiobs/workspace/Unicode.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -88,6 +89,20 @@ bool IsReserved(std::uint32_t value)
 	}
 }
 
+std::string AsciiFold(std::string_view value)
+{
+	std::string folded;
+	folded.reserve(value.size());
+	for (const char character : value) {
+		if (character >= 'A' && character <= 'Z') {
+			folded.push_back(static_cast<char>(character - 'A' + 'a'));
+		} else {
+			folded.push_back(character);
+		}
+	}
+	return folded;
+}
+
 bool IsAsciiEqual(std::string_view value, std::string_view expected)
 {
 	return AsciiFold(value) == AsciiFold(expected);
@@ -133,18 +148,18 @@ bool IsDeviceName(std::string_view component)
 
 } // namespace
 
-std::string AsciiFold(std::string_view value)
+std::string EntryCollisionKey(std::string_view root, std::string_view path)
 {
+	std::string key(root);
+	key.push_back('\0');
 	std::string folded;
-	folded.reserve(value.size());
-	for (const char character : value) {
-		if (character >= 'A' && character <= 'Z') {
-			folded.push_back(static_cast<char>(character - 'A' + 'a'));
-		} else {
-			folded.push_back(character);
-		}
+	if (CollisionKey(path, folded)) {
+		key += folded;
+	} else {
+		key.push_back('\xFF');
+		key.append(path);
 	}
-	return folded;
+	return key;
 }
 
 PathResult ValidatePath(std::string_view path)
@@ -165,11 +180,7 @@ PathResult ValidatePath(std::string_view path)
 		return {PathStatus::Invalid, "absolute"};
 	}
 
-	bool has_non_ascii = false;
 	for (const CodePoint &code_point : code_points) {
-		if (code_point.value > 0x7fU) {
-			has_non_ascii = true;
-		}
 		if (IsControl(code_point.value)) {
 			return {PathStatus::Invalid, "control"};
 		}
@@ -220,9 +231,6 @@ PathResult ValidatePath(std::string_view path)
 		component_start = slash + 1U;
 	}
 
-	if (has_non_ascii) {
-		return {PathStatus::Unchecked, {}};
-	}
 	return {PathStatus::Ok, {}};
 }
 

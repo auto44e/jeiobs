@@ -2,10 +2,10 @@ name: jeiobs workspace library
 on:
   pull_request:
     branches: [main]
-    paths: ['shared/jeiobs-workspace/**', 'deps/blake2/**', '.github/workflows/jeiobs-workspace.yaml']
+    paths: ['shared/jeiobs-workspace/**', 'tools/jeiobs/unicode/**', 'deps/blake2/**', '.github/workflows/jeiobs-workspace.yaml']
   push:
     branches: [main, 'jeiobs/**']
-    paths: ['shared/jeiobs-workspace/**', 'deps/blake2/**', '.github/workflows/jeiobs-workspace.yaml']
+    paths: ['shared/jeiobs-workspace/**', 'tools/jeiobs/unicode/**', 'deps/blake2/**', '.github/workflows/jeiobs-workspace.yaml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,10 +34,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: vcpkg install nlohmann-json:x64-windows
+      - name: Fetch the pinned Unicode data (Ubuntu)
+        if: runner.os == 'Linux'
+        run: tools/jeiobs/unicode/fetch-ucd.sh "$RUNNER_TEMP/ucd"
       - name: Configure
         shell: bash
         run: |
           args=(-S shared/jeiobs-workspace -B build)
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            args+=("-DJW_UCD_DIR=$RUNNER_TEMP/ucd")
+          fi
           if [[ "$RUNNER_OS" == Windows ]]; then
             args+=(-A x64 "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake")
           else

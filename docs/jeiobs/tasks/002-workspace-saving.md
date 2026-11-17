@@ -58,6 +58,10 @@ Record exact native CI results and remaining hardware/UI/licensed-plugin tests.
   and the PR2 review Minors (number token length and exponent clamping). Codex wrote the library and
   Claude the black-box cases blind; the cases decided four readings (contract r1). Linux (GCC):
   `jw-unit`, `jw-fuzz-smoke` and `jw-cases` (1134 case lines) pass, also under ASan and UBSan.
-- Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host). Also
-  owed: an owner-merged PR that pins the Unicode Character Database and adds the generated collision
-  tables (decision 3), and S2 includes a purge for local history (decision 2).
+- Unicode collision tables (decision 3, owner-merged): `Unicode.hpp/.cpp` and the generated
+  `UnicodeTables.inc` (UCD 18.0.0, script and pins in `tools/jeiobs/unicode/`, license in
+  `shared/jeiobs-workspace/third_party/unicode/`). Non-ASCII paths are now checked: `OK unchecked`
+  and the `unchecked-paths` flag are gone, and the manifest and planner collisions use
+  `NFD(casefold(NFD(path)))`.
+- Next: PR4 (`config_lock`, approved: WORKSPACE_FORMAT section 14; the frontend capture host). S2
+  includes a purge for local history (decision 2).

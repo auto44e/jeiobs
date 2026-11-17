@@ -33,7 +33,8 @@ any license; if it ever conflicts with a license, the license controls.
 - Bundled third-party components keep their own licenses, in their own
   directories (for example `deps/*`, `libobs/graphics/libnsgif`,
   `plugins/obs-outputs/librtmp`, `plugins/obs-filters/rnnoise`,
-  `plugins/decklink`, `shared/media-playback`). Any SDK added later gets a recorded
+  `plugins/decklink`, `shared/media-playback`,
+  `shared/jeiobs-workspace/third_party/unicode`: Unicode License v3 for the generated Unicode tables). Any SDK added later gets a recorded
   provenance and license review first (see [task 001](tasks/001-vst3.md)).
 - [COMMITMENT](../../COMMITMENT) is the GPL Cooperation Commitment made by upstream
   contributors. It is retained unchanged. Keeping it does not make any additional
