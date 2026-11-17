@@ -152,3 +152,16 @@ Spec: `docs/jeiobs/WORKSPACE_FORMAT.md` §6 (fidelity, omitted files), §7 (allo
 the stored total is inclusive of 256 MiB counted in plan order, and the collections list must contain A, B, C, D
 in name order. The implementation lists A and C (check how collections are indexed when a file is the 64 MiB
 limit, and whether B is dropped from `collections[]` while kept in `entries[]`). Fix so the case passes; do not edit it.
+
+## r4 (review run 02 of PR #32)
+1. (codex-2, Major) A directory whose listing failed part way (`Summary.error`) must never produce a partial
+   `unrepresentable/names` entry without the `listing-error` warning and `unreadable` handling of r2.4; every code
+   path that lists a directory checks the error.
+2. (claude-7) The collapse sample list is not capped at 101 entries while it counts only regular files:
+   subfolders and non-regular files never vanish silently (count them under the folder, `size` 0).
+3. (claude-15) `ProcessOwnedRoot` lists nothing under the app dir or `basic/` except what each root owns
+   (r1.4): an unrepresentable name there is ignored, not planned (no `obs-studio` path entries).
+4. (claude-16) AddOmitted merge scans are linear/map-based; the 256 MiB stored budget is applied in the plan
+   order of r1 (user.ini, modules, collections, profiles, module configs), sorted by name bytes within each
+   group, not directory order.
+5. (claude-12) `windows.h` is included only with NOMINMAX/WIN32_LEAN_AND_MEAN (lead did it).
