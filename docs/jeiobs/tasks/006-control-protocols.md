@@ -170,7 +170,7 @@ A8. **Persistence correction.** `bindings.json` is captured by workspaces as `op
     already refuses unreviewed entries; there is no separate bindings export path). This keeps
     M1's promise that a snapshot restores a machine's setup while hardware identity never leaves
     the machine. `secrets.json` stays out of capture. The sidecar is keyed by the collection's
-    generated UID (WORKSPACE_FORMAT section 9), not by the OBS file name.
+    scene-UUID set with a name fallback and an `unresolved` state on mismatch, not by the OBS file name. The generated UID of WORKSPACE_FORMAT section 9 exists only inside a captured revision, so it cannot key live configuration; PR5 decides whether a live identity source is added.
 A9. **Trust and scope details.** A trust-by-target matrix is part of PR4 (table of class × target
     × default). OS-level MIDI ports that are network-backed (RTP-MIDI sessions, Network MIDI 2.0)
     are `remote-net`, not `hw`. Learn mode and SysEx thru are `meta` and local-admin only.
@@ -209,14 +209,17 @@ A13. **Grants.** Peer grants and trust overrides are machine-local state in `gra
      capture, export and import, so an old snapshot cannot re-grant a revoked peer and an imported
      mapping cannot widen trust. UDP source addresses are spoofable: a UDP peer allowlist is
      advisory, and no grant over UDP can give `output-control`, `profile` or `meta`. Only an
-     authenticated transport (for example Network MIDI 2.0 with its authentication, or a
-     token-authenticated OSC/TCP session whose secret is in `secrets.json`) can hold those classes.
+     authenticated, connection-oriented transport can hold those classes: a token-authenticated
+     OSC/TCP session whose secret is in `secrets.json`. Network MIDI 2.0 is UDP and authenticates
+     only the invitation, so it counts as UDP here: no privileged grant.
 A14. **Loopback is not trusted by default.** A listener on `127.0.0.1` is reachable by web pages
      and browser sources (DNS rebinding, `no-cors` POSTs). Default grants for `loopback-net`
      apply to UDP only. TCP and HTTP listeners (OSC over TCP/SLIP, OSCQuery) default to read-only
      until the listener enforces a loopback `Host`, rejects any `Origin`, sends no CORS headers,
      and closes the connection on the first malformed frame; they never get write classes by
-     default. OSCQuery is GET-only.
+     default. Those checks are unconditional for every TCP, HTTP and WebSocket listener, reads
+     included (a mapped value streamed over an OSCQuery WebSocket to a web page or a browser
+     source is a leak). OSCQuery is GET-only.
 A15. **Targets, concretely** (every kind has all of: identity, read path, write path, class;
      unclassified means deny):
 
@@ -229,30 +232,41 @@ A15. **Targets, concretely** (every kind has all of: identity, read path, write 
      | transition | name + kind | frontend current-transition event | queued frontend call | scene |
      | hotkey | registerer + name | none | queued, through the frontend hotkey router | by effect; unknown is output-control |
      | output (stream, record, replay, virtual camera) | output kind | output signals | `RequestOutput(origin, kind, start or stop)` | output-control |
-     | profile, collection | name + generated UID | frontend events | `RequestProfileSwitch(origin, target)` with the same confirmation rules | profile |
+     | profile, collection | name + scene-UUID set (collections) | frontend events | `RequestProfileSwitch(origin, target)` with the same confirmation rules | profile |
      | plugin parameter, plugin event | instance + parameter id or URI | M3 state snapshot | single-writer ring | plugin-param |
      | M4 graph and listen bus | node/port id | graph snapshot | the R1/R3 API | mix |
      | egress endpoint | endpoint id | none | endpoint egress queue | the endpoint's trust class |
 
      `RequestOutput` covers only output kinds. Profile and collection switching use their own
-     request because it changes service and outputs. SysEx and raw wire thru need `meta` unless a
-     route is explicitly mapped.
+     request because it changes service and outputs. SysEx and raw wire thru are `meta` operations: creating or enabling such a
+     route needs `meta`; a mapped route then runs without it. The egress row's class is the
+     endpoint's trust class, which A1's table maps to the capability classes it may carry.
 A16. **Coalescing.** Keep the newest absolute value per writer and per target, then apply the
      target's reducer (Sum, Min, Max, ...). Relative values accumulate as the sum of deltas. A
      writer's successive absolute values are never summed.
-A17. **A7 corrected.** Balance is written on whichever thread pushes audio
-     (`process_audio`, called from `obs_source_output_audio`, `obs-source.c:4057-4059,4085`), not only
-     the audio thread, and `audio_balance` is an existing signal (`:96,5735`): reads are signal driven.
+A17. **A7 corrected.** The balance field is READ on whichever thread pushes audio (`process_audio`,
+     called from `obs_source_output_audio`, `obs-source.c:4057-4059,4085`) and WRITTEN by the setter
+     on the caller's thread (`:5735-5737`), so it is an unsynchronized cross-thread field and gets the
+     same latest-value slot as volume. `audio_balance` is an existing signal (`:96,5735`): reads are
+     signal driven.
      Volume and mute reads come from the signal when the source is active. While an inactive
      source holds a shadow value the read reports it as `pending`; `user_volume`, the mixer, the
      saved collection and obs-websocket keep the old value until the adapter flushes the latest
-     shadow once when the source becomes active.
-A18. **Record.** Settled by: items 1-7, 9 and A1-A7: Claude and Codex agreed in the debate or in
-     review rounds; the lead resolved the splits. Items 8, A8, A12-A14: the lead, after the
-     peers disagreed (Claude and Codex first wanted bindings outside capture; round-1 review asked
-     for capture; the lead chose capture as `local-only` with no export path). A10: the lead's outline, scope
-     to be fixed by PR1. Round-2 findings that remain Minor or were answered by the open list
-     below are tracked in the ledger.
+     shadow once when the source becomes active, unless a newer write by another writer (the OBS UI or
+     obs-websocket, observed through the signals) arrived meanwhile; a newer observed write wins and
+     the shadow is dropped.
+A18. **Record, who settled what.**
+     - Debate (Claude and Codex agreed): items 1-7 and 9; the principle.
+     - Review round 1 (both peers asked, the lead answered): A1-A7 (authorization, output control,
+       targets, reads, queues, audio-thread facts), A9, A10 (the lead's outline; PR1 fixes the types).
+     - Review round 2 (Claude asked, Codex agreed where noted): A11 (routes; the lead's
+       definition), A15-A17 (targets table, coalescing, audio facts).
+     - The lead alone, as proposals that only Claude's review tested: A12 (bindings capture as
+       `local-only`; the debate had Claude and Codex wanting bindings outside capture, review round 1
+       asked for capture, the lead chose capture with no export path), A13 (grants machine-local)
+       and A14 (loopback), which no Codex reply addressed. Codex has not accepted A12-A14.
+     - Item 8's persistence layout was settled by the debate except for bindings (A12).
+     **Every decision above that has no flex bullet is firm.**
 
 **Additional if-otherwise and flex.**
 - Serials and peer addresses in portable files would let a mapping restore across machines;
