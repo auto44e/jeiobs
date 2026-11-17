@@ -1,0 +1,1049 @@
+# Black-box cases for jc-check (jeiobs-control, K1-PR1), run by run-cases.cmake. Expected values come
+# from docs/jeiobs/tasks/006-control-protocols.md (K1 design, A1-A18) and the K1-PR1 contract
+# (mapping schema v1, validation errors, compile checks 1-5, the jc-check CLI), not from the code.
+#
+# One case per line:   NAME | EXIT | EXPECTED | ARGS
+#   NAME      letters, digits, ".", "_", "-". A name ending in "@posix" is skipped on Windows.
+#   EXIT      expected exit code: 0 OK, 1 ERR, 2 usage. N,M accepts either (only where the contract
+#             allows both readings). Whatever EXIT allows, an OK line needs exit 0 and an ERR line exit 1.
+#   EXPECTED  compared with stdout after trailing CR and LF characters are removed:
+#               TEXT          exact match, for example "OK" or "ERR E_DENIED r1"
+#               ~REGEX        CMake regular expression that must match stdout (anchor it)
+#               =FILE,...     stdout has exactly the bytes of FILE (without its trailing CR and LF):
+#                             compact JSON with sorted keys. Several FILEs only where the contract
+#                             allows more than one reading.
+#               @FILE,...     stdout is one JSON object equal to FILE (member order and escapes free)
+#               *             stdout is not checked
+#             TEXT, ~REGEX and =FILE also need stdout to be one line: an ERR line comes alone.
+#             An error code whose detail the contract leaves open is matched as "ERR E_CODE( .+)?".
+#   ARGS      jc-check arguments, split on spaces and run from this directory. %XX is the byte 0xXX
+#             (%20 space), the token "" is an empty argument and ${NAME} a value that run-cases.cmake
+#             defines: ${WORK} is the scratch directory with the generated inputs, ${UTF8_PATH} a
+#             mapping under a non-ASCII path and ${V_...} value JSON too long for one line here.
+# Fields are separated by " | ". Blank lines and lines starting with # are ignored. Semicolons and
+# backslashes are not allowed anywhere in this file (write %3B and %5C), square brackets are.
+#
+# Readings where the contract is open are stated in the section comments below.
+
+# ---- usage (exit 2, stdout not checked)
+usage-no-arguments | 2 | *
+usage-unknown-command | 2 | * | frobnicate fixtures/valid/minimal.json
+usage-validate-without-file | 2 | * | validate
+usage-compile-without-file | 2 | * | compile
+usage-match-without-arguments | 2 | * | match
+usage-match-without-event | 2 | * | match fixtures/valid/minimal.json
+usage-value-without-op | 2 | * | value
+usage-value-unknown-op | 2 | * | value frobnicate {"type":"trigger"}
+usage-value-roundtrip-without-json | 2 | * | value roundtrip
+usage-value-double-without-json | 2 | * | value double
+usage-value-limits-without-json | 2 | * | value limits
+
+# ---- files and paths
+# /dev/null is not a regular file (E_IO in jeiobs-workspace) or reads as empty (E_JSON).
+# A missing EVENT.json is E_IO or the contract's catch-all "bad event".
+io-validate-missing-file | 1 | ~^ERR E_IO( .+)?$ | validate fixtures/does-not-exist.json
+io-validate-directory | 1 | ~^ERR E_IO( .+)?$ | validate fixtures
+io-validate-dev-null@posix | 1 | ~^ERR E_(IO|JSON)( .+)?$ | validate /dev/null
+io-compile-missing-file | 1 | ~^ERR E_IO( .+)?$ | compile fixtures/does-not-exist.json
+io-compile-directory | 1 | ~^ERR E_IO( .+)?$ | compile fixtures
+io-match-missing-mapping | 1 | ~^ERR E_IO( .+)?$ | match fixtures/does-not-exist.json fixtures/match/events/main-mcu0.json
+io-match-missing-event | 1 | ~^ERR E_(IO( .+)?|SCHEMA event)$ | match fixtures/match/basic.json fixtures/does-not-exist.json
+io-match-event-directory | 1 | ~^ERR E_(IO( .+)?|SCHEMA event)$ | match fixtures/match/basic.json fixtures
+io-validate-utf8-path | 0 | OK | validate ${UTF8_PATH}
+io-validate-path-with-space | 0 | OK | validate ${WORK}/with%20space/minimal.json
+
+# ---- valid mappings
+valid-minimal | 0 | OK | validate fixtures/valid/minimal.json
+valid-empty | 0 | OK | validate fixtures/valid/empty.json
+valid-full | 0 | OK | validate fixtures/valid/full.json
+valid-full-compiles | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":8,"id":"fader_volume","merge":{"policy":"touch-lease","priority":0},"target_key":"mixer[|]field=volume[|]id=mic"},.*,"slots":."main_surface","pad_2".}$ | compile fixtures/valid/full.json
+valid-unknown-fields-everywhere | 0 | OK | validate fixtures/valid/unknown-fields.json
+valid-unknown-fields-not-in-output | 0 | =expected/compile/known-fields.json | compile fixtures/valid/unknown-fields.json
+valid-known-fields-compile | 0 | =expected/compile/known-fields.json | compile fixtures/valid/known-fields.json
+valid-future-minor | 0 | OK | validate fixtures/valid/future-minor.json
+valid-minor-above-32-bits | 0 | OK | validate fixtures/valid/minor-4294967296.json
+valid-crlf-tabs | 0 | OK | validate fixtures/valid/crlf-tabs.json
+valid-utf8-raw | 0 | OK | validate fixtures/valid/utf8-raw.json
+valid-escapes | 0 | OK | validate fixtures/valid/escapes.json
+valid-finite-number-edges | 0 | OK | validate fixtures/valid/numbers.json
+valid-id-boundaries | 0 | OK | validate fixtures/valid/id-boundaries.json
+
+# ---- JSON faults, found while parsing (as in jeiobs-workspace manifests)
+# Inputs under ${WORK} are generated by run-cases.cmake (raw bytes stay out of git).
+# NaN and Infinity literals are not JSON: E_JSON or E_NONFINITE. A lone surrogate escape
+# is E_JSON or E_UTF8. A top-level array is E_JSON or a schema error.
+parse-dupkey-top-level | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-top-level.json
+parse-dupkey-route | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-route.json
+parse-dupkey-target | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-target.json
+parse-dupkey-segment | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-segment.json
+parse-dupkey-unknown-member | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-unknown-member.json
+parse-dupkey-escaped | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-escaped.json
+parse-dupkey-slot | 1 | ~^ERR E_DUPKEY( .+)?$ | validate fixtures/parse/dupkey-slot.json
+parse-nul-escape-value | 1 | ~^ERR E_NUL( .+)?$ | validate fixtures/parse/nul-escape-value.json
+parse-nul-escape-key | 1 | ~^ERR E_NUL( .+)?$ | validate fixtures/parse/nul-escape-key.json
+parse-nul-escape-unknown | 1 | ~^ERR E_NUL( .+)?$ | validate fixtures/parse/nul-escape-unknown.json
+parse-nul-raw-in-string | 1 | ~^ERR E_NUL( .+)?$ | validate ${WORK}/nul-in-string.json
+parse-nul-raw-trailing | 1 | ~^ERR E_NUL( .+)?$ | validate ${WORK}/nul-trailing.json
+parse-nonfinite | 1 | ~^ERR E_NONFINITE( .+)?$ | validate fixtures/parse/nonfinite.json
+parse-nonfinite-negative | 1 | ~^ERR E_NONFINITE( .+)?$ | validate fixtures/parse/nonfinite-negative.json
+parse-nonfinite-nested | 1 | ~^ERR E_NONFINITE( .+)?$ | validate fixtures/parse/nonfinite-nested.json
+parse-nonfinite-1e309 | 1 | ~^ERR E_NONFINITE( .+)?$ | validate fixtures/parse/nonfinite-1e309.json
+parse-nonfinite-above-max | 1 | ~^ERR E_NONFINITE( .+)?$ | validate fixtures/parse/nonfinite-above-max.json
+parse-nonfinite-in-guard | 1 | ~^ERR E_NONFINITE( .+)?$ | validate fixtures/parse/nonfinite-in-guard.json
+parse-nonfinite-integer-400-digits | 1 | ~^ERR E_(NONFINITE|JSON|LIMIT)( .+)?$ | validate fixtures/parse/nonfinite-integer-400-digits.json
+parse-nan-literal | 1 | ~^ERR E_(JSON|NONFINITE)( .+)?$ | validate fixtures/parse/nan-literal.json
+parse-infinity-literal | 1 | ~^ERR E_(JSON|NONFINITE)( .+)?$ | validate fixtures/parse/infinity-literal.json
+parse-lone-surrogate-escape | 1 | ~^ERR E_(JSON|UTF8)( .+)?$ | validate fixtures/parse/lone-surrogate-escape.json
+parse-utf8-ff | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-ff.json
+parse-utf8-80 | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-80.json
+parse-utf8-overlong | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-overlong.json
+parse-utf8-surrogate | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-surrogate.json
+parse-utf8-above-10ffff | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-above-10ffff.json
+parse-utf8-truncated | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-truncated.json
+parse-utf8-key | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-key.json
+parse-utf8-unknown-member | 1 | ~^ERR E_UTF8( .+)?$ | validate ${WORK}/utf8-unknown-member.json
+parse-bom | 1 | ~^ERR E_BOM( .+)?$ | validate ${WORK}/bom.json
+parse-bom-compile | 1 | ~^ERR E_BOM( .+)?$ | compile ${WORK}/bom.json
+parse-bom-after-space | 1 | ~^ERR E_(JSON|BOM)( .+)?$ | validate ${WORK}/bom-after-space.json
+parse-empty-file | 1 | ~^ERR E_JSON( .+)?$ | validate ${WORK}/empty.json
+parse-whitespace-only | 1 | ~^ERR E_JSON( .+)?$ | validate ${WORK}/whitespace.json
+parse-syntax-truncated | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-truncated.json
+parse-syntax-trailing-comma | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-trailing-comma.json
+parse-syntax-trailing-data | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-trailing-data.json
+parse-syntax-comment | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-comment.json
+parse-syntax-single-quotes | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-single-quotes.json
+parse-syntax-unquoted-key | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-unquoted-key.json
+parse-syntax-raw-tab-in-string | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-raw-tab-in-string.json
+parse-syntax-leading-plus | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-leading-plus.json
+parse-syntax-leading-zero | 1 | ~^ERR E_JSON( .+)?$ | validate fixtures/parse/syntax-leading-zero.json
+parse-top-level-array | 1 | ~^ERR E_(JSON|SCHEMA)( .+)?$ | validate fixtures/parse/top-level-array.json
+parse-top-level-string | 1 | ~^ERR E_(JSON|SCHEMA)( .+)?$ | validate fixtures/parse/top-level-string.json
+
+# ---- limits of the mapping file (contract: <= 4 MiB, depth <= 32, slots <= 256,
+# routes <= 10,000, transforms <= 16 per route, address <= 16 segments, a symbol or text
+# segment <= 256 bytes). Depth counts as in jeiobs-workspace: the top-level object is depth 1.
+# The contract lists the counts both with the schema and as limits: E_LIMIT or E_SCHEMA,
+# naming the counted member. The file-size detail is free.
+limit-size-4mib | 0 | OK | validate ${WORK}/size-4194304.json
+limit-size-4mib-plus-one | 1 | ~^ERR E_LIMIT( .+)?$ | validate ${WORK}/size-4194305.json
+limit-size-4mib-plus-one-compile | 1 | ~^ERR E_LIMIT( .+)?$ | compile ${WORK}/size-4194305.json
+limit-depth-32 | 0 | OK | validate ${WORK}/depth-32.json
+limit-depth-33 | 1 | ~^ERR E_LIMIT .*depth.*$ | validate ${WORK}/depth-33.json
+limit-depth-33-objects | 1 | ~^ERR E_LIMIT .*depth.*$ | validate ${WORK}/depth-33-objects.json
+limit-depth-100000 | 1 | ~^ERR E_LIMIT .*depth.*$ | validate ${WORK}/depth-100000.json
+limit-slots-256 | 0 | OK | validate ${WORK}/slots-256.json
+limit-slots-257 | 1 | ~^ERR E_(LIMIT|SCHEMA) slots?$ | validate ${WORK}/slots-257.json
+limit-routes-10000 | 0 | OK | validate ${WORK}/routes-10000.json
+limit-routes-10000-compile | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"g1",.*"id":"g10000",.*$ | compile ${WORK}/routes-10000.json
+limit-routes-10001 | 1 | ~^ERR E_(LIMIT|SCHEMA) routes?$ | validate ${WORK}/routes-10001.json
+limit-transforms-16 | 0 | OK | validate fixtures/limit/transforms-16.json
+limit-transforms-17 | 1 | ~^ERR E_(LIMIT|SCHEMA) transforms?$ | validate fixtures/limit/transforms-17.json
+limit-address-16-segments | 0 | OK | validate fixtures/limit/address-16.json
+limit-address-17-segments | 1 | ~^ERR E_(SCHEMA address|LIMIT .*(address|segment).*)$ | validate fixtures/limit/address-17.json
+limit-emit-address-16-segments | 0 | OK | validate fixtures/limit/emit-address-16.json
+limit-emit-address-17-segments | 1 | ~^ERR E_(SCHEMA (target|address)|LIMIT .*(address|segment).*)$ | validate fixtures/limit/emit-address-17.json
+limit-symbol-256 | 0 | OK | validate fixtures/limit/symbol-256.json
+limit-symbol-256-bytes-multibyte | 0 | OK | validate fixtures/limit/symbol-256-bytes-multibyte.json
+limit-text-256 | 0 | OK | validate fixtures/limit/text-256.json
+limit-text-256-bytes-4-byte-chars | 0 | OK | validate fixtures/limit/text-256-bytes-4-byte-chars.json
+limit-symbol-257 | 1 | ~^ERR E_(SCHEMA address|LIMIT .*(address|segment|symbol|text).*)$ | validate fixtures/limit/symbol-257.json
+limit-symbol-257-bytes-multibyte | 1 | ~^ERR E_(SCHEMA address|LIMIT .*(address|segment|symbol|text).*)$ | validate fixtures/limit/symbol-257-bytes-multibyte.json
+limit-text-257 | 1 | ~^ERR E_(SCHEMA address|LIMIT .*(address|segment|symbol|text).*)$ | validate fixtures/limit/text-257.json
+limit-text-257-bytes-4-byte-chars | 1 | ~^ERR E_(SCHEMA address|LIMIT .*(address|segment|symbol|text).*)$ | validate fixtures/limit/text-257-bytes-4-byte-chars.json
+
+# ---- bounded time: 10,000 routes with a 64-wide set each, and 10,000 chained emit routes
+# (a recursive cycle search 10,000 deep must not exhaust the stack)
+perf-fanout-10000-validate | 0 | OK | validate ${WORK}/perf-fanout-10000.json
+perf-fanout-10000-compile | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":64,"id":"f1",.*"id":"f10000",.*$ | compile ${WORK}/perf-fanout-10000.json
+perf-fanout-10000-match | 0 | {"matches":["f5000"]} | match ${WORK}/perf-fanout-10000.json fixtures/match/events/perf-f5000.json
+perf-chain-10000-compile | 0 | ~^{"routes":.{"class":"[a-z-]+","enabled":true,"fanout":1,"id":"c1",.*$ | compile ${WORK}/perf-chain-10000.json
+perf-cycle-10000 | 1 | ERR E_CYCLE c1 | compile ${WORK}/perf-cycle-10000.json
+
+# ---- schema: format, major, minor, slots, routes
+# A major that is not an integer is E_MAJOR or E_SCHEMA major. A major of 2 is E_MAJOR
+# however the rest of the file looks.
+schema-format-missing | 1 | ERR E_SCHEMA format | validate fixtures/schema/format-missing.json
+schema-format-other | 1 | ERR E_SCHEMA format | validate fixtures/schema/format-other.json
+schema-format-case | 1 | ERR E_SCHEMA format | validate fixtures/schema/format-case.json
+schema-format-trailing-space | 1 | ERR E_SCHEMA format | validate fixtures/schema/format-trailing-space.json
+schema-format-number | 1 | ERR E_SCHEMA format | validate fixtures/schema/format-number.json
+schema-format-null | 1 | ERR E_SCHEMA format | validate fixtures/schema/format-null.json
+schema-major-2 | 1 | ~^ERR E_MAJOR( .+)?$ | validate fixtures/schema/major-2.json
+schema-major-0 | 1 | ~^ERR E_MAJOR( .+)?$ | validate fixtures/schema/major-0.json
+schema-major-negative | 1 | ~^ERR E_MAJOR( .+)?$ | validate fixtures/schema/major-negative.json
+schema-major-2-other-layout | 1 | ~^ERR E_MAJOR( .+)?$ | validate fixtures/schema/major-2-other-layout.json
+schema-major-missing | 1 | ~^ERR (E_MAJOR( .+)?|E_SCHEMA major)$ | validate fixtures/schema/major-missing.json
+schema-major-string | 1 | ~^ERR (E_MAJOR( .+)?|E_SCHEMA major)$ | validate fixtures/schema/major-string.json
+schema-major-fraction | 1 | ~^ERR (E_MAJOR( .+)?|E_SCHEMA major)$ | validate fixtures/schema/major-fraction.json
+schema-major-true | 1 | ~^ERR (E_MAJOR( .+)?|E_SCHEMA major)$ | validate fixtures/schema/major-true.json
+schema-minor-missing | 1 | ERR E_SCHEMA minor | validate fixtures/schema/minor-missing.json
+schema-minor-negative | 1 | ERR E_SCHEMA minor | validate fixtures/schema/minor-negative.json
+schema-minor-fraction | 1 | ERR E_SCHEMA minor | validate fixtures/schema/minor-fraction.json
+schema-minor-string | 1 | ERR E_SCHEMA minor | validate fixtures/schema/minor-string.json
+schema-minor-null | 1 | ERR E_SCHEMA minor | validate fixtures/schema/minor-null.json
+schema-slots-object | 1 | ERR E_SCHEMA slots | validate fixtures/schema/slots-object.json
+schema-slots-null | 1 | ERR E_SCHEMA slots | validate fixtures/schema/slots-null.json
+schema-routes-object | 1 | ERR E_SCHEMA routes | validate fixtures/schema/routes-object.json
+schema-routes-string | 1 | ERR E_SCHEMA routes | validate fixtures/schema/routes-string.json
+
+# ---- schema: slots (ids match [a-z0-9_]{1,64}, requires is a list of strings)
+# The detail names the member (id, requires) or its container (slot, slots).
+schema-slot-id-missing | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-missing.json
+schema-slot-id-empty | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-empty.json
+schema-slot-id-uppercase | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-uppercase.json
+schema-slot-id-hyphen | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-hyphen.json
+schema-slot-id-dot | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-dot.json
+schema-slot-id-space | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-space.json
+schema-slot-id-65 | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-65.json
+schema-slot-id-non-ascii | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-non-ascii.json
+schema-slot-id-number | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-number.json
+schema-slot-id-null | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/slot-id-null.json
+schema-slot-not-object | 1 | ~^ERR E_SCHEMA (slots?)$ | validate fixtures/schema/slot-not-object.json
+schema-slot-requires-string | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-string.json
+schema-slot-requires-number-item | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-number-item.json
+schema-slot-requires-missing | 1 | ~^ERR E_SCHEMA (requires|slots?)$ | validate fixtures/schema/slot-requires-missing.json
+schema-slot-duplicate | 1 | ERR E_DUP main_surface | validate fixtures/schema/slot-duplicate.json
+
+# ---- schema: routes (ids as for slots, enabled is a boolean, match.slot is null or a slot id)
+# Errors come in document order: the first faulty route wins, and E_DUP and E_REF are
+# reported where they occur, before a later route's schema error.
+schema-route-id-missing | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-missing.json
+schema-route-id-empty | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-empty.json
+schema-route-id-uppercase | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-uppercase.json
+schema-route-id-hyphen | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-hyphen.json
+schema-route-id-dot | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-dot.json
+schema-route-id-space | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-space.json
+schema-route-id-65 | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-65.json
+schema-route-id-non-ascii | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-non-ascii.json
+schema-route-id-number | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-number.json
+schema-route-id-null | 1 | ~^ERR E_SCHEMA (id|routes?)$ | validate fixtures/schema/route-id-null.json
+schema-route-not-object | 1 | ~^ERR E_SCHEMA (routes?)$ | validate fixtures/schema/route-not-object.json
+schema-route-duplicate | 1 | ERR E_DUP r1 | validate fixtures/schema/route-duplicate.json
+schema-route-duplicate-first-wins | 1 | ERR E_DUP b | validate fixtures/schema/route-duplicate-first-wins.json
+schema-route-enabled-string | 1 | ~^ERR E_SCHEMA (enabled|routes?)$ | validate fixtures/schema/route-enabled-string.json
+schema-route-enabled-number | 1 | ~^ERR E_SCHEMA (enabled|routes?)$ | validate fixtures/schema/route-enabled-number.json
+schema-route-enabled-null | 1 | ~^ERR E_SCHEMA (enabled|routes?)$ | validate fixtures/schema/route-enabled-null.json
+schema-route-enabled-missing | 1 | ~^ERR E_SCHEMA (enabled|routes?)$ | validate fixtures/schema/route-enabled-missing.json
+schema-match-missing | 1 | ~^ERR E_SCHEMA (match|routes?)$ | validate fixtures/schema/match-missing.json
+schema-match-array | 1 | ~^ERR E_SCHEMA (match|routes?)$ | validate fixtures/schema/match-array.json
+schema-match-slot-number | 1 | ~^ERR E_SCHEMA (slot|match)$ | validate fixtures/schema/match-slot-number.json
+schema-match-slot-object | 1 | ~^ERR E_SCHEMA (slot|match)$ | validate fixtures/schema/match-slot-object.json
+schema-match-slot-unknown | 1 | ERR E_REF other_surface | validate fixtures/schema/match-slot-unknown.json
+schema-match-slot-unknown-first-wins | 1 | ERR E_REF zz_surface | validate fixtures/schema/match-slot-unknown-first-wins.json
+schema-match-slot-refers-to-a-route-id | 1 | ERR E_REF r1 | validate fixtures/schema/match-slot-refers-to-route.json
+schema-match-slot-missing | 1 | ~^ERR E_SCHEMA (slot|match)$ | validate fixtures/schema/match-slot-missing.json
+valid-match-slot-null | 0 | OK | validate fixtures/valid/match-slot-null.json
+
+# ---- document order of validation errors
+order-first-route-target | 1 | ERR E_SCHEMA target | validate fixtures/schema/order-target-then-address.json
+order-first-route-address | 1 | ERR E_SCHEMA address | validate fixtures/schema/order-address-then-target.json
+order-slot-before-route | 1 | ~^ERR E_SCHEMA (id|slots?)$ | validate fixtures/schema/order-slot-before-route.json
+order-dup-before-later-schema | 1 | ERR E_DUP r1 | validate fixtures/schema/order-dup-before-later-schema.json
+order-ref-before-later-schema | 1 | ERR E_REF nope | validate fixtures/schema/order-ref-before-later-schema.json
+order-schema-before-later-dup | 1 | ERR E_SCHEMA target | validate fixtures/schema/order-schema-before-later-dup.json
+
+# ---- schema: address segments (SEG is an object with exactly one key: s, i 0..2^53, t,
+# any true, r [lo,hi] with lo <= hi, in 1..64 distinct integers). Every fault is
+# E_SCHEMA address. EXACTLY ONE key is read literally: an unknown key next to a known one
+# is a fault here, although unknown members are ignored elsewhere.
+seg-ok-s | 0 | OK | validate fixtures/valid/seg-s.json
+seg-ok-s-utf8 | 0 | OK | validate fixtures/valid/seg-s-utf8.json
+seg-ok-i-0 | 0 | OK | validate fixtures/valid/seg-i-0.json
+seg-ok-i-2pow53 | 0 | OK | validate fixtures/valid/seg-i-2pow53.json
+seg-ok-t | 0 | OK | validate fixtures/valid/seg-t.json
+seg-ok-t-slash | 0 | OK | validate fixtures/valid/seg-t-slash.json
+seg-ok-any | 0 | OK | validate fixtures/valid/seg-any.json
+seg-ok-any-only | 0 | OK | validate fixtures/valid/seg-any-only.json
+seg-ok-r | 0 | OK | validate fixtures/valid/seg-r.json
+seg-ok-r-equal-bounds | 0 | OK | validate fixtures/valid/seg-r-equal-bounds.json
+seg-ok-r-zero | 0 | OK | validate fixtures/valid/seg-r-zero.json
+seg-ok-in-1 | 0 | OK | validate fixtures/valid/seg-in-1.json
+seg-ok-in-64 | 0 | OK | validate fixtures/valid/seg-in-64.json
+seg-ok-in-unsorted | 0 | OK | validate fixtures/valid/seg-in-unsorted.json
+seg-ok-in-2pow53 | 0 | OK | validate fixtures/valid/seg-in-2pow53.json
+seg-ok-mixed | 0 | OK | validate fixtures/valid/seg-mixed.json
+seg-bad-string | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-string.json
+seg-bad-number | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-number.json
+seg-bad-null | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-null.json
+seg-bad-array | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-array.json
+seg-bad-true | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-true.json
+seg-bad-empty-object | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-empty-object.json
+seg-bad-two-known-keys | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-two-known-keys.json
+seg-bad-known-and-unknown-key | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-known-and-unknown-key.json
+seg-bad-unknown-key-only | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-unknown-key-only.json
+seg-bad-s-number | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-s-number.json
+seg-bad-s-null | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-s-null.json
+seg-bad-s-array | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-s-array.json
+seg-bad-i-negative | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-i-negative.json
+seg-bad-i-fraction | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-i-fraction.json
+seg-bad-i-string | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-i-string.json
+seg-bad-i-true | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-i-true.json
+seg-bad-i-2pow53-plus-one | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-i-2pow53-plus-one.json
+seg-bad-i-2pow64 | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-i-2pow64.json
+seg-bad-t-number | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-t-number.json
+seg-bad-t-null | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-t-null.json
+seg-bad-any-false | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-any-false.json
+seg-bad-any-number | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-any-number.json
+seg-bad-any-string | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-any-string.json
+seg-bad-any-null | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-any-null.json
+seg-bad-r-reversed | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-reversed.json
+seg-bad-r-one-bound | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-one-bound.json
+seg-bad-r-three-bounds | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-three-bounds.json
+seg-bad-r-empty | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-empty.json
+seg-bad-r-fraction | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-fraction.json
+seg-bad-r-string-bounds | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-string-bounds.json
+seg-bad-r-string | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-string.json
+seg-bad-r-object | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-r-object.json
+seg-bad-in-empty | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-empty.json
+seg-bad-in-65 | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-65.json
+seg-bad-in-duplicate | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-duplicate.json
+seg-bad-in-duplicate-apart | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-duplicate-apart.json
+seg-bad-in-string-item | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-string-item.json
+seg-bad-in-fraction-item | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-fraction-item.json
+seg-bad-in-nested | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-nested.json
+seg-bad-in-number | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-in-number.json
+seg-bad-address-empty | 1 | ERR E_SCHEMA address | validate fixtures/schema/seg-address-empty.json
+schema-address-missing | 1 | ERR E_SCHEMA address | validate fixtures/schema/address-missing.json
+schema-address-object | 1 | ERR E_SCHEMA address | validate fixtures/schema/address-object.json
+schema-address-string | 1 | ERR E_SCHEMA address | validate fixtures/schema/address-string.json
+
+# ---- schema: guard predicates (value min/max finite numbers with min <= max, modifier,
+# layer, bank integer >= 0). Every fault is E_SCHEMA guard.
+guard-ok-value | 0 | OK | validate fixtures/valid/guard-value.json
+guard-ok-value-equal | 0 | OK | validate fixtures/valid/guard-value-equal.json
+guard-ok-value-negative-fractions | 0 | OK | validate fixtures/valid/guard-value-negative-fractions.json
+guard-ok-modifier | 0 | OK | validate fixtures/valid/guard-modifier.json
+guard-ok-layer | 0 | OK | validate fixtures/valid/guard-layer.json
+guard-ok-bank-0 | 0 | OK | validate fixtures/valid/guard-bank-0.json
+guard-ok-bank-large | 0 | OK | validate fixtures/valid/guard-bank-large.json
+guard-ok-all-four | 0 | OK | validate fixtures/valid/guard-all-four.json
+guard-bad-unknown-predicate | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-unknown-predicate.json
+guard-bad-empty-predicate | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-empty-predicate.json
+guard-bad-predicate-not-object | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-predicate-not-object.json
+guard-bad-predicate-string | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-predicate-string.json
+guard-bad-value-not-object | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-not-object.json
+guard-bad-value-min-missing | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-min-missing.json
+guard-bad-value-max-missing | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-max-missing.json
+guard-bad-value-min-greater | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-min-greater.json
+guard-bad-value-min-greater-fraction | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-min-greater-fraction.json
+guard-bad-value-min-string | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-min-string.json
+guard-bad-value-max-null | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-max-null.json
+guard-bad-value-max-true | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-value-max-true.json
+guard-bad-modifier-number | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-modifier-number.json
+guard-bad-modifier-null | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-modifier-null.json
+guard-bad-layer-number | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-layer-number.json
+guard-bad-layer-array | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-layer-array.json
+guard-bad-bank-negative | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-bank-negative.json
+guard-bad-bank-fraction | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-bank-fraction.json
+guard-bad-bank-string | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-bank-string.json
+guard-bad-bank-null | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-bank-null.json
+guard-bad-second-predicate-bad | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-second-predicate-bad.json
+guard-bad-array | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-array.json
+guard-bad-all-object | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-all-object.json
+guard-bad-string | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-string.json
+guard-bad-all-missing | 1 | ERR E_SCHEMA guard | validate fixtures/schema/guard-all-missing.json
+
+# ---- schema: transforms (validated only in PR1). An unknown op is E_SCHEMA op, a wrong or
+# missing parameter is E_SCHEMA transforms. A missing or non-string op is either.
+# Unknown parameters are ignored, as unknown members everywhere.
+transform-ok-scale | 0 | OK | validate fixtures/valid/transform-scale.json
+transform-ok-scale-reversed-in | 0 | OK | validate fixtures/valid/transform-scale-reversed-in.json
+transform-ok-scale-reversed-out | 0 | OK | validate fixtures/valid/transform-scale-reversed-out.json
+transform-ok-scale-constant-out | 0 | OK | validate fixtures/valid/transform-scale-constant-out.json
+transform-ok-scale-fractions | 0 | OK | validate fixtures/valid/transform-scale-fractions.json
+transform-ok-curve-linear | 0 | OK | validate fixtures/valid/transform-curve-linear.json
+transform-ok-curve-log | 0 | OK | validate fixtures/valid/transform-curve-log.json
+transform-ok-curve-exp | 0 | OK | validate fixtures/valid/transform-curve-exp.json
+transform-ok-invert | 0 | OK | validate fixtures/valid/transform-invert.json
+transform-ok-invert-unknown-parameter | 0 | OK | validate fixtures/valid/transform-invert-unknown-parameter.json
+transform-ok-clamp | 0 | OK | validate fixtures/valid/transform-clamp.json
+transform-ok-clamp-equal | 0 | OK | validate fixtures/valid/transform-clamp-equal.json
+transform-ok-clamp-negative | 0 | OK | validate fixtures/valid/transform-clamp-negative.json
+transform-ok-deadzone-0 | 0 | OK | validate fixtures/valid/transform-deadzone-0.json
+transform-ok-deadzone-0.999 | 0 | OK | validate fixtures/valid/transform-deadzone-0.999.json
+transform-ok-quantize-2 | 0 | OK | validate fixtures/valid/transform-quantize-2.json
+transform-ok-quantize-128 | 0 | OK | validate fixtures/valid/transform-quantize-128.json
+transform-ok-toggle | 0 | OK | validate fixtures/valid/transform-toggle.json
+transform-ok-momentary | 0 | OK | validate fixtures/valid/transform-momentary.json
+transform-ok-threshold | 0 | OK | validate fixtures/valid/transform-threshold.json
+transform-ok-threshold-negative | 0 | OK | validate fixtures/valid/transform-threshold-negative.json
+transform-ok-relative-twos-complement | 0 | OK | validate fixtures/valid/transform-relative-twos-complement.json
+transform-ok-relative-sign-magnitude | 0 | OK | validate fixtures/valid/transform-relative-sign-magnitude.json
+transform-ok-relative-binary-offset | 0 | OK | validate fixtures/valid/transform-relative-binary-offset.json
+transform-ok-relative-tiny-step | 0 | OK | validate fixtures/valid/transform-relative-tiny-step.json
+transform-ok-join14 | 0 | OK | validate fixtures/valid/transform-join14.json
+transform-ok-split14 | 0 | OK | validate fixtures/valid/transform-split14.json
+transform-ok-empty-list | 0 | OK | validate fixtures/valid/transforms-empty.json
+transform-bad-op-unknown | 1 | ERR E_SCHEMA op | validate fixtures/schema/transform-op-unknown.json
+transform-bad-op-case | 1 | ERR E_SCHEMA op | validate fixtures/schema/transform-op-case.json
+transform-bad-op-empty-string | 1 | ERR E_SCHEMA op | validate fixtures/schema/transform-op-empty-string.json
+transform-bad-op-join-32 | 1 | ERR E_SCHEMA op | validate fixtures/schema/transform-op-join-32.json
+transform-bad-op-missing | 1 | ~^ERR E_SCHEMA (op|transforms)$ | validate fixtures/schema/transform-op-missing.json
+transform-bad-op-number | 1 | ~^ERR E_SCHEMA (op|transforms)$ | validate fixtures/schema/transform-op-number.json
+transform-bad-op-null | 1 | ~^ERR E_SCHEMA (op|transforms)$ | validate fixtures/schema/transform-op-null.json
+transform-bad-not-object | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-not-object.json
+transform-bad-scale-in-equal | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-in-equal.json
+transform-bad-scale-in-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-in-missing.json
+transform-bad-scale-out-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-out-missing.json
+transform-bad-scale-in-one | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-in-one.json
+transform-bad-scale-in-three | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-in-three.json
+transform-bad-scale-in-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-in-string.json
+transform-bad-scale-out-string-item | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-out-string-item.json
+transform-bad-scale-out-object | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-scale-out-object.json
+transform-bad-curve-kind-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-curve-kind-missing.json
+transform-bad-curve-kind-unknown | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-curve-kind-unknown.json
+transform-bad-curve-kind-case | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-curve-kind-case.json
+transform-bad-curve-kind-number | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-curve-kind-number.json
+transform-bad-clamp-min-greater | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-clamp-min-greater.json
+transform-bad-clamp-min-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-clamp-min-missing.json
+transform-bad-clamp-max-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-clamp-max-missing.json
+transform-bad-clamp-min-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-clamp-min-string.json
+transform-bad-clamp-max-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-clamp-max-string.json
+transform-bad-deadzone-width-1 | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-deadzone-width-1.json
+transform-bad-deadzone-width-1.5 | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-deadzone-width-1.5.json
+transform-bad-deadzone-width-negative | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-deadzone-width-negative.json
+transform-bad-deadzone-width-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-deadzone-width-missing.json
+transform-bad-deadzone-width-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-deadzone-width-string.json
+transform-bad-quantize-steps-1 | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-quantize-steps-1.json
+transform-bad-quantize-steps-0 | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-quantize-steps-0.json
+transform-bad-quantize-steps-negative | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-quantize-steps-negative.json
+transform-bad-quantize-steps-fraction | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-quantize-steps-fraction.json
+transform-bad-quantize-steps-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-quantize-steps-string.json
+transform-bad-quantize-steps-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-quantize-steps-missing.json
+transform-bad-threshold-at-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-threshold-at-missing.json
+transform-bad-threshold-at-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-threshold-at-string.json
+transform-bad-threshold-at-null | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-threshold-at-null.json
+transform-bad-relative-encoding-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-encoding-missing.json
+transform-bad-relative-encoding-unknown | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-encoding-unknown.json
+transform-bad-relative-encoding-case | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-encoding-case.json
+transform-bad-relative-encoding-number | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-encoding-number.json
+transform-bad-relative-step-0 | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-step-0.json
+transform-bad-relative-step-negative | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-step-negative.json
+transform-bad-relative-step-missing | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-step-missing.json
+transform-bad-relative-step-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-relative-step-string.json
+transform-bad-second-in-list | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transform-second-bad.json
+transform-bad-list-object | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transforms-object.json
+transform-bad-list-string | 1 | ERR E_SCHEMA transforms | validate fixtures/schema/transforms-string.json
+
+# ---- schema: targets (kind and its fields: anything else is E_SCHEMA target)
+# Reading: every listed field is required and is a string unless it is an enum, except
+# scene-item item_id, an integer (OBS scene item ids are int64). An emit address with any,
+# r or in is E_SCHEMA target or E_SCHEMA address. Unknown extra members are ignored.
+target-ok-source-property | 0 | OK | validate fixtures/valid/target-source-property.json
+target-ok-filter-property | 0 | OK | validate fixtures/valid/target-filter-property.json
+target-ok-scene | 0 | OK | validate fixtures/valid/target-scene.json
+target-ok-scene-item | 0 | OK | validate fixtures/valid/target-scene-item.json
+target-ok-transition | 0 | OK | validate fixtures/valid/target-transition.json
+target-ok-profile | 0 | OK | validate fixtures/valid/target-profile.json
+target-ok-plugin-param | 0 | OK | validate fixtures/valid/target-plugin-param.json
+target-ok-plugin-event | 0 | OK | validate fixtures/valid/target-plugin-event.json
+target-ok-graph | 0 | OK | validate fixtures/valid/target-graph.json
+target-ok-emit | 0 | OK | validate fixtures/valid/target-emit.json
+target-ok-extra-member-ignored | 0 | OK | validate fixtures/valid/target-extra-member-ignored.json
+target-ok-mixer-volume | 0 | OK | validate fixtures/valid/target-mixer-volume.json
+target-ok-mixer-mute | 0 | OK | validate fixtures/valid/target-mixer-mute.json
+target-ok-mixer-balance | 0 | OK | validate fixtures/valid/target-mixer-balance.json
+target-ok-mixer-monitoring | 0 | OK | validate fixtures/valid/target-mixer-monitoring.json
+target-ok-mixer-mixers | 0 | OK | validate fixtures/valid/target-mixer-mixers.json
+target-ok-mixer-sync_offset | 0 | OK | validate fixtures/valid/target-mixer-sync_offset.json
+target-ok-hotkey-none | 0 | OK | validate fixtures/valid/target-hotkey-none.json
+target-ok-hotkey-scene | 0 | OK | validate fixtures/valid/target-hotkey-scene.json
+target-ok-hotkey-mixer | 0 | OK | validate fixtures/valid/target-hotkey-mixer.json
+target-ok-hotkey-output | 0 | OK | validate fixtures/valid/target-hotkey-output.json
+target-ok-hotkey-unknown | 0 | OK | validate fixtures/valid/target-hotkey-unknown.json
+target-ok-output-stream-start | 0 | OK | validate fixtures/valid/target-output-stream-start.json
+target-ok-output-record-stop | 0 | OK | validate fixtures/valid/target-output-record-stop.json
+target-ok-output-replay-toggle | 0 | OK | validate fixtures/valid/target-output-replay-toggle.json
+target-ok-output-virtualcam-start | 0 | OK | validate fixtures/valid/target-output-virtualcam-start.json
+target-ok-egress-hw | 0 | OK | validate fixtures/valid/target-egress-hw.json
+target-ok-egress-virtual | 0 | OK | validate fixtures/valid/target-egress-virtual.json
+target-ok-egress-loopback-net | 0 | OK | validate fixtures/valid/target-egress-loopback-net.json
+target-ok-egress-remote-net | 0 | OK | validate fixtures/valid/target-egress-remote-net.json
+target-bad-kind-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-kind-missing.json
+target-bad-kind-unknown | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-kind-unknown.json
+target-bad-kind-case | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-kind-case.json
+target-bad-kind-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-kind-number.json
+target-bad-kind-null | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-kind-null.json
+target-bad-not-object | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-not-object.json
+target-bad-array | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-array.json
+target-bad-scene-with-scene-item-fields | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-with-scene-item-fields.json
+target-bad-mixer-field-unknown | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-field-unknown.json
+target-bad-mixer-field-case | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-field-case.json
+target-bad-mixer-field-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-field-number.json
+target-bad-mixer-field-track-mask-alias | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-field-track-mask-alias.json
+target-bad-hotkey-effect-unknown-value | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-effect-unknown-value.json
+target-bad-hotkey-effect-case | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-effect-case.json
+target-bad-hotkey-effect-null | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-effect-null.json
+target-bad-hotkey-name-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-name-number.json
+target-bad-output-output-replay-buffer | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-output-replay-buffer.json
+target-bad-output-output-virtual-camera | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-output-virtual-camera.json
+target-bad-output-output-case | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-output-case.json
+target-bad-output-action-unknown | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-action-unknown.json
+target-bad-output-action-case | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-action-case.json
+target-bad-egress-trust-local-ui | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-egress-trust-local-ui.json
+target-bad-egress-trust-unknown | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-egress-trust-unknown.json
+target-bad-egress-trust-case | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-egress-trust-case.json
+target-bad-source-property-id-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-source-property-id-number.json
+target-bad-source-property-field-null | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-source-property-field-null.json
+target-bad-filter-property-field-array | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-filter-property-field-array.json
+target-bad-scene-id-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-id-number.json
+target-bad-scene-item-scene-id-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-item-scene-id-number.json
+target-bad-transition-name-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-transition-name-number.json
+target-bad-profile-name-null | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-profile-name-null.json
+target-bad-plugin-param-param-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-plugin-param-param-number.json
+target-bad-plugin-event-instance-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-plugin-event-instance-number.json
+target-bad-graph-port-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-graph-port-number.json
+target-bad-egress-endpoint-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-egress-endpoint-number.json
+target-bad-filter-property-id-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-filter-property-id-number.json
+target-bad-mixer-id-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-id-number.json
+target-bad-scene-item-item-id-fraction | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-item-item-id-fraction.json
+target-bad-hotkey-registerer-kind-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-registerer-kind-number.json
+target-bad-hotkey-registerer-id-null | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-registerer-id-null.json
+target-bad-plugin-param-instance-null | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-plugin-param-instance-null.json
+target-bad-graph-node-number | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-graph-node-number.json
+target-bad-mixer-field-of-source-property | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-field-of-source-property.json
+target-bad-source-property-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-source-property-id-missing.json
+target-bad-source-property-field-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-source-property-field-missing.json
+target-bad-filter-property-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-filter-property-id-missing.json
+target-bad-filter-property-field-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-filter-property-field-missing.json
+target-bad-scene-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-id-missing.json
+target-bad-scene-item-scene-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-item-scene-id-missing.json
+target-bad-scene-item-item-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-scene-item-item-id-missing.json
+target-bad-mixer-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-id-missing.json
+target-bad-mixer-field-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-mixer-field-missing.json
+target-bad-transition-name-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-transition-name-missing.json
+target-bad-hotkey-registerer-kind-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-registerer-kind-missing.json
+target-bad-hotkey-registerer-id-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-registerer-id-missing.json
+target-bad-hotkey-name-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-name-missing.json
+target-bad-hotkey-effect-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-hotkey-effect-missing.json
+target-bad-output-output-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-output-missing.json
+target-bad-output-action-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-output-action-missing.json
+target-bad-profile-name-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-profile-name-missing.json
+target-bad-plugin-param-instance-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-plugin-param-instance-missing.json
+target-bad-plugin-param-param-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-plugin-param-param-missing.json
+target-bad-plugin-event-instance-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-plugin-event-instance-missing.json
+target-bad-graph-node-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-graph-node-missing.json
+target-bad-graph-port-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-graph-port-missing.json
+target-bad-egress-endpoint-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-egress-endpoint-missing.json
+target-bad-egress-trust-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-egress-trust-missing.json
+target-bad-missing | 1 | ERR E_SCHEMA target | validate fixtures/schema/target-missing.json
+target-bad-emit-missing | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-missing.json
+target-bad-emit-any | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-any.json
+target-bad-emit-range | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-range.json
+target-bad-emit-set | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-set.json
+target-bad-emit-empty | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-empty.json
+target-bad-emit-object | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-object.json
+target-bad-emit-bad-segment | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-bad-segment.json
+target-bad-emit-two-keys | 1 | ~^ERR E_SCHEMA (target|address)$ | validate fixtures/schema/target-emit-two-keys.json
+
+# ---- schema: merge (policy is last-writer, priority, touch-lease, sum, min, max or
+# boolean-or, priority is an integer, default 0). The detail names merge or its member.
+merge-ok-last-writer | 0 | OK | validate fixtures/valid/merge-last-writer.json
+merge-ok-priority | 0 | OK | validate fixtures/valid/merge-priority.json
+merge-ok-touch-lease | 0 | OK | validate fixtures/valid/merge-touch-lease.json
+merge-ok-sum | 0 | OK | validate fixtures/valid/merge-sum.json
+merge-ok-min | 0 | OK | validate fixtures/valid/merge-min.json
+merge-ok-max | 0 | OK | validate fixtures/valid/merge-max.json
+merge-ok-boolean-or | 0 | OK | validate fixtures/valid/merge-boolean-or.json
+merge-ok-priority-negative | 0 | OK | validate fixtures/valid/merge-priority-negative.json
+merge-bad-not-object | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-not-object.json
+merge-bad-policy-missing | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-policy-missing.json
+merge-bad-policy-unknown | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-policy-unknown.json
+merge-bad-policy-case | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-policy-case.json
+merge-bad-policy-number | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-policy-number.json
+merge-bad-policy-underscore | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-policy-underscore.json
+merge-bad-priority-fraction | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-priority-fraction.json
+merge-bad-priority-string | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-priority-string.json
+merge-bad-priority-true | 1 | ~^ERR E_SCHEMA (merge|policy|priority)$ | validate fixtures/schema/merge-priority-true.json
+
+# ---- compile check 1, E_DENIED: a source-property or filter-property field equal, ASCII
+# case-insensitively, to one of the twelve denied names. Nothing else is denied in PR1:
+# not other kinds, not ids, not near names, not Unicode case folds (U+212A KELVIN SIGN,
+# U+017F LONG S). Disabled routes are checked.
+denied-sp-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-key.json
+denied-sp-stream-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-stream-key.json
+denied-sp-bearer-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-bearer-token.json
+denied-sp-username | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-username.json
+denied-sp-password | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-password.json
+denied-sp-server | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-server.json
+denied-sp-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-token.json
+denied-sp-refresh-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-refresh-token.json
+denied-sp-auth | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-auth.json
+denied-sp-passphrase | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-passphrase.json
+denied-sp-secret | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-secret.json
+denied-sp-streamid | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-sp-streamid.json
+denied-fp-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-key.json
+denied-fp-stream-key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-stream-key.json
+denied-fp-bearer-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-bearer-token.json
+denied-fp-username | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-username.json
+denied-fp-password | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-password.json
+denied-fp-server | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-server.json
+denied-fp-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-token.json
+denied-fp-refresh-token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-refresh-token.json
+denied-fp-auth | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-auth.json
+denied-fp-passphrase | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-passphrase.json
+denied-fp-secret | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-secret.json
+denied-fp-streamid | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-fp-streamid.json
+denied-case-sp-KEY | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-KEY.json
+denied-case-sp-Stream-Key | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-Stream-Key.json
+denied-case-fp-PassWord | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-PassWord.json
+denied-case-sp-STREAMID | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-STREAMID.json
+denied-case-fp-Refresh-Token | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-Refresh-Token.json
+denied-case-sp-sEcReT | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-sp-sEcReT.json
+denied-case-fp-AUTH | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-case-fp-AUTH.json
+denied-validate-is-ok | 0 | OK | validate fixtures/compile/denied-sp-stream-key.json
+denied-match-fails | 1 | ERR E_DENIED r1 | match fixtures/compile/denied-sp-stream-key.json fixtures/match/events/main-mcu0.json
+allowed-field-keys | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-keys.json
+allowed-field-key-frame | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-key-frame.json
+allowed-field-stream-key-hyphen | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-stream-key-hyphen.json
+allowed-field-streamkey | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-streamkey.json
+allowed-field-stream-keys | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-stream-keys.json
+allowed-field-passwords | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-passwords.json
+allowed-field-pass | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-pass.json
+allowed-field-user | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-user.json
+allowed-field-server-url | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-server-url.json
+allowed-field-url | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-url.json
+allowed-field-tokens | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-tokens.json
+allowed-field-secret-underscore | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-secret-underscore.json
+allowed-field-leading-space | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-leading-space.json
+allowed-field-trailing-space | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-trailing-space.json
+allowed-field-authority | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-authority.json
+allowed-field-monkey | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-monkey.json
+allowed-field-kelvin-sign-ey | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-kelvin-sign-ey.json
+allowed-field-long-s-ecret | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-long-s-ecret.json
+allowed-field-fullwidth-key | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-fullwidth-key.json
+allowed-field-stream-id-split | 0 | ~^{"routes":.{"class":"source-property",.*$ | compile fixtures/compile/allowed-field-stream-id-split.json
+allowed-plugin-param-password | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-plugin-param-password.json
+allowed-hotkey-stream-key | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-hotkey-stream-key.json
+allowed-scene-id-key | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-scene-id-key.json
+allowed-source-id-password | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-source-id-password.json
+allowed-filter-id-secret | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-filter-id-secret.json
+allowed-transition-secret | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-transition-secret.json
+allowed-graph-port-auth | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/allowed-graph-port-auth.json
+denied-disabled-route | 1 | ERR E_DENIED r1 | compile fixtures/compile/denied-disabled.json
+denied-first-in-document-order | 1 | ERR E_DENIED zz | compile fixtures/compile/denied-first-in-document-order.json
+
+# ---- compile check 2, E_WILDCARD_PRIVILEGED: an any, r or in segment on a route whose
+# class is output-control (output kind, hotkey with effect output or unknown), profile
+# or meta. Any r or in counts, even of size 1. Other classes take wildcards, privileged
+# targets take concrete addresses. Disabled routes are checked. No PR1 target kind is
+# meta for certain (emit is not classed by A15), so meta is not tested on its own.
+wild-any-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-output.json
+wild-any-profile | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-profile.json
+wild-any-hotkey-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-hotkey-output.json
+wild-any-hotkey-unknown | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-any-hotkey-unknown.json
+wild-r-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-output.json
+wild-r-profile | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-profile.json
+wild-r-hotkey-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-hotkey-output.json
+wild-r-hotkey-unknown | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-hotkey-unknown.json
+wild-in-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-output.json
+wild-in-profile | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-profile.json
+wild-in-hotkey-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-output.json
+wild-in-hotkey-unknown | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-hotkey-unknown.json
+wild-r-size-1-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-r-size-1-output.json
+wild-in-size-1-profile | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-in-size-1-profile.json
+wild-last-of-16-hotkey-unknown | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-last-of-16-hotkey-unknown.json
+wild-disabled-output | 1 | ERR E_WILDCARD_PRIVILEGED r1 | compile fixtures/compile/wild-disabled-output.json
+wild-validate-is-ok | 0 | OK | validate fixtures/compile/wild-any-output.json
+wild-first-in-document-order | 1 | ERR E_WILDCARD_PRIVILEGED zz | compile fixtures/compile/wild-first-in-document-order.json
+wild-ok-any-hotkey-none | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-hotkey-none.json
+wild-ok-any-hotkey-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-hotkey-scene.json
+wild-ok-any-hotkey-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-hotkey-mixer.json
+wild-ok-any-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-mixer.json
+wild-ok-any-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-scene.json
+wild-ok-any-source-property | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-source-property.json
+wild-ok-any-plugin-param | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-plugin-param.json
+wild-ok-any-egress-remote-net | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-any-egress-remote-net.json
+wild-ok-r-hotkey-none | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-hotkey-none.json
+wild-ok-r-hotkey-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-hotkey-scene.json
+wild-ok-r-hotkey-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-hotkey-mixer.json
+wild-ok-r-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-mixer.json
+wild-ok-r-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-scene.json
+wild-ok-r-source-property | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-source-property.json
+wild-ok-r-plugin-param | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-plugin-param.json
+wild-ok-r-egress-remote-net | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-r-egress-remote-net.json
+wild-ok-in-hotkey-none | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-hotkey-none.json
+wild-ok-in-hotkey-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-hotkey-scene.json
+wild-ok-in-hotkey-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-hotkey-mixer.json
+wild-ok-in-mixer | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-mixer.json
+wild-ok-in-scene | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-scene.json
+wild-ok-in-source-property | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-source-property.json
+wild-ok-in-plugin-param | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-plugin-param.json
+wild-ok-in-egress-remote-net | 0 | ~^{"routes":.{"class":"[a-z-]+",.*$ | compile fixtures/compile/wild-ok-in-egress-remote-net.json
+wild-ok-concrete-output | 0 | ~^{"routes":.{"class":"(output-control|profile)",.*$ | compile fixtures/compile/concrete-ok-output.json
+wild-ok-concrete-profile | 0 | ~^{"routes":.{"class":"(output-control|profile)",.*$ | compile fixtures/compile/concrete-ok-profile.json
+wild-ok-concrete-hotkey-output | 0 | ~^{"routes":.{"class":"(output-control|profile)",.*$ | compile fixtures/compile/concrete-ok-hotkey-output.json
+wild-ok-concrete-hotkey-unknown | 0 | ~^{"routes":.{"class":"(output-control|profile)",.*$ | compile fixtures/compile/concrete-ok-hotkey-unknown.json
+
+# ---- compile check 3, E_FANOUT: the product of range sizes (hi-lo+1) and set sizes over
+# the pattern is above 64. any counts 1. Products are exact: 2^32 x 2^32 and
+# 171809177920 x 107367629 = 2^64 + 64 wrap a 64-bit product to 0 and to 64. Disabled
+# routes are checked.
+fanout-ok-range-64 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":64,"id":"r1",.*$ | compile fixtures/compile/fanout-range-64.json
+fanout-ok-range-64-offset | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":64,"id":"r1",.*$ | compile fixtures/compile/fanout-range-64-offset.json
+fanout-ok-set-64 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":64,"id":"r1",.*$ | compile fixtures/compile/fanout-set-64.json
+fanout-ok-range-times-set-64 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":64,"id":"r1",.*$ | compile fixtures/compile/fanout-range-times-set-64.json
+fanout-ok-sets-2-times-32 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":64,"id":"r1",.*$ | compile fixtures/compile/fanout-sets-2-times-32.json
+fanout-ok-any-not-counted | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*$ | compile fixtures/compile/fanout-any-not-counted.json
+fanout-ok-any-and-range-64 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":64,"id":"r1",.*$ | compile fixtures/compile/fanout-any-and-range-64.json
+fanout-ok-range-size-1 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*$ | compile fixtures/compile/fanout-range-size-1.json
+fanout-ok-range-times-set-12 | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":12,"id":"r1",.*$ | compile fixtures/compile/fanout-range-times-set-12.json
+fanout-range-65 | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-range-65.json
+fanout-range-65-offset | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-range-65-offset.json
+fanout-ranges-5-times-13 | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-ranges-5-times-13.json
+fanout-set-3-times-range-22 | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-set-3-times-range-22.json
+fanout-sets-64-times-2 | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-sets-64-times-2.json
+fanout-range-2pow53-plus-one | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-range-2pow53-plus-one.json
+fanout-wrap-2pow64-to-0 | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-wrap-2pow64-to-0.json
+fanout-wrap-2pow64-plus-64-to-64 | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-wrap-2pow64-plus-64-to-64.json
+fanout-sixteen-huge-ranges | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-sixteen-huge-ranges.json
+fanout-disabled-route | 1 | ERR E_FANOUT r1 | compile fixtures/compile/fanout-disabled-65.json
+fanout-validate-is-ok | 0 | OK | validate fixtures/compile/fanout-range-65.json
+fanout-first-in-document-order | 1 | ERR E_FANOUT zz | compile fixtures/compile/fanout-first-in-document-order.json
+
+# ---- compile check 4, E_AMBIGUOUS_MERGE: enabled routes sharing a target key (kind and
+# identity fields, for mixer also field) are one route, or all declare the same policy
+# and, for priority, pairwise distinct priorities (default 0). The first route of the
+# group in document order is named. Disabled routes are not in any group. Keys compare
+# field by field: a value holding the canonical separators does not collide with another
+# target whose canonical string happens to be equal.
+merge-two-none | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-none.json
+merge-two-first-declared | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-first-declared.json
+merge-two-second-declared | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-second-declared.json
+merge-two-different-policies | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-different-policies.json
+merge-two-priority-equal | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-priority-equal.json
+merge-two-priority-both-default | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-priority-both-default.json
+merge-two-priority-default-and-0 | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-priority-default-and-0.json
+merge-two-other-slot | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-other-slot.json
+merge-two-last-writer-vs-none | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-two-last-writer-vs-none.json
+merge-validate-is-ok | 0 | OK | validate fixtures/compile/merge-two-none.json
+merge-ok-two-priority-distinct | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-priority-distinct.json
+merge-ok-two-priority-default-and-1 | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-priority-default-and-1.json
+merge-ok-two-priority-negative | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-priority-negative.json
+merge-ok-two-last-writer | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-last-writer.json
+merge-ok-two-touch-lease | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-touch-lease.json
+merge-ok-two-sum | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-sum.json
+merge-ok-two-min | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-min.json
+merge-ok-two-max | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-max.json
+merge-ok-two-boolean-or | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-boolean-or.json
+merge-ok-two-touch-lease-equal-priority | 0 | ~^{.+}$ | compile fixtures/compile/merge-two-touch-lease-equal-priority.json
+merge-ok-mixer-field-distinct | 0 | ~^{.+}$ | compile fixtures/compile/merge-mixer-field-distinct.json
+merge-ok-mixer-id-distinct | 0 | ~^{.+}$ | compile fixtures/compile/merge-mixer-id-distinct.json
+merge-ok-second-disabled | 0 | ~^{.+}$ | compile fixtures/compile/merge-second-disabled.json
+merge-ok-source-field-distinct | 0 | ~^{.+}$ | compile fixtures/compile/merge-source-field-distinct.json
+merge-ok-scene-item-distinct | 0 | ~^{.+}$ | compile fixtures/compile/merge-scene-item-distinct.json
+merge-ok-kind-distinct | 0 | ~^{.+}$ | compile fixtures/compile/merge-kind-distinct.json
+merge-ok-separator-in-value | 0 | ~^{.+}$ | compile fixtures/compile/merge-separator-in-value.json
+merge-three-priority-1-2-1 | 1 | ERR E_AMBIGUOUS_MERGE p1 | compile fixtures/compile/merge-three-priority-1-2-1.json
+merge-ok-three-priority-3-1-2 | 0 | ~^{.+}$ | compile fixtures/compile/merge-three-priority-3-1-2.json
+merge-three-one-undeclared | 1 | ERR E_AMBIGUOUS_MERGE p1 | compile fixtures/compile/merge-three-one-undeclared.json
+merge-disabled-route-not-named | 1 | ERR E_AMBIGUOUS_MERGE x1 | compile fixtures/compile/merge-disabled-not-named.json
+merge-ok-disabled-clash-ignored | 0 | ~^{.+}$ | compile fixtures/compile/merge-disabled-priority-clash-ignored.json
+merge-group-in-the-middle | 1 | ERR E_AMBIGUOUS_MERGE b1 | compile fixtures/compile/merge-second-group-named.json
+merge-emit-same-address | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-emit-same-address.json
+merge-egress-same-endpoint | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-egress-same-endpoint.json
+merge-hotkey-same | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-hotkey-same.json
+merge-plugin-param-same | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-plugin-param-same.json
+merge-extra-member-not-identity | 1 | ERR E_AMBIGUOUS_MERGE zeta | compile fixtures/compile/merge-extra-member-same-key.json
+
+# ---- compile check 5, E_CYCLE: route A -> route B when A's target is emit E and B's
+# pattern matches E (equal length, per-segment Matches, B.slot null or equal to A.slot).
+# Any cycle names its lowest-ordered route in document order, not a route that only
+# leads into or out of it. Guards and transforms do not break an edge. Disabled routes
+# are not in the graph. A route whose own pattern has any, r or in and whose target is
+# emit is E_WILDCARD_PRIVILEGED first if emit is classed meta: those cases accept it.
+cycle-self | 1 | ERR E_CYCLE self | compile fixtures/compile/cycle-self.json
+cycle-two | 1 | ERR E_CYCLE zb | compile fixtures/compile/cycle-two.json
+cycle-three | 1 | ERR E_CYCLE r_z | compile fixtures/compile/cycle-three.json
+cycle-with-tail | 1 | ERR E_CYCLE cb | compile fixtures/compile/cycle-with-tail.json
+cycle-with-exit | 1 | ERR E_CYCLE x | compile fixtures/compile/cycle-with-exit.json
+cycle-slot-equal | 1 | ERR E_CYCLE s1a | compile fixtures/compile/cycle-slot-equal.json
+cycle-guard-transforms | 1 | ERR E_CYCLE g | compile fixtures/compile/cycle-guard-transforms.json
+cycle-mixed-segments | 1 | ERR E_CYCLE m1 | compile fixtures/compile/cycle-mixed-segments.json
+cycle-validate-is-ok | 0 | OK | validate fixtures/compile/cycle-two.json
+cycle-ok-none-chain | 0 | ~^{.+}$ | compile fixtures/compile/cycle-none-chain.json
+cycle-ok-near-miss-int | 0 | ~^{.+}$ | compile fixtures/compile/cycle-near-miss-int.json
+cycle-ok-near-miss-symbol | 0 | ~^{.+}$ | compile fixtures/compile/cycle-near-miss-symbol.json
+cycle-ok-near-miss-length | 0 | ~^{.+}$ | compile fixtures/compile/cycle-near-miss-length.json
+cycle-ok-near-miss-text-vs-symbol | 0 | ~^{.+}$ | compile fixtures/compile/cycle-near-miss-text-vs-symbol.json
+cycle-ok-near-miss-int-vs-symbol | 0 | ~^{.+}$ | compile fixtures/compile/cycle-near-miss-int-vs-symbol.json
+cycle-ok-slot-mismatch | 0 | ~^{.+}$ | compile fixtures/compile/cycle-slot-mismatch.json
+cycle-ok-disabled | 0 | ~^{.+}$ | compile fixtures/compile/cycle-disabled.json
+cycle-ok-disabled-self | 0 | ~^{.+}$ | compile fixtures/compile/cycle-disabled-self.json
+cycle-wild-range | 1 | ~^ERR E_(CYCLE|WILDCARD_PRIVILEGED) w$ | compile fixtures/compile/cycle-wild-range.json
+cycle-wild-set | 1 | ~^ERR E_(CYCLE|WILDCARD_PRIVILEGED) w$ | compile fixtures/compile/cycle-wild-set.json
+cycle-wild-any | 1 | ~^ERR E_(CYCLE|WILDCARD_PRIVILEGED) w$ | compile fixtures/compile/cycle-wild-any.json
+cycle-ok-wild-range-near-miss | 0,1 | ~^({.+}|ERR E_WILDCARD_PRIVILEGED w)$ | compile fixtures/compile/cycle-wild-range-near-miss.json
+cycle-ok-wild-set-near-miss | 0,1 | ~^({.+}|ERR E_WILDCARD_PRIVILEGED w)$ | compile fixtures/compile/cycle-wild-set-near-miss.json
+cycle-ok-wild-any-near-miss-length | 0,1 | ~^({.+}|ERR E_WILDCARD_PRIVILEGED w)$ | compile fixtures/compile/cycle-wild-any-near-miss-length.json
+
+# ---- compile output: compact JSON, keys sorted, routes in document order with class,
+# target_key (kind|field=value|... identity fields in alphabetical order), merge (declared,
+# or last-writer/0 when none) and fanout, then the slot ids (in document order, which is
+# also sorted order here). Readings: mixer's target_key includes field (the merge key
+# does), item_id prints as an integer. Whether hotkey effect, output action and egress trust are
+# identity fields is not settled: each has both expected files.
+compile-minimal | 0 | =expected/compile/minimal.json | compile fixtures/valid/minimal.json
+compile-empty | 0 | {"routes":[],"slots":[]} | compile fixtures/valid/empty.json
+compile-target-keys | 0 | =expected/compile/keys.json | compile fixtures/compile/keys.json
+compile-target-key-scene-item | 0 | =expected/compile/key-scene-item.json | compile fixtures/compile/key-scene-item.json
+compile-target-key-mixer | 0 | =expected/compile/key-mixer-mute.json | compile fixtures/compile/key-mixer-mute.json
+compile-target-key-hotkey | 0 | =expected/compile/key-hotkey.json,expected/compile/key-hotkey-with-effect.json | compile fixtures/compile/key-hotkey.json
+compile-target-key-output | 0 | =expected/compile/key-output.json,expected/compile/key-output-with-action.json | compile fixtures/compile/key-output.json
+compile-target-key-egress | 0 | =expected/compile/key-egress.json,expected/compile/key-egress-with-trust.json | compile fixtures/compile/key-egress.json
+compile-target-key-ignores-extra-member | 0 | =expected/compile/key-extra-member.json | compile fixtures/compile/key-extra-member.json
+compile-target-key-unicode-and-escapes | 0 | @expected/compile/key-unicode-and-escapes.json | compile fixtures/compile/key-unicode-and-escapes.json
+compile-order-merge-fanout-disabled | 0 | =expected/compile/order-and-merge.json | compile fixtures/compile/order-and-merge.json
+compile-class-source-property | 0 | ~^{"routes":.{"class":"source-property","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-source-property.json
+compile-class-filter-property | 0 | ~^{"routes":.{"class":"filter","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-filter-property.json
+compile-class-scene | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-scene.json
+compile-class-scene-item | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-scene-item.json
+compile-class-mixer-balance | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-mixer-balance.json
+compile-class-transition | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-transition.json
+compile-class-hotkey-none | 0 | ~^{"routes":.{"class":"hotkey","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-none.json
+compile-class-hotkey-scene | 0 | ~^{"routes":.{"class":"scene","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-scene.json
+compile-class-hotkey-mixer | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-mixer.json
+compile-class-hotkey-output | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-output.json
+compile-class-hotkey-unknown | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-hotkey-unknown.json
+compile-class-output-stream-start | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-output-stream-start.json
+compile-class-output-virtualcam-start | 0 | ~^{"routes":.{"class":"output-control","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-output-virtualcam-start.json
+compile-class-profile | 0 | ~^{"routes":.{"class":"profile","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-profile.json
+compile-class-plugin-param | 0 | ~^{"routes":.{"class":"plugin-param","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-plugin-param.json
+compile-class-plugin-event | 0 | ~^{"routes":.{"class":"plugin-param","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-plugin-event.json
+compile-class-graph | 0 | ~^{"routes":.{"class":"mix","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-graph.json
+compile-class-egress-remote-net | 0 | ~^{"routes":.{"class":"egress-by-trust","enabled":true,"fanout":1,"id":"r1",.*,"slots":."main_surface".}$ | compile fixtures/valid/target-egress-remote-net.json
+compile-class-emit-any-name | 0 | ~^{"routes":.{"class":"[a-z-]+","enabled":true,"fanout":1,"id":"r1",.*$ | compile fixtures/valid/target-emit.json
+
+# ---- match: enabled routes whose slot is null or equal to the event slot and whose pattern
+# matches the event address, in document order. Equal length, symbol, int and text
+# segments compare equal bytes and never match each other, any matches one segment, r and
+# in match int segments only. A bad event is ERR E_SCHEMA event.
+match-main-mcu0 | 0 | {"matches":["m_null","m_main","m_any","m_range","m_set"]} | match fixtures/match/basic.json fixtures/match/events/main-mcu0.json
+match-null-mcu0 | 0 | {"matches":["m_null","m_any","m_range","m_set"]} | match fixtures/match/basic.json fixtures/match/events/null-mcu0.json
+match-pad-mcu0 | 0 | {"matches":["m_null","m_pad","m_any","m_range","m_set"]} | match fixtures/match/basic.json fixtures/match/events/pad-mcu0.json
+match-mcu7 | 0 | {"matches":["m_any","m_range"]} | match fixtures/match/basic.json fixtures/match/events/mcu7.json
+match-mcu8 | 0 | {"matches":["m_any","m_set"]} | match fixtures/match/basic.json fixtures/match/events/mcu8.json
+match-mcu16 | 0 | {"matches":["m_any","m_set"]} | match fixtures/match/basic.json fixtures/match/events/mcu16.json
+match-mcu9 | 0 | {"matches":["m_any"]} | match fixtures/match/basic.json fixtures/match/events/mcu9.json
+match-mcu-symbol-0 | 0 | {"matches":["m_any"]} | match fixtures/match/basic.json fixtures/match/events/mcu-symbol-0.json
+match-mcu-text-0 | 0 | {"matches":["m_any"]} | match fixtures/match/basic.json fixtures/match/events/mcu-text-0.json
+match-osc-text | 0 | {"matches":["m_text"]} | match fixtures/match/basic.json fixtures/match/events/osc-text.json
+match-osc-symbol | 0 | {"matches":["m_sym"]} | match fixtures/match/basic.json fixtures/match/events/osc-symbol.json
+match-short | 0 | {"matches":["m_short"]} | match fixtures/match/basic.json fixtures/match/events/short.json
+match-long | 0 | {"matches":[]} | match fixtures/match/basic.json fixtures/match/events/long.json
+match-case | 0 | {"matches":[]} | match fixtures/match/basic.json fixtures/match/events/case.json
+match-nothing | 0 | {"matches":[]} | match fixtures/match/basic.json fixtures/match/events/nothing.json
+match-big | 0 | {"matches":["m_big"]} | match fixtures/match/basic.json fixtures/match/events/big.json
+match-big-minus-one | 0 | {"matches":[]} | match fixtures/match/basic.json fixtures/match/events/big-minus-one.json
+match-nfc | 0 | {"matches":["m_nfc"]} | match fixtures/match/basic.json fixtures/match/events/nfc.json
+match-nfd | 0 | {"matches":[]} | match fixtures/match/basic.json fixtures/match/events/nfd.json
+match-deep-16 | 0 | {"matches":["m_16"]} | match fixtures/match/basic.json fixtures/match/events/deep-16.json
+match-deep-16-last-differs | 0 | {"matches":[]} | match fixtures/match/basic.json fixtures/match/events/deep-16-last-differs.json
+match-document-order | 0 | {"matches":["zz","aa","mm"]} | match fixtures/match/order.json fixtures/match/events/x.json
+match-full-fader | 0 | {"matches":["fader_volume"]} | match fixtures/valid/full.json fixtures/match/events/full-fader3.json
+match-full-note | 0 | {"matches":["scene_pad","plugin_notes"]} | match fixtures/valid/full.json fixtures/match/events/full-note.json
+match-full-note-other-slot | 0 | {"matches":[]} | match fixtures/valid/full.json fixtures/match/events/full-note-main.json
+match-full-thru | 0 | {"matches":["thru_out"]} | match fixtures/valid/full.json fixtures/match/events/full-thru.json
+match-full-mute | 0 | {"matches":["mute_button"]} | match fixtures/valid/full.json fixtures/match/events/full-mute.json
+match-invalid-mapping | 1 | ERR E_SCHEMA target | match fixtures/schema/target-kind-unknown.json fixtures/match/events/main-mcu0.json
+match-mapping-with-cycle | 1 | ERR E_CYCLE zb | match fixtures/compile/cycle-two.json fixtures/match/events/main-mcu0.json
+match-bad-event-any | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-any.json
+match-bad-event-range | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-range.json
+match-bad-event-set | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-set.json
+match-bad-event-slot-number | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-slot-number.json
+match-bad-event-slot-object | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-slot-object.json
+match-bad-event-address-missing | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-address-missing.json
+match-bad-event-address-object | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-address-object.json
+match-bad-event-address-empty | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-address-empty.json
+match-bad-event-segment-two-keys | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-segment-two-keys.json
+match-bad-event-segment-string | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-segment-string.json
+match-bad-event-i-negative | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-i-negative.json
+match-bad-event-i-2pow53-plus-one | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-i-2pow53-plus-one.json
+match-bad-event-i-fraction | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-i-fraction.json
+match-bad-event-17-segments | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-17-segments.json
+match-bad-event-symbol-257 | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-symbol-257.json
+match-bad-event-array | 1 | ERR E_SCHEMA event | match fixtures/match/basic.json fixtures/match/events/bad-array.json
+match-bad-event-syntax | 1 | ~^ERR E_(JSON( .+)?|SCHEMA event)$ | match fixtures/match/basic.json fixtures/match/events/bad-syntax.json
+match-bad-event-duplicate-key | 1 | ~^ERR E_(DUPKEY( .+)?|SCHEMA event)$ | match fixtures/match/basic.json fixtures/match/events/bad-duplicate-key.json
+match-bad-event-bom | 1 | ~^ERR E_(BOM( .+)?|SCHEMA event)$ | match fixtures/match/basic.json ${WORK}/bom-event.json
+
+# ---- value helpers. roundtrip is FromDoubleInCodeSpace(v, v.AsDouble()) == v, the double view
+# being the code itself (code space), rounded to nearest, ties to even, and clamped to the
+# width: exact for every code up to 2^53, and at the very top of 64 and 128 bits through
+# the clamp. double prints that view with %.17g. limits checks text <= 4,096 bytes, tuple
+# <= 256 elements and nesting <= 4 (a tuple holding scalars is depth 1), and that a uint or
+# int value fits its bits. The blob limit (65,536 bytes) needs a 128 KiB argument, more
+# than a Windows command line or one Linux argument can hold: not tested here.
+# NaN and infinity round trips are not specified: OK or ERR E_VALUE. NaN prints as nan with
+# an optional sign and platform suffix.
+value-roundtrip-u1-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":1,"value":"0"}
+value-roundtrip-u1-0x1 | 0 | OK | value roundtrip {"type":"uint","bits":1,"value":"1"}
+value-roundtrip-u7-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":7,"value":"0"}
+value-roundtrip-u7-0x1 | 0 | OK | value roundtrip {"type":"uint","bits":7,"value":"1"}
+value-roundtrip-u7-0x40 | 0 | OK | value roundtrip {"type":"uint","bits":7,"value":"64"}
+value-roundtrip-u7-0x7e | 0 | OK | value roundtrip {"type":"uint","bits":7,"value":"126"}
+value-roundtrip-u7-0x7f | 0 | OK | value roundtrip {"type":"uint","bits":7,"value":"127"}
+value-roundtrip-u14-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":14,"value":"0"}
+value-roundtrip-u14-0x1fff | 0 | OK | value roundtrip {"type":"uint","bits":14,"value":"8191"}
+value-roundtrip-u14-0x2000 | 0 | OK | value roundtrip {"type":"uint","bits":14,"value":"8192"}
+value-roundtrip-u14-0x3fff | 0 | OK | value roundtrip {"type":"uint","bits":14,"value":"16383"}
+value-roundtrip-u16-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":16,"value":"0"}
+value-roundtrip-u16-0x8000 | 0 | OK | value roundtrip {"type":"uint","bits":16,"value":"32768"}
+value-roundtrip-u16-0xffff | 0 | OK | value roundtrip {"type":"uint","bits":16,"value":"65535"}
+value-roundtrip-u32-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":32,"value":"0"}
+value-roundtrip-u32-0x80000000 | 0 | OK | value roundtrip {"type":"uint","bits":32,"value":"2147483648"}
+value-roundtrip-u32-0xfffffffe | 0 | OK | value roundtrip {"type":"uint","bits":32,"value":"4294967294"}
+value-roundtrip-u32-0xffffffff | 0 | OK | value roundtrip {"type":"uint","bits":32,"value":"4294967295"}
+value-roundtrip-u53-0x1fffffffffffff | 0 | OK | value roundtrip {"type":"uint","bits":53,"value":"9007199254740991"}
+value-roundtrip-u64-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":64,"value":"0"}
+value-roundtrip-u64-0x20000000000000 | 0 | OK | value roundtrip {"type":"uint","bits":64,"value":"9007199254740992"}
+value-roundtrip-u64-0x20000000000002 | 0 | OK | value roundtrip {"type":"uint","bits":64,"value":"9007199254740994"}
+value-roundtrip-u64-0xfffffffffffff800 | 0 | OK | value roundtrip {"type":"uint","bits":64,"value":"18446744073709549568"}
+value-roundtrip-u64-0xffffffffffffffff | 0 | OK | value roundtrip {"type":"uint","bits":64,"value":"18446744073709551615"}
+value-roundtrip-u128-0x0 | 0 | OK | value roundtrip {"type":"uint","bits":128,"value":"0"}
+value-roundtrip-u128-0x80000000000000000000000000000000 | 0 | OK | value roundtrip {"type":"uint","bits":128,"value":"170141183460469231731687303715884105728"}
+value-roundtrip-u128-0xfffffffffffff8000000000000000000 | 0 | OK | value roundtrip {"type":"uint","bits":128,"value":"340282366920938425684442744474606501888"}
+value-roundtrip-u128-0xffffffffffffffffffffffffffffffff | 0 | OK | value roundtrip {"type":"uint","bits":128,"value":"340282366920938463463374607431768211455"}
+value-roundtrip-u64-0x20000000000001 | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":64,"value":"9007199254740993"}
+value-roundtrip-u64-0x20000000000003 | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":64,"value":"9007199254740995"}
+value-roundtrip-u64-0xfffffffffffffffe | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":64,"value":"18446744073709551614"}
+value-roundtrip-u64-0xfffffffffffff7ff | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":64,"value":"18446744073709549567"}
+value-roundtrip-u128-0x80000000000000000000000000000001 | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":128,"value":"170141183460469231731687303715884105729"}
+value-roundtrip-u128-0xfffffffffffff7ffffffffffffffffff | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":128,"value":"340282366920938425684442744474606501887"}
+value-roundtrip-u128-0x200000000000010000000000000001 | 1 | ERR E_VALUE | value roundtrip {"type":"uint","bits":128,"value":"166153499473114502559719956244594689"}
+value-roundtrip-i1-minus1 | 0 | OK | value roundtrip {"type":"int","bits":1,"value":"-1"}
+value-roundtrip-i1-0 | 0 | OK | value roundtrip {"type":"int","bits":1,"value":"0"}
+value-roundtrip-i7-minus64 | 0 | OK | value roundtrip {"type":"int","bits":7,"value":"-64"}
+value-roundtrip-i7-minus1 | 0 | OK | value roundtrip {"type":"int","bits":7,"value":"-1"}
+value-roundtrip-i7-0 | 0 | OK | value roundtrip {"type":"int","bits":7,"value":"0"}
+value-roundtrip-i7-63 | 0 | OK | value roundtrip {"type":"int","bits":7,"value":"63"}
+value-roundtrip-i8-minus128 | 0 | OK | value roundtrip {"type":"int","bits":8,"value":"-128"}
+value-roundtrip-i8-127 | 0 | OK | value roundtrip {"type":"int","bits":8,"value":"127"}
+value-roundtrip-i14-minus8192 | 0 | OK | value roundtrip {"type":"int","bits":14,"value":"-8192"}
+value-roundtrip-i14-8191 | 0 | OK | value roundtrip {"type":"int","bits":14,"value":"8191"}
+value-roundtrip-i16-minus32768 | 0 | OK | value roundtrip {"type":"int","bits":16,"value":"-32768"}
+value-roundtrip-i16-32767 | 0 | OK | value roundtrip {"type":"int","bits":16,"value":"32767"}
+value-roundtrip-i32-minus2147483648 | 0 | OK | value roundtrip {"type":"int","bits":32,"value":"-2147483648"}
+value-roundtrip-i32-2147483647 | 0 | OK | value roundtrip {"type":"int","bits":32,"value":"2147483647"}
+value-roundtrip-i64-minus9223372036854775808 | 0 | OK | value roundtrip {"type":"int","bits":64,"value":"-9223372036854775808"}
+value-roundtrip-i64-9223372036854775807 | 0 | OK | value roundtrip {"type":"int","bits":64,"value":"9223372036854775807"}
+value-roundtrip-i64-minus9007199254740992 | 0 | OK | value roundtrip {"type":"int","bits":64,"value":"-9007199254740992"}
+value-roundtrip-i64-9007199254740992 | 0 | OK | value roundtrip {"type":"int","bits":64,"value":"9007199254740992"}
+value-roundtrip-i128-minus170141183460469231731687303715884105728 | 0 | OK | value roundtrip {"type":"int","bits":128,"value":"-170141183460469231731687303715884105728"}
+value-roundtrip-i128-170141183460469231731687303715884105727 | 0 | OK | value roundtrip {"type":"int","bits":128,"value":"170141183460469231731687303715884105727"}
+value-roundtrip-i64-minus9007199254740993 | 1 | ERR E_VALUE | value roundtrip {"type":"int","bits":64,"value":"-9007199254740993"}
+value-roundtrip-i64-9007199254740993 | 1 | ERR E_VALUE | value roundtrip {"type":"int","bits":64,"value":"9007199254740993"}
+value-roundtrip-i64-minus9223372036854775807 | 1 | ERR E_VALUE | value roundtrip {"type":"int","bits":64,"value":"-9223372036854775807"}
+value-roundtrip-i128-minus170141183460469231731687303715884105727 | 1 | ERR E_VALUE | value roundtrip {"type":"int","bits":128,"value":"-170141183460469231731687303715884105727"}
+value-roundtrip-u7-128-does-not-fit | 1 | ~^ERR E_(VALUE|LIMIT)( .+)?$ | value roundtrip {"type":"uint","bits":7,"value":"128"}
+value-roundtrip-ieee32-3f800000 | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"3f800000"}
+value-roundtrip-ieee32-3dcccccd | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"3dcccccd"}
+value-roundtrip-ieee32-00000001 | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"00000001"}
+value-roundtrip-ieee32-007fffff | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"007fffff"}
+value-roundtrip-ieee32-00800000 | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"00800000"}
+value-roundtrip-ieee32-80000000 | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"80000000"}
+value-roundtrip-ieee32-80000001 | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"80000001"}
+value-roundtrip-ieee32-7f7fffff | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"7f7fffff"}
+value-roundtrip-ieee32-ff7fffff | 0 | OK | value roundtrip {"type":"float","format":"ieee32","bits_hex":"ff7fffff"}
+value-roundtrip-ieee64-3ff0000000000000 | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"3ff0000000000000"}
+value-roundtrip-ieee64-3ff0000000000001 | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"3ff0000000000001"}
+value-roundtrip-ieee64-0000000000000001 | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"0000000000000001"}
+value-roundtrip-ieee64-000fffffffffffff | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"000fffffffffffff"}
+value-roundtrip-ieee64-0010000000000000 | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"0010000000000000"}
+value-roundtrip-ieee64-8000000000000000 | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"8000000000000000"}
+value-roundtrip-ieee64-7fefffffffffffff | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"7fefffffffffffff"}
+value-roundtrip-ieee64-c00921fb54442d18 | 0 | OK | value roundtrip {"type":"float","format":"ieee64","bits_hex":"c00921fb54442d18"}
+value-roundtrip-ieee32-7f800000 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"7f800000"}
+value-roundtrip-ieee32-ff800000 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"ff800000"}
+value-roundtrip-ieee32-7fc00000 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"7fc00000"}
+value-roundtrip-ieee32-7fc00001 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"7fc00001"}
+value-roundtrip-ieee32-7f800001 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"7f800001"}
+value-roundtrip-ieee32-ffffffff | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee32","bits_hex":"ffffffff"}
+value-roundtrip-ieee64-7ff0000000000000 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee64","bits_hex":"7ff0000000000000"}
+value-roundtrip-ieee64-7ff8000000000000 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee64","bits_hex":"7ff8000000000000"}
+value-roundtrip-ieee64-7ff8000000000001 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee64","bits_hex":"7ff8000000000001"}
+value-roundtrip-ieee64-7ff0000000000001 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee64","bits_hex":"7ff0000000000001"}
+value-roundtrip-ieee64-fff8000000000000 | 0,1 | ~^(OK|ERR E_VALUE)$ | value roundtrip {"type":"float","format":"ieee64","bits_hex":"fff8000000000000"}
+value-double-u7-127 | 0 | 127 | value double {"type":"uint","bits":7,"value":"127"}
+value-double-u7-0 | 0 | 0 | value double {"type":"uint","bits":7,"value":"0"}
+value-double-u14-16383 | 0 | 16383 | value double {"type":"uint","bits":14,"value":"16383"}
+value-double-u32-max | 0 | 4294967295 | value double {"type":"uint","bits":32,"value":"4294967295"}
+value-double-u64-2pow53 | 0 | 9007199254740992 | value double {"type":"uint","bits":64,"value":"9007199254740992"}
+value-double-u64-2pow53-plus-1-ties-to-even-down | 0 | 9007199254740992 | value double {"type":"uint","bits":64,"value":"9007199254740993"}
+value-double-u64-2pow53-plus-3-ties-to-even-up | 0 | 9007199254740996 | value double {"type":"uint","bits":64,"value":"9007199254740995"}
+value-double-u64-max | 0 | 1.8446744073709552e+19 | value double {"type":"uint","bits":64,"value":"18446744073709551615"}
+value-double-u128-max | 0 | 3.4028236692093846e+38 | value double {"type":"uint","bits":128,"value":"340282366920938463463374607431768211455"}
+value-double-u128-no-double-rounding | 0 | 1.6615349947311452e+35 | value double {"type":"uint","bits":128,"value":"166153499473114502559719956244594689"}
+value-double-u128-2pow64-plus-1 | 0 | 1.8446744073709552e+19 | value double {"type":"uint","bits":128,"value":"18446744073709551617"}
+value-double-i7-minus-64 | 0 | -64 | value double {"type":"int","bits":7,"value":"-64"}
+value-double-i64-min | 0 | -9.2233720368547758e+18 | value double {"type":"int","bits":64,"value":"-9223372036854775808"}
+value-double-i64-max | 0 | 9.2233720368547758e+18 | value double {"type":"int","bits":64,"value":"9223372036854775807"}
+value-double-i128-min | 0 | -1.7014118346046923e+38 | value double {"type":"int","bits":128,"value":"-170141183460469231731687303715884105728"}
+value-double-i128-minus-2pow53-minus-1 | 0 | -9007199254740992 | value double {"type":"int","bits":128,"value":"-9007199254740993"}
+value-double-ieee32-one | 0 | 1 | value double {"type":"float","format":"ieee32","bits_hex":"3f800000"}
+value-double-ieee32-0.1 | 0 | 0.10000000149011612 | value double {"type":"float","format":"ieee32","bits_hex":"3dcccccd"}
+value-double-ieee32-min-denormal | 0 | 1.4012984643248171e-45 | value double {"type":"float","format":"ieee32","bits_hex":"00000001"}
+value-double-ieee32-max-denormal | 0 | 1.1754942106924411e-38 | value double {"type":"float","format":"ieee32","bits_hex":"007fffff"}
+value-double-ieee32-max | 0 | 3.4028234663852886e+38 | value double {"type":"float","format":"ieee32","bits_hex":"7f7fffff"}
+value-double-ieee32-minus-zero | 0 | -0 | value double {"type":"float","format":"ieee32","bits_hex":"80000000"}
+value-double-ieee32-inf | 0 | inf | value double {"type":"float","format":"ieee32","bits_hex":"7f800000"}
+value-double-ieee32-minus-inf | 0 | -inf | value double {"type":"float","format":"ieee32","bits_hex":"ff800000"}
+value-double-ieee64-min-denormal | 0 | 4.9406564584124654e-324 | value double {"type":"float","format":"ieee64","bits_hex":"0000000000000001"}
+value-double-ieee64-min-normal | 0 | 2.2250738585072014e-308 | value double {"type":"float","format":"ieee64","bits_hex":"0010000000000000"}
+value-double-ieee64-max | 0 | 1.7976931348623157e+308 | value double {"type":"float","format":"ieee64","bits_hex":"7fefffffffffffff"}
+value-double-ieee64-one-plus-ulp | 0 | 1.0000000000000002 | value double {"type":"float","format":"ieee64","bits_hex":"3ff0000000000001"}
+value-double-ieee64-minus-pi | 0 | -3.1415926535897931 | value double {"type":"float","format":"ieee64","bits_hex":"c00921fb54442d18"}
+value-double-ieee64-minus-zero | 0 | -0 | value double {"type":"float","format":"ieee64","bits_hex":"8000000000000000"}
+value-double-nan-ieee32-7fc00001 | 0 | ~^-?nan.*$ | value double {"type":"float","format":"ieee32","bits_hex":"7fc00001"}
+value-double-nan-ieee32-7f800001 | 0 | ~^-?nan.*$ | value double {"type":"float","format":"ieee32","bits_hex":"7f800001"}
+value-double-nan-ieee64-7ff8000000000001 | 0 | ~^-?nan.*$ | value double {"type":"float","format":"ieee64","bits_hex":"7ff8000000000001"}
+value-double-nan-ieee64-7ff0000000000001 | 0 | ~^-?nan.*$ | value double {"type":"float","format":"ieee64","bits_hex":"7ff0000000000001"}
+value-double-nan-ieee64-fff8000000000000 | 0 | ~^-?nan.*$ | value double {"type":"float","format":"ieee64","bits_hex":"fff8000000000000"}
+value-limits-ok-trigger | 0 | OK | value limits {"type":"trigger"}
+value-limits-ok-bool-true | 0 | OK | value limits {"type":"bool","value":true}
+value-limits-ok-bool-false | 0 | OK | value limits {"type":"bool","value":false}
+value-limits-ok-u1-1 | 0 | OK | value limits {"type":"uint","bits":1,"value":"1"}
+value-limits-ok-u7-127 | 0 | OK | value limits {"type":"uint","bits":7,"value":"127"}
+value-limits-ok-u64-max | 0 | OK | value limits {"type":"uint","bits":64,"value":"18446744073709551615"}
+value-limits-ok-u128-max | 0 | OK | value limits {"type":"uint","bits":128,"value":"340282366920938463463374607431768211455"}
+value-limits-ok-i1-minus-1 | 0 | OK | value limits {"type":"int","bits":1,"value":"-1"}
+value-limits-ok-i7-minus-64 | 0 | OK | value limits {"type":"int","bits":7,"value":"-64"}
+value-limits-ok-i7-63 | 0 | OK | value limits {"type":"int","bits":7,"value":"63"}
+value-limits-ok-i128-min | 0 | OK | value limits {"type":"int","bits":128,"value":"-170141183460469231731687303715884105728"}
+value-limits-ok-i128-max | 0 | OK | value limits {"type":"int","bits":128,"value":"170141183460469231731687303715884105727"}
+value-limits-ok-ieee32 | 0 | OK | value limits {"type":"float","format":"ieee32","bits_hex":"7fc00001"}
+value-limits-ok-ieee64 | 0 | OK | value limits {"type":"float","format":"ieee64","bits_hex":"7ff0000000000001"}
+value-limits-ok-text-empty | 0 | OK | value limits {"type":"text","value":""}
+value-limits-ok-text-4096 | 0 | OK | value limits ${V_TEXT_4096}
+value-limits-ok-text-4096-bytes-2-byte-chars | 0 | OK | value limits ${V_TEXT_E9_2048}
+value-limits-ok-text-4096-bytes-4-byte-chars | 0 | OK | value limits ${V_TEXT_EMOJI_1024}
+value-limits-ok-text-4096-escaped-ascii | 0 | OK | value limits ${V_TEXT_U41_4096}
+value-limits-ok-blob-empty | 0 | OK | value limits {"type":"blob","hex":""}
+value-limits-ok-blob-bytes | 0 | OK | value limits {"type":"blob","hex":"00ff7f80"}
+value-limits-ok-tuple-empty | 0 | OK | value limits {"type":"tuple","values":[]}
+value-limits-ok-tuple-256 | 0 | OK | value limits ${V_TUPLE_256}
+value-limits-ok-tuple-depth-4 | 0 | OK | value limits ${V_TUPLE_DEPTH_4}
+value-limits-ok-tuple-depth-4-wide | 0 | OK | value limits ${V_TUPLE_DEPTH_4_WIDE}
+value-limits-ok-tuple-mixed | 0 | OK | value limits {"type":"tuple","values":[{"type":"trigger"},{"type":"bool","value":true},{"type":"uint","bits":14,"value":"16383"},{"type":"int","bits":32,"value":"-1"},{"type":"float","format":"ieee32","bits_hex":"3f800000"},{"type":"text","value":"/x"},{"type":"blob","hex":"f0"}]}
+value-limits-bad-u1-2 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":1,"value":"2"}
+value-limits-bad-u7-128 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":7,"value":"128"}
+value-limits-bad-u14-16384 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":14,"value":"16384"}
+value-limits-bad-u32-2pow32 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":32,"value":"4294967296"}
+value-limits-bad-u64-2pow64 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":64,"value":"18446744073709551616"}
+value-limits-bad-u128-2pow128 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"uint","bits":128,"value":"340282366920938463463374607431768211456"}
+value-limits-bad-i1-1 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":1,"value":"1"}
+value-limits-bad-i7-minus-65 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":7,"value":"-65"}
+value-limits-bad-i7-64 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":7,"value":"64"}
+value-limits-bad-i128-min-minus-1 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":128,"value":"-170141183460469231731687303715884105729"}
+value-limits-bad-i128-max-plus-1 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"int","bits":128,"value":"170141183460469231731687303715884105728"}
+value-limits-bad-text-4097 | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_4097}
+value-limits-bad-text-4098-bytes-2-byte-chars | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_E9_2049}
+value-limits-bad-text-4100-bytes-4-byte-chars | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_EMOJI_1025}
+value-limits-bad-text-4097-escaped-ascii | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TEXT_U41_4097}
+value-limits-bad-tuple-257 | 1 | ~^ERR E_LIMIT .*[Tt]uple.*$ | value limits ${V_TUPLE_257}
+value-limits-bad-tuple-depth-5 | 1 | ~^ERR E_LIMIT .*([Tt]uple|depth|nest).*$ | value limits ${V_TUPLE_DEPTH_5}
+value-limits-bad-tuple-holding-text-4097 | 1 | ~^ERR E_LIMIT .*[Tt]ext.*$ | value limits ${V_TUPLE_TEXT_4097}
+value-limits-bad-tuple-holding-u7-128 | 1 | ~^ERR E_LIMIT( .+)?$ | value limits {"type":"tuple","values":[{"type":"trigger"},{"type":"uint","bits":7,"value":"128"}]}
+value-limits-bad-uint-bits-0 | 1 | ~^ERR E_(LIMIT|VALUE|SCHEMA)( .+)?$ | value limits {"type":"uint","bits":0,"value":"0"}
+value-limits-bad-uint-bits-129 | 1 | ~^ERR E_(LIMIT|VALUE|SCHEMA)( .+)?$ | value limits {"type":"uint","bits":129,"value":"0"}
+value-limits-bad-int-bits-0 | 1 | ~^ERR E_(LIMIT|VALUE|SCHEMA)( .+)?$ | value limits {"type":"int","bits":0,"value":"0"}

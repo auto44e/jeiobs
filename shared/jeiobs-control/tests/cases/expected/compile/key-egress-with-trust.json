@@ -1,0 +1,1 @@
+{"routes":[{"class":"egress-by-trust","enabled":true,"fanout":1,"id":"r1","merge":{"policy":"last-writer","priority":0},"target_key":"egress|endpoint=midi_out_1|trust=virtual"}],"slots":["main_surface"]}

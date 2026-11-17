@@ -1,0 +1,12 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "x_top": {"a": [1, {"b": null}]},
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"], "x_slot": {"serial": "not here"}}
+  ],
+  "routes": [
+    {"id": "r1", "x_route": {"nested": [1, "two", null, true]}, "enabled": true, "match": {"slot": "main_surface", "x_match": [], "address": [{"s": "mcu"}, {"r": [1, 4]}, {"in": [1, 2, 3]}]}, "guard": {"all": [{"bank": 2}], "x_guard": "ignored"}, "transforms": [{"op": "invert", "x_param": 1.5}], "target": {"kind": "source-property", "id": "src_a", "field": "opacity", "x_target": {"field": "password"}}, "merge": {"policy": "priority", "priority": 3, "x_merge": "max"}}
+  ]
+}

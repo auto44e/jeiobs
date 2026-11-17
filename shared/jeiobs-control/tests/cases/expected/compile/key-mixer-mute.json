@@ -1,0 +1,1 @@
+{"routes":[{"class":"mix","enabled":true,"fanout":1,"id":"r1","merge":{"policy":"last-writer","priority":0},"target_key":"mixer|field=mute|id=Mic/Aux"}],"slots":["main_surface"]}

@@ -1,0 +1,13 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": []},
+    {"id": "pad_2", "requires": []}
+  ],
+  "routes": [
+    {"id": "a", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "a"}]}, "target": {"kind": "emit", "address": [{"s": "b"}]}},
+    {"id": "b", "enabled": true, "match": {"slot": "pad_2", "address": [{"s": "b"}]}, "target": {"kind": "emit", "address": [{"s": "a"}]}}
+  ]
+}

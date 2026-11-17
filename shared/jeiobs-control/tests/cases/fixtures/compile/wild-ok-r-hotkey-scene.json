@@ -1,0 +1,11 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "r1", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"r": [1, 8]}]}, "target": {"kind": "hotkey", "registerer_kind": "frontend", "registerer_id": "obs", "name": "x.y", "effect": "scene"}}
+  ]
+}

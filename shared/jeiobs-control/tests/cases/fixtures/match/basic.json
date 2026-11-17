@@ -1,0 +1,24 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": []},
+    {"id": "pad_2", "requires": []}
+  ],
+  "routes": [
+    {"id": "m_null", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m01", "field": "volume"}},
+    {"id": "m_main", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m02", "field": "volume"}},
+    {"id": "m_pad", "enabled": true, "match": {"slot": "pad_2", "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m03", "field": "volume"}},
+    {"id": "m_any", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"any": true}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m04", "field": "volume"}},
+    {"id": "m_range", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"r": [0, 7]}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m05", "field": "volume"}},
+    {"id": "m_set", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"in": [0, 8, 16]}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m06", "field": "volume"}},
+    {"id": "m_text", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"t": "/fader"}]}, "target": {"kind": "mixer", "id": "m07", "field": "volume"}},
+    {"id": "m_sym", "enabled": true, "match": {"slot": null, "address": [{"s": "osc"}, {"s": "/fader"}]}, "target": {"kind": "mixer", "id": "m08", "field": "volume"}},
+    {"id": "m_off", "enabled": false, "match": {"slot": null, "address": [{"s": "mcu"}, {"i": 0}, {"s": "fader"}]}, "target": {"kind": "mixer", "id": "m09", "field": "volume"}},
+    {"id": "m_short", "enabled": true, "match": {"slot": null, "address": [{"s": "mcu"}, {"i": 0}]}, "target": {"kind": "mixer", "id": "m10", "field": "volume"}},
+    {"id": "m_big", "enabled": true, "match": {"slot": null, "address": [{"s": "big"}, {"i": 9007199254740992}]}, "target": {"kind": "mixer", "id": "m11", "field": "volume"}},
+    {"id": "m_nfc", "enabled": true, "match": {"slot": null, "address": [{"s": "café"}]}, "target": {"kind": "mixer", "id": "m12", "field": "volume"}},
+    {"id": "m_16", "enabled": true, "match": {"slot": null, "address": [{"s": "deep"}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"any": true}, {"i": 15}]}, "target": {"kind": "mixer", "id": "m13", "field": "volume"}}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "format": "jeiobs-control",
+  "major": 1,
+  "minor": 0,
+  "slots": [
+    {"id": "main_surface", "requires": ["mcu.fader", "feedback.motor"]}
+  ],
+  "routes": [
+    {"id": "r1", "enabled": true, "match": {"slot": "main_surface", "address": [{"s": "osc"}, {"i": 0}, {"i": 1}, {"i": 2}, {"i": 3}, {"i": 4}, {"i": 5}, {"i": 6}, {"i": 7}, {"i": 8}, {"i": 9}, {"i": 10}, {"i": 11}, {"i": 12}, {"i": 13}, {"i": 14}, {"i": 15}]}, "target": {"kind": "mixer", "id": "mic", "field": "volume"}}
+  ]
+}
