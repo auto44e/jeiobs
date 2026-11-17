@@ -315,7 +315,9 @@ class PlannerImpl {
 		if (child.kind == FsEntryKind::Directory && !child.path.empty() && !child.name.empty()) {
 			const Summary summary = Summarize(child.path);
 			if (!summary.error.ok()) {
-				AddListingFailure(root, child.relative_path, summary.error, false);
+				// The folder's own name is unrepresentable, so it is never recorded; the warning names the
+				// folder that contains it.
+				warnings_.push_back({"listing-error", container});
 			} else {
 				size = SaturatingAdd(size, summary.size);
 			}
@@ -323,7 +325,6 @@ class PlannerImpl {
 			size = SaturatingAdd(size, child.size);
 		}
 		(void)root;
-		(void)container;
 	}
 
 	void FinishUnrepresentable(const std::string &root, const std::string &container, std::uint64_t count,

@@ -794,23 +794,21 @@ void TestPlannerR4()
 	JW_CHECK(partial_result.ok());
 	if (partial_result.ok()) {
 		const auto names = FindPlanEntry(*partial_result.value, "scenes", "basic/scenes");
-		const auto unreadable = FindPlanEntry(*partial_result.value, "scenes", partial_relative);
 		JW_CHECK(names != nullptr);
-		JW_CHECK(unreadable != nullptr);
 		if (names != nullptr) {
 			JW_CHECK_EQ(names->reason, "unrepresentable");
 			JW_CHECK_EQ(names->count, 1U);
 			JW_CHECK_EQ(names->size, 0U);
 		}
-		if (unreadable != nullptr) {
-			JW_CHECK_EQ(unreadable->reason, "unreadable");
-			JW_CHECK_EQ(unreadable->kind, "dir");
-		}
+		// The folder's own name is unrepresentable: it is never recorded as an entry or in a warning,
+		// the warning names the containing folder.
+		JW_CHECK(FindPlanEntry(*partial_result.value, "scenes", partial_relative) == nullptr);
 		JW_CHECK(std::any_of(partial_result.value->warnings.begin(), partial_result.value->warnings.end(),
 				     [](const auto &warning) {
-					     return warning.code == "listing-error" &&
-						    warning.path == "basic/scenes/bad?";
+					     return warning.code == "listing-error" && warning.path == "basic/scenes";
 				     }));
+		JW_CHECK(std::none_of(partial_result.value->warnings.begin(), partial_result.value->warnings.end(),
+				      [](const auto &warning) { return warning.path == "basic/scenes/bad?"; }));
 	}
 
 	Jeiobs::Workspace::MemFs owned;
