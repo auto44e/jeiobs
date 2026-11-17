@@ -327,7 +327,7 @@ class PlannerImpl {
 
 	using ChildHandler = std::function<bool(const Child &)>;
 	void ProcessDirectory(const std::string &fs_directory, const std::string &root, const std::string &relative,
-			      const ChildHandler &handler);
+			      const ChildHandler &handler, bool sort_entries = false);
 	void ProcessOwnedRoot(const std::string &fs_directory, const std::string &root, const std::string &relative,
 			      const ChildHandler &handler);
 
@@ -495,13 +495,13 @@ bool UnknownAccumulator::Add(const Fs &fs, const Child &child)
 }
 
 void PlannerImpl::ProcessDirectory(const std::string &fs_directory, const std::string &root,
-				   const std::string &relative, const ChildHandler &handler)
+				   const std::string &relative, const ChildHandler &handler, bool sort_entries)
 {
 	const StateSizes state = SaveState();
 	UnknownAccumulator unknown;
 	std::uint64_t unrepresentable_count = 0U;
 	std::uint64_t unrepresentable_size = 0U;
-	const Error list_error = fs_.ListEach(fs_directory, [&](const FsEntry &entry) {
+	auto process_entry = [&](const FsEntry &entry) {
 		const Child child{entry.name,
 				  JoinPath(fs_directory, entry.name),
 				  JoinPath(relative, entry.name),
@@ -532,7 +532,23 @@ void PlannerImpl::ProcessDirectory(const std::string &fs_directory, const std::s
 		}
 		AddUnknown(root, relative, child, unknown);
 		return error_.ok();
-	});
+	};
+	Error list_error;
+	if (sort_entries) {
+		FsListResult listed = fs_.List(fs_directory);
+		if (listed.ok()) {
+			std::sort(listed.entries.begin(), listed.entries.end(),
+				  [](const FsEntry &left, const FsEntry &right) { return left.name < right.name; });
+			for (const FsEntry &entry : listed.entries) {
+				if (!process_entry(entry)) {
+					break;
+				}
+			}
+		}
+		list_error = std::move(listed.error);
+	} else {
+		list_error = fs_.ListEach(fs_directory, process_entry);
+	}
 	if (!list_error.ok()) {
 		RestoreState(state);
 		AddListingFailure(root, relative, list_error, false);
@@ -793,33 +809,36 @@ void PlannerImpl::AddCollectionFile(const std::string &root, const std::string &
 void PlannerImpl::ProcessCollectionDirectory(const std::string &fs_directory, const std::string &root,
 					     const std::string &relative)
 {
-	ProcessDirectory(fs_directory, root, relative, [&](const Child &child) {
-		if (child.kind == FsEntryKind::File &&
-		    (EndsWith(child.name, ".json") || EndsWith(child.name, ".json.bak"))) {
-			const std::string main_name = EndsWith(child.name, ".json.bak")
-							      ? child.name.substr(0U, child.name.size() - 4U)
-							      : child.name;
-			if (main_name.size() <= 5U || !EndsWith(main_name, ".json")) {
-				return false;
+	ProcessDirectory(
+		fs_directory, root, relative,
+		[&](const Child &child) {
+			if (child.kind == FsEntryKind::File &&
+			    (EndsWith(child.name, ".json") || EndsWith(child.name, ".json.bak"))) {
+				const std::string main_name = EndsWith(child.name, ".json.bak")
+								      ? child.name.substr(0U, child.name.size() - 4U)
+								      : child.name;
+				if (main_name.size() <= 5U || !EndsWith(main_name, ".json")) {
+					return false;
+				}
+				const std::string collection_name = main_name.substr(0U, main_name.size() - 5U);
+				if (collection_name.empty() || !IsRepresentablePath(collection_name)) {
+					return false;
+				}
+				AddCollectionFile(root, JoinRelative(relative, child.name), child);
+				return true;
 			}
-			const std::string collection_name = main_name.substr(0U, main_name.size() - 5U);
-			if (collection_name.empty() || !IsRepresentablePath(collection_name)) {
-				return false;
+			if (child.kind == FsEntryKind::File &&
+			    (EndsWith(child.name, ".json.v1") || EndsWith(child.name, ".json.invalid"))) {
+				AddSpecial(root, child, "not-loaded");
+				return true;
 			}
-			AddCollectionFile(root, JoinRelative(relative, child.name), child);
-			return true;
-		}
-		if (child.kind == FsEntryKind::File &&
-		    (EndsWith(child.name, ".json.v1") || EndsWith(child.name, ".json.invalid"))) {
-			AddSpecial(root, child, "not-loaded");
-			return true;
-		}
-		if (IsTransient(child.name)) {
-			AddSpecial(root, child, "transient");
-			return true;
-		}
-		return false;
-	});
+			if (IsTransient(child.name)) {
+				AddSpecial(root, child, "transient");
+				return true;
+			}
+			return false;
+		},
+		true);
 }
 
 void PlannerImpl::ProcessScenesRoot(const std::string &fs_directory)
@@ -1288,11 +1307,11 @@ PlanResult PlannerImpl::Run()
 		return {std::nullopt, MakeError(ErrorCode::Schema, "parent")};
 	}
 
-	ProcessConfigRoot(JoinPath(roots_.config.path, roots_.app_dir));
 	ProcessUserRoot(JoinPath(roots_.user.path, roots_.app_dir));
+	ProcessPluginManagerRoot(JoinPath(roots_.plugin_manager.path, roots_.app_dir));
 	ProcessScenesRoot(JoinPath(roots_.scenes.path, roots_.app_dir));
 	ProcessProfilesRoot(JoinPath(roots_.profiles.path, roots_.app_dir));
-	ProcessPluginManagerRoot(JoinPath(roots_.plugin_manager.path, roots_.app_dir));
+	ProcessConfigRoot(JoinPath(roots_.config.path, roots_.app_dir));
 	if (!error_.ok()) {
 		return {std::nullopt, error_};
 	}
